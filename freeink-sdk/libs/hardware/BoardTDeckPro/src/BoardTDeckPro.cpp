@@ -221,6 +221,12 @@ void handlePress(uint8_t code) {
   // Shift on a symbol is meaningless; don't report it as a modifier.
   if (sym) e.mods &= static_cast<uint8_t>(~KeyMod::Shift);
   enqueue(e);
+#ifdef DECKPOINT_KEY_DEBUG
+  if (Serial) {
+    Serial.printf("[%lu] [KEY] code=%u ch=%c special=%u mods=0x%02x bridge=0x%02x\n", millis(), code,
+                  e.ch ? e.ch : '-', static_cast<unsigned>(e.special), e.mods, s_raw ? 0 : s_buttonForCode[code]);
+  }
+#endif
 
   // Shift lock behaves as caps lock: it stays on; one-shots are spent.
   s_shift.consume();
