@@ -4,6 +4,8 @@
 
 #include <cassert>
 
+#include <HalKeyboard.h>
+
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 
@@ -60,6 +62,21 @@ void UiTabListActivity::moveRingTo(const int ringIndex) {
 }
 
 void UiTabListActivity::navigateButtons() {
+  // DECKPOINT: on a keyboard, h/l (front Left/Right) switch tabs; j/k walk
+  // the items. Buttons fold Left/Right into previous/next, which is why tab
+  // switching there is a hold.
+  if (halKeyboard.present()) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+      navigationStartedOnTabs = false;
+      stepTab(-1);
+      return;
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+      navigationStartedOnTabs = false;
+      stepTab(1);
+      return;
+    }
+  }
   if (mappedInput.wasPressed(MappedInputManager::Button::NavNext) ||
       mappedInput.wasPressed(MappedInputManager::Button::NavPrevious)) {
     navigationStartedOnTabs = ringPos() == 0;

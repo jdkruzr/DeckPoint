@@ -82,7 +82,11 @@ inline freeink::ui::GfxRendererTarget makeUiTarget(const GfxRenderer& renderer) 
 // the legacy drawIcon assets use a different bit layout). Two crisp sizes:
 // 24 for single-line rows, 32 for label+subtitle rows.
 inline freeink::ui::BitmapRef listIconFor(const UIIcon icon, const int size = 24) {
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+  if (false) {  // DECKPOINT: compact rows use the 24px set throughout
+#else
   if (size >= 32) {
+#endif
     switch (icon) {
       case UIIcon::Folder:
         return freeink::ui::bitmapFromIcon(icon_folder_32);

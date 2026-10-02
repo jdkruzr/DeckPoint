@@ -916,6 +916,10 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   // DECKPOINT: a physical keyboard replaces the on-screen one and its tips;
   // the screen is just the title, the field and a one-line key legend.
   if (halKeyboard.present()) {
+    if (!deckpoint::keyLegendEnabled()) {
+      renderer.displayBuffer();
+      return;
+    }
     const int legendLh = renderer.getLineHeight(SMALL_FONT_ID);
     const int legendY = renderer.getScreenHeight() - 2 * legendLh - metrics.verticalSpacing;
     deckpoint::drawCenteredEscLegend(renderer, SMALL_FONT_ID, legendY, "Enter: OK    ", ": cancel");

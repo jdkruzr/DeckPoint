@@ -8,6 +8,7 @@
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
+#include "deckpoint/KeyLegend.h"  // DECKPOINT
 #include "fontIds.h"
 
 namespace fui = freeink::ui;
@@ -112,8 +113,13 @@ void UiListActivity::navigateButtons() {
 
 void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, const int selectionOffset) {
   props.toggleCheckbox = true;
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+  props.toggleWidth = 18;  // DECKPOINT: 12px box beside 15px text
+  props.toggleHeight = 18;
+#else
   props.toggleWidth = 28;
   props.toggleHeight = 28;
+#endif
   props.partialTrailingRow = true;
   auto& n = activeNav();
   const int prevTop = n.top;
@@ -161,6 +167,8 @@ void UiListActivity::render(RenderLock&&) {
     drawChrome();
     renderUi();
   }
+  deckpoint::setLegendExtra(legendExtra());  // DECKPOINT
   drawFooter();
+  deckpoint::setLegendExtra(nullptr);
   renderer.displayBuffer();
 }

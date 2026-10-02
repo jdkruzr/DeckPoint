@@ -13,6 +13,24 @@ namespace deckpoint {
 // Draw a freeink::Icon (logical-frame bits) at x,y through the renderer.
 void drawIconLogical(const GfxRenderer& renderer, const freeink::Icon& icon, int x, int y);
 
+// Extra screen-specific hint ("h/l: tab") folded into the next legend drawn
+// by drawHintLegend(); callers set it around their footer and clear it after.
+void setLegendExtra(const char* extra);
+
+// True when legends should be drawn (keyboard present + Settings > Key Legend).
+bool keyLegendEnabled();
+
+// Height the bottom legend band occupies (0 when legends are off).
+int keyLegendBandHeight(const GfxRenderer& renderer);
+
+// Turn a screen's button-hint labels (what Back / Confirm / Previous / Next
+// do there) into a key legend on the bottom band, e.g.
+//   "Esc (mic): Back   Enter: Select   j/k: move".
+// Empty labels are skipped. Used by every theme's drawButtonHints() on
+// keyboard boards, so screens get legends without per-screen code.
+void drawHintLegend(const GfxRenderer& renderer, const char* back, const char* confirm, const char* previous,
+                    const char* next);
+
 // Draw a one-line key legend in `fontId`, centered, its baseline row at the
 // bottom of the screen (with a small margin). Returns the legend's top y.
 int drawBottomKeyLegend(const GfxRenderer& renderer, int fontId, const char* text);

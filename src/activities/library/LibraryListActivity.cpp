@@ -23,6 +23,7 @@
 #include "components/UIScale.h"
 #include "components/UITheme.h"
 #include "components/icons/headerIcons.h"
+#include "deckpoint/KeyLegend.h"  // DECKPOINT
 #include "deckpoint/icons/search16.h"  // DECKPOINT
 #include "components/icons/listIcons.h"
 #include "components/icons/search32.h"
@@ -780,6 +781,20 @@ bool LibraryListActivity::handleButtons() {
 }
 
 void LibraryListActivity::navigateButtons() {
+  // DECKPOINT: on a keyboard, h/l switch tabs (see UiTabListActivity). Clearing
+  // navigationStartedOnTabs keeps the h release from opening search.
+  if (halKeyboard.present()) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+      navigationStartedOnTabs = false;
+      stepTab(-1);
+      return;
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+      navigationStartedOnTabs = false;
+      stepTab(1);
+      return;
+    }
+  }
   const int count = listCount();
   auto& nav = activeNav();
   if (mappedInput.wasPressed(MappedInputManager::Button::NavNext) ||
@@ -1029,6 +1044,7 @@ void LibraryListActivity::drawHoldHelp() const {
   if (halKeyboard.present()) {
     // DECKPOINT: "Hold: ..." describes buttons a keyboard doesn't have; show
     // the keys instead, left of the position readout on the same line.
+    if (!deckpoint::keyLegendEnabled()) return;
     const char* legend = tabsFocused() ? "h/l: tab   k: search   Enter: list" : "j/k: move   Enter: open";
     const auto& km = UITheme::getInstance().getMetrics();
     const int ky = renderer.getScreenHeight() - km.buttonHintsHeight - renderer.getLineHeight(SMALL_FONT_ID);

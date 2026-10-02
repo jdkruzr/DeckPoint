@@ -17,6 +17,10 @@
 // the two existing tab screens differ on press-vs-release and what Back does)
 // plus what activating a row or tapping a tab means.
 class UiTabListActivity : public UiListActivity {
+ protected:
+  // DECKPOINT: tabs switch with h/l on a keyboard (see navigateButtons()).
+  const char* legendExtra() const override { return "h/l: tab"; }
+
  public:
   void onEnter() override;
 

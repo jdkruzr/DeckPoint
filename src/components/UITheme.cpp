@@ -76,10 +76,17 @@ const ThemeMetrics& UITheme::getMetrics() const {
   // hasTouch() can flip once touch init completes after static construction, so the
   // cached copy is refreshed when the flag differs instead of copying the struct per call.
   const bool touch = gpio.hasTouch();
-  if (!metricsValid || touch != metricsForTouch) {
+  static uint8_t metricsForKeyLegend = 0xFF;  // DECKPOINT: legend band depends on a live setting
+  if (!metricsValid || touch != metricsForTouch || SETTINGS.keyLegend != metricsForKeyLegend) {
+    metricsForKeyLegend = SETTINGS.keyLegend;
     adjustedMetrics = *currentMetrics;
     if (touch || gpio.hidesButtonHints()) {  // DECKPOINT: keyboard boards have no hint strip either
       adjustedMetrics.buttonHintsHeight = 0;
+    }
+    // DECKPOINT: ...but they may show the key legend in its place; reserve
+    // its band so lists stop above it (11px face, 13px line + margins).
+    if (!touch && SETTINGS.keyLegend != 0 && FREEINK_CAP_KEYBOARD) {
+      adjustedMetrics.buttonHintsHeight = 16;
     }
     metricsForTouch = touch;
     metricsValid = true;

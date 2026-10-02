@@ -64,6 +64,8 @@ class UiListActivity : public Activity, protected UiAppHost {
   virtual void drawChrome();
   // Button hints, drawn after the app renders. Default: Back/Select/Up/Down.
   virtual void drawFooter();
+  // DECKPOINT: extra key hint folded into the bottom key legend (e.g. tabs).
+  virtual const char* legendExtra() const { return nullptr; }
 
   // --- helpers ---------------------------------------------------------------
   // Measure visibleRows for the screen band, apply follow-on-build, clamp the

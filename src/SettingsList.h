@@ -248,6 +248,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           StrId::STR_CAT_DISPLAY),
         SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                             StrId::STR_CAT_DISPLAY),
+#if FREEINK_CAP_KEYBOARD
+        // DECKPOINT: key legend along the bottom of every non-reading screen.
+        SettingInfo::Toggle(StrId::STR_KEY_LEGEND, &CrossPointSettings::keyLegend, "keyLegend",
+                            StrId::STR_CAT_DISPLAY),
+#endif
 #if FREEINK_CAP_FRONTLIGHT
         SettingInfo::Toggle(StrId::STR_RESTORE_LIGHT_ON_WAKE, &CrossPointSettings::frontlightRestoreOnWake,
                             "frontlightRestoreOnWake", StrId::STR_CAT_DISPLAY),

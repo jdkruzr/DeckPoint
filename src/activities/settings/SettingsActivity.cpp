@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalDisplay.h>
+#include <HalKeyboard.h>  // DECKPOINT
 #include <LibraryBuilder.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -251,7 +252,12 @@ void SettingsActivity::stepTab(const int direction) {
 bool SettingsActivity::handleButtons() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (ringPos() == 0) {
-      stepTab(1);
+      // DECKPOINT: h/l switch tabs on a keyboard, so Enter enters the list.
+      if (halKeyboard.present()) {
+        if (listCount() > 0) moveRingTo(1);
+      } else {
+        stepTab(1);
+      }
     } else {
       toggleCurrentSetting();
       requestUpdate();
@@ -599,7 +605,8 @@ void SettingsActivity::drawChrome() {
 void SettingsActivity::drawFooter() {
   const int ring = ringPos();
   const auto confirmLabel =
-      (ring == 0) ? I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount])
+      (ring == 0) ? (halKeyboard.present() ? tr(STR_SELECT)  // DECKPOINT: Enter drops into the list on keyboards
+                                           : I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount]))
                   : (ring > 0 && (*currentSettings)[ring - 1].nameId == StrId::STR_TIME_TO_SLEEP ? tr(STR_SELECT)
                                                                                                  : tr(STR_TOGGLE));
 

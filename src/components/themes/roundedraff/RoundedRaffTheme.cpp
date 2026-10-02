@@ -12,6 +12,7 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "components/icons/cover.h"
+#include "deckpoint/KeyLegend.h"  // DECKPOINT
 #include "fontIds.h"
 
 namespace {
@@ -201,6 +202,8 @@ void RoundedRaffTheme::drawTextField(const GfxRenderer& renderer, Rect rect, con
 void RoundedRaffTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                        const char* btn4) const {
   if (gpio.hidesButtonHints()) {  // DECKPOINT: was hasTouch()
+    // Keyboard boards: the same labels become a key legend.
+    if (!gpio.hasTouch()) deckpoint::drawHintLegend(renderer, btn1, btn2, btn3, btn4);
     return;
   }
 

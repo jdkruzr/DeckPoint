@@ -24,6 +24,7 @@
 #include "components/icons/settings2.h"
 #include "components/icons/transfer.h"
 #include "components/icons/wifi.h"
+#include "deckpoint/KeyLegend.h"  // DECKPOINT
 #include "fontIds.h"
 
 // Internal constants
@@ -110,6 +111,8 @@ void LyraTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char
 void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                 const char* btn4) const {
   if (gpio.hidesButtonHints()) {  // DECKPOINT: was hasTouch()
+    // Keyboard boards: the same labels become a key legend.
+    if (!gpio.hasTouch()) deckpoint::drawHintLegend(renderer, btn1, btn2, btn3, btn4);
     return;
   }
 
