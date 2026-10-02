@@ -28,6 +28,9 @@ enum class Revision : uint8_t { Unknown, V1_0, V1_1 };
 void begin();
 Revision revision();
 const char* revisionName();
+bool loraAsleep();
+// Print the board report (revision, keyboard, LoRa) to Serial.
+void logStatus();
 
 // --- keyboard ----------------------------------------------------------------
 bool keyboardPresent();
@@ -52,6 +55,15 @@ struct ModifierState {
   bool alt, altLocked;
 };
 ModifierState modifiers();
+
+// Feed a matrix key event as if the TCA8418 had reported it (code 1..35).
+// For development tooling: lets a host drive the UI over serial.
+void injectKey(uint8_t code, bool pressed);
+
+// millis() of the last decoded key press (any key, bridged or not). Firmware
+// folds this into its inactivity timer: in raw mode typing produces no button
+// edges, so InputManager alone would let the device sleep mid-sentence.
+unsigned long lastKeyActivityMs();
 
 // Keyboard backlight (GPIO42).
 void setKeyboardBacklight(bool on);

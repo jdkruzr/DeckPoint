@@ -141,6 +141,8 @@ unsigned long HalGPIO::getPowerButtonHeldTime() const { return inputMgr.getPower
 
 bool HalGPIO::hasTouch() const { return inputMgr.hasTouch(); }
 
+bool HalGPIO::hidesButtonHints() const { return hasTouch() || FREEINK_CAP_KEYBOARD; }  // DECKPOINT
+
 bool HalGPIO::hasHomeKey() const { return BoardConfig::hasHomeKey(); }
 
 bool HalGPIO::wasHomeKeyPressed() const { return inputMgr.wasHomeKeyPressed(); }

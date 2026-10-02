@@ -130,6 +130,8 @@ struct ThemeMetrics {
   int capsuleRadius;
 };
 
+#include "deckpoint/CompactMetrics.h"  // DECKPOINT: DECKPOINT_THEME_METRICS
+
 enum UIIcon {
   None = 0,
   Folder,
@@ -153,7 +155,7 @@ enum UIIcon {
 // Additional themes can inherit from this and override methods as needed
 
 namespace BaseMetrics {
-constexpr ThemeMetrics values = {.batteryWidth = 15,
+constexpr ThemeMetrics values = DECKPOINT_THEME_METRICS(ThemeMetrics{.batteryWidth = 15,
                                  .batteryHeight = 12,
                                  .topPadding = 5,
                                  .batteryBarHeight = 20,
@@ -225,7 +227,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .textFieldLineEndOffset = 0,
                                  .controlRadius = 0,
                                  .sheetRadius = 0,
-                                 .capsuleRadius = 0};
+                                 .capsuleRadius = 0});
 }
 
 class BaseTheme {

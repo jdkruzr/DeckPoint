@@ -5,7 +5,7 @@
 class GfxRenderer;
 
 namespace RoundedRaffMetrics {
-constexpr ThemeMetrics values = {.batteryWidth = 15,
+constexpr ThemeMetrics values = DECKPOINT_THEME_METRICS(ThemeMetrics{.batteryWidth = 15,
                                  .batteryHeight = 12,
                                  // Fit the 23px SMALL_FONT_ID line box and lift it one pixel while
                                  // keeping the 12px battery glyph at y=19, aligned with Lyra.
@@ -86,7 +86,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .textFieldLineEndOffset = -1,
                                  .controlRadius = 18,
                                  .sheetRadius = 18,
-                                 .capsuleRadius = 255};
+                                 .capsuleRadius = 255});
 }
 
 class RoundedRaffTheme : public BaseTheme {

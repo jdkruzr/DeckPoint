@@ -83,6 +83,9 @@ class HalGPIO {
   // going through the debounced state. Cheap enough to call every few ms.
   bool rawInputActive();
   bool hasTouch() const;
+  // DECKPOINT: true when the board has no physical front/side buttons to label
+  // (touch-only or keyboard-driven); themes skip their button-hint strips.
+  bool hidesButtonHints() const;
   // Capacitive Home key reported by the touch controller (X4 Pro). The tap
   // event fires on release and excludes a long hold.
   bool hasHomeKey() const;

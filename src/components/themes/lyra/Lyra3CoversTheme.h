@@ -11,7 +11,7 @@ constexpr ThemeMetrics values = [] {
   ThemeMetrics v = LyraMetrics::values;
   v.homeCoverTileHeight = 300;
   v.homeRecentBooksCount = 3;
-  return v;
+  return DECKPOINT_THEME_METRICS(v);
 }();
 }  // namespace Lyra3CoversMetrics
 

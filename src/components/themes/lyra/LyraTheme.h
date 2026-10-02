@@ -6,7 +6,7 @@ class GfxRenderer;
 
 // Lyra theme metrics (zero runtime cost)
 namespace LyraMetrics {
-constexpr ThemeMetrics values = {.batteryWidth = 16,
+constexpr ThemeMetrics values = DECKPOINT_THEME_METRICS(ThemeMetrics{.batteryWidth = 16,
                                  .batteryHeight = 12,
                                  // Shared anchor for every header band, including the cover-grid
                                  // home's status band; roomy enough that the strip clears the edge.
@@ -79,7 +79,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .textFieldLineEndOffset = 0,
                                  .controlRadius = 6,
                                  .sheetRadius = 6,
-                                 .capsuleRadius = 6};
+                                 .capsuleRadius = 6});
 }  // namespace LyraMetrics
 
 class LyraTheme : public BaseTheme {

@@ -2,6 +2,7 @@
 
 #include <BoardConfig.h>
 #include <InputManager.h>
+#include <SPI.h>
 #include <Tca8418.h>
 #include <Wire.h>
 
@@ -18,7 +19,11 @@ constexpr int8_t PIN_I2C_SCL = 14;
 constexpr int8_t PIN_KB_INT = 15;
 constexpr int8_t PIN_KB_LED = 42;
 constexpr int8_t PIN_LORA_CS = 3;
-constexpr int8_t PIN_LORA_EN = 46;
+constexpr int8_t PIN_LORA_EN = 46;    // load switch for LORA_VDD (whole radio supply)
+constexpr int8_t PIN_LORA_BUSY = 6;
+constexpr int8_t PIN_SPI_SCK = 36;
+constexpr int8_t PIN_SPI_MISO = 47;
+constexpr int8_t PIN_SPI_MOSI = 33;
 constexpr int8_t PIN_GPS_EN = 39;
 constexpr int8_t PIN_MODEM_EN = 41;
 constexpr int8_t PIN_MOTOR = 2;          // v1.0 vibration motor / v1.1 DRV2605 enable
@@ -33,6 +38,7 @@ constexpr uint8_t KB_ROWS = 4;
 constexpr uint8_t KB_COLS = 10;
 
 Revision s_revision = Revision::Unknown;
+bool s_loraAsleep = false;
 freeink::Tca8418 s_kb;
 bool s_backlight = false;
 
@@ -174,9 +180,12 @@ uint8_t buttonMaskFor(const KeyDef& def) {
   }
 }
 
+unsigned long s_lastKeyMs = 0;
+
 void handlePress(uint8_t code) {
   const KeyDef* def = lookup(code);
   if (def == nullptr) return;
+  s_lastKeyMs = millis();
 
   if (Modifier* m = modifierFor(def->role)) {
     m->press();
@@ -288,6 +297,29 @@ void outputHigh(int8_t pin) {
   digitalWrite(pin, HIGH);
 }
 
+// Put the SX1262 into cold-start sleep (~160 nA). The radio stays powered:
+// LORA_EN switches its whole supply, and an unpowered radio would be
+// back-powered through the shared SPI lines. A falling edge on its NSS wakes
+// it, so its CS must stay parked high afterwards (it is never touched again).
+bool sleepLoRa() {
+  const unsigned long start = millis();
+  pinMode(PIN_LORA_BUSY, INPUT);
+  while (digitalRead(PIN_LORA_BUSY) == HIGH) {  // POR + calibration after power-up
+    if (millis() - start > 100) return false;
+    delay(1);
+  }
+  // Same pins the SD card and panel use later; a repeat SPI.begin() keeps them.
+  SPI.begin(PIN_SPI_SCK, PIN_SPI_MISO, PIN_SPI_MOSI, -1);
+  SPI.beginTransaction(SPISettings(2000000, MSBFIRST, SPI_MODE0));
+  digitalWrite(PIN_LORA_CS, LOW);
+  SPI.transfer(0x84);  // SetSleep
+  SPI.transfer(0x00);  // cold start, RTC timeout disabled
+  digitalWrite(PIN_LORA_CS, HIGH);
+  SPI.endTransaction();
+  delay(1);
+  return true;
+}
+
 bool probe(uint8_t addr) {
   Wire.beginTransmission(addr);
   return Wire.endTransmission() == 0;
@@ -297,12 +329,14 @@ bool probe(uint8_t addr) {
 
 void begin() {
   // Shared SPI bus: deselect everyone before the first transaction. The SX1262
-  // stays powered (as Meshtastic and LilyGo's factory firmware leave it) so an
-  // unpowered radio can't load the shared MISO line.
+  // stays powered (an unpowered radio would load the shared lines) but is put
+  // to sleep until DeckPoint has a use for it.
   outputHigh(PIN_LORA_EN);
   outputHigh(PIN_LORA_CS);
   outputHigh(BoardConfig::ACTIVE.sd.cs);
   outputHigh(BoardConfig::ACTIVE.display.cs);
+  delay(5);  // LORA_VDD ramp
+  s_loraAsleep = sleepLoRa();
 
   // Rails we don't use yet: GPS, LTE modem, motor, keyboard backlight.
   outputLow(PIN_GPS_EN);
@@ -325,10 +359,16 @@ void begin() {
     InputManager::setButtonHook(buttonHook);
   }
 
-  if (Serial) {
-    Serial.printf("[%lu] [TDECK] revision %s, keyboard %s\n", millis(), revisionName(),
-                  s_kb.present() ? "ok" : "MISSING");
-  }
+  logStatus();
+}
+
+bool loraAsleep() { return s_loraAsleep; }
+
+void logStatus() {
+  if (!Serial) return;
+  Serial.printf("[%lu] [TDECK] revision %s, keyboard %s, LoRa %s, kb backlight %s\n", millis(), revisionName(),
+                s_kb.present() ? "ok" : "MISSING", s_loraAsleep ? "asleep" : "BUSY stuck (left in standby)",
+                s_backlight ? "on" : "off");
 }
 
 Revision revision() { return s_revision; }
@@ -345,6 +385,16 @@ const char* revisionName() {
 }
 
 bool keyboardPresent() { return s_kb.present(); }
+
+void injectKey(uint8_t code, bool pressed) {
+  if (pressed) {
+    handlePress(code);
+  } else {
+    handleRelease(code);
+  }
+}
+
+unsigned long lastKeyActivityMs() { return s_lastKeyMs; }
 
 bool popKey(KeyEvent& out) {
   serviceKeyboard();

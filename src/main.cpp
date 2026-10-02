@@ -43,6 +43,7 @@
 #include "platform/UsbSerialJtagHandoff.h"
 #include "util/ButtonNavigator.h"
 #include "util/PluginEvents.h"
+#include "deckpoint/TestPattern.h"  // DECKPOINT
 #include "util/ScreenshotUtil.h"
 #include "util/Timezones.h"
 
@@ -421,7 +422,13 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.insertFont(NOTOSANS_18_FONT_ID, notosans18FontFamily);
 #endif  // OMIT_FONTS
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+  // DECKPOINT: one UI font tier down on small panels. ~70 call sites name
+  // UI_12_FONT_ID directly, so remap the slot rather than each caller.
+  renderer.insertFont(UI_12_FONT_ID, ui10FontFamily);
+#else
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
+#endif
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
 
   // Discover and load SD card fonts
@@ -734,6 +741,30 @@ void loop() {
         logSerial.write(buf, bufferSize);
         logSerial.printf("SCREENSHOT_END\n");
       }
+      // DECKPOINT: on-glass calibration image for checking orientation, bezel
+      // insets and physical scale against a photo of the panel.
+      else if (cmd == "TESTPATTERN") {
+        RenderLock lock;
+        deckpoint::drawTestPattern(renderer);
+      }
+#if FREEINK_DEVICE_TDECKPRO
+      else if (cmd == "BOARD") {  // DECKPOINT: reprint the board report
+        BoardTDeckPro::logStatus();
+      }
+      // DECKPOINT: "CMD:KEY:<code>[:p|:r]" injects a keyboard matrix event so
+      // host tooling (scripts/deckpoint_serial.py) can drive the UI. A bare
+      // code is a full tap; the bridge's pulse logic keeps it visible.
+      else if (cmd.startsWith("KEY:")) {
+        const String arg = cmd.substring(4);
+        const int colon = arg.indexOf(':');
+        const long code = (colon < 0 ? arg : arg.substring(0, colon)).toInt();
+        const String phase = colon < 0 ? String() : arg.substring(colon + 1);
+        if (code >= 1 && code <= 35) {
+          if (phase != "r") BoardTDeckPro::injectKey(static_cast<uint8_t>(code), true);
+          if (phase != "p") BoardTDeckPro::injectKey(static_cast<uint8_t>(code), false);
+        }
+      }
+#endif
     }
   }
 
@@ -744,6 +775,16 @@ void loop() {
     lastActivityTime = millis();         // Reset inactivity timer
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
+#if FREEINK_DEVICE_TDECKPRO
+  // DECKPOINT: typed keys that the button bridge doesn't map (or any key in raw
+  // mode) produce no button edges, but they are still the user being active.
+  static unsigned long lastSeenKeyMs = 0;
+  if (BoardTDeckPro::lastKeyActivityMs() != lastSeenKeyMs) {
+    lastSeenKeyMs = BoardTDeckPro::lastKeyActivityMs();
+    lastActivityTime = millis();
+    powerManager.setPowerSaving(false);
+  }
+#endif
 
   // Let wake continue as soon as its hold has been verified. The release can
   // arrive after setup, so consume that one input frame rather than making it

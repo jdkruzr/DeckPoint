@@ -78,7 +78,7 @@ const ThemeMetrics& UITheme::getMetrics() const {
   const bool touch = gpio.hasTouch();
   if (!metricsValid || touch != metricsForTouch) {
     adjustedMetrics = *currentMetrics;
-    if (touch) {
+    if (touch || gpio.hidesButtonHints()) {  // DECKPOINT: keyboard boards have no hint strip either
       adjustedMetrics.buttonHintsHeight = 0;
     }
     metricsForTouch = touch;
