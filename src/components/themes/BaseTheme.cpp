@@ -356,9 +356,11 @@ void BaseTheme::applyHeaderStatus(const GfxRenderer& renderer, freeink::ui::Head
   // buttons drop by that amount to align with the glyphs the user sees.
   // Buttons keep a standard square (a band-8 button dwarfs its 24px icon);
   // the boxes are invisible and minTouchSize pads the tap target.
-  constexpr int16_t headerButtonSize = 48;
   const int16_t bandHeight = static_cast<int16_t>(metrics.headerHeight);
   const int16_t strip = static_cast<int16_t>(metrics.batteryBarHeight);
+  // DECKPOINT: was a fixed 48; clamp to the content row so compact bands
+  // (44px with a 14px strip) don't push the button box up into the strip.
+  const int16_t headerButtonSize = static_cast<int16_t>(std::min(48, bandHeight - strip));
   const int titleFontId = uiScaleSpec().titleFontId;
   const int16_t opticalDrop =
       static_cast<int16_t>((renderer.getLineHeight(titleFontId) - renderer.getTextHeight(titleFontId)) / 2);

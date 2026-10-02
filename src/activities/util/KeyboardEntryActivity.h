@@ -32,6 +32,9 @@ class KeyboardEntryActivity : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
   bool preventAutoSleep() override { return true; }
+  // DECKPOINT: type on a physical keyboard instead of the on-screen one.
+  bool wantsRawKeys() const override;
+  void onKey(const freeink::KeyEvent& event) override;
 
  private:
   std::string title;

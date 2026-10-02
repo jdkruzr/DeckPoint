@@ -1,4 +1,5 @@
 #pragma once
+#include <KeyEvent.h>
 #include <Logging.h>
 
 #include <cassert>
@@ -54,6 +55,13 @@ class Activity {
   virtual bool isHomeActivity() const { return false; }
   virtual bool handleHomeGesture() { return false; }
   virtual ScreenshotInfo getScreenshotInfo() const { return {}; }
+
+  // DECKPOINT: physical keyboard. An activity that returns true from
+  // wantsRawKeys() receives every key press via onKey() and the keyboard's
+  // button bridge is muted while it is on top; otherwise mapped keys arrive
+  // as ordinary button presses and the rest are discarded.
+  virtual bool wantsRawKeys() const { return false; }
+  virtual void onKey(const freeink::KeyEvent& /*event*/) {}
 
   // Start a new activity without destroying the current one
   // Note: requestUpdate() will be invoked automatically once resultHandler finishes

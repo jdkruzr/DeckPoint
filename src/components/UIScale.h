@@ -13,7 +13,13 @@ struct UIScaleSpec {
 
 inline UIScaleSpec uiScaleSpec() {
   UIScaleSpec spec{};
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+  // DECKPOINT: UI_12's slot already holds the 10pt face on compact builds, so
+  // "small" steps down to the 8pt face to stay smaller than body text.
+  spec.smallFontId = SMALL_FONT_ID;
+#else
   spec.smallFontId = UI_10_FONT_ID;
+#endif
   spec.bodyFontId = UI_12_FONT_ID;
   // Titles use the UI font, not a reader font: fui headers draw book and
   // directory titles, and the built-in Ubuntu UI fonts cover Hebrew (plus the

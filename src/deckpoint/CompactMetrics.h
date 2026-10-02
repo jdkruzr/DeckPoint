@@ -22,7 +22,7 @@ constexpr ThemeMetrics compactMetrics(ThemeMetrics m) {
   m.batteryHeight = 8;
   m.topPadding = 3;
   m.batteryBarHeight = 14;
-  m.headerHeight = 34;
+  m.headerHeight = 44;  // 14px status strip + a 24px title line with breathing room
   m.verticalSpacing = 6;
 
   m.previewPadding = 6;

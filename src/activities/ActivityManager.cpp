@@ -4,6 +4,7 @@
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <HalDisplay.h>
+#include <HalKeyboard.h>
 #include <HalPowerManager.h>
 #include <Memory.h>
 #include <VectorFontSupport.h>
@@ -127,6 +128,20 @@ void ActivityManager::loop() {
     if (currentActivity->name != "FrontlightPanel" && (statusBarTap || mappedInput.wasLightPanelGesture())) {
       pushActivity(std::make_unique<FrontlightPanelActivity>(renderer, mappedInput));
       return;
+    }
+
+    // DECKPOINT: physical keyboard routing. Raw-key activities get every press
+    // (and mute the button bridge); for the rest, mapped keys already arrived as
+    // button presses and the leftover queue is dropped so nothing goes stale.
+    if (halKeyboard.present()) {
+      const bool raw = currentActivity->wantsRawKeys();
+      halKeyboard.setRawMode(raw);
+      if (raw) {
+        freeink::KeyEvent event;
+        while (halKeyboard.pop(event)) currentActivity->onKey(event);
+      } else {
+        halKeyboard.flush();
+      }
     }
 
     // Note: do not hold a lock here, the loop() method must be responsible for acquire one if needed

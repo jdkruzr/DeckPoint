@@ -2,6 +2,7 @@
 
 #include <BidiUtils.h>
 #include <HalGPIO.h>
+#include <HalKeyboard.h>
 #include <I18n.h>
 
 #include <algorithm>
@@ -911,6 +912,18 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     }
   }
 
+  // DECKPOINT: a physical keyboard replaces the on-screen one and its tips;
+  // the screen is just the title, the field and a one-line key legend.
+  if (halKeyboard.present()) {
+    const int legendLh = renderer.getLineHeight(SMALL_FONT_ID);
+    const int legendY = renderer.getScreenHeight() - 2 * legendLh - metrics.verticalSpacing;
+    renderer.drawCenteredText(SMALL_FONT_ID, legendY, "Enter: OK    Esc: cancel", true);
+    renderer.drawCenteredText(SMALL_FONT_ID, legendY + legendLh,
+                              isPassword ? "Alt+P: show/hide password" : "Alt+H/L: move cursor", true);
+    renderer.displayBuffer();
+    return;
+  }
+
   const fui::Rect kbRect = keyboardRect();
   const int keysHeight = keyboardKeysHeight(metrics, currentLayout().rowCount, mappedInput.hasTouch());
   const fui::Rect keysRect{kbRect.x, static_cast<int16_t>(kbRect.y + (kbRect.height - keysHeight) / 2), kbRect.width,
@@ -1014,6 +1027,71 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   GUI.drawSideButtonHints(renderer, ">", "<");
 
   renderer.displayBuffer();
+}
+
+// DECKPOINT: physical keyboard input. With real keys there is no on-screen
+// keyboard to drive, so this is the whole editing model:
+//   printable -> insert at cursor      Backspace / Shift+Backspace -> delete back / forward
+//   Enter -> submit                    Esc (mic key) -> cancel
+//   Alt+H / Alt+L -> cursor left/right Alt+P -> show/hide password  Alt+Backspace -> clear
+bool KeyboardEntryActivity::wantsRawKeys() const { return halKeyboard.present(); }
+
+void KeyboardEntryActivity::onKey(const freeink::KeyEvent& event) {
+  using freeink::SpecialKey;
+  const bool alt = (event.mods & freeink::KeyMod::Alt) != 0;
+  if (cursorPos > text.length()) cursorPos = text.length();
+
+  switch (event.special) {
+    case SpecialKey::Enter:
+      onComplete(text);
+      return;
+    case SpecialKey::Escape:
+      onCancel();
+      return;
+    case SpecialKey::Backspace:
+      if (alt) {
+        text.clear();
+        cursorPos = 0;
+      } else if (!backspaceUtf8()) {
+        return;
+      }
+      requestUpdate();
+      return;
+    case SpecialKey::Delete:
+      if (cursorPos >= text.length()) return;
+      text.erase(cursorPos, utf8Next(text, cursorPos) - cursorPos);
+      requestUpdate();
+      return;
+    default:
+      break;
+  }
+
+  if (event.ch == 0) return;
+  if (alt) {
+    switch (event.ch) {
+      case 'h':
+        if (cursorPos == 0) return;
+        cursorPos = utf8Prev(text, cursorPos);
+        break;
+      case 'l':
+        if (cursorPos >= text.length()) return;
+        cursorPos = utf8Next(text, cursorPos);
+        break;
+      case 'p':
+        if (inputType != InputType::Password) return;
+        passwordVisible = !passwordVisible;
+        break;
+      default:
+        return;
+    }
+    requestUpdate();
+    return;
+  }
+
+  const char out[2] = {event.ch, 0};
+  const size_t before = text.length();
+  insertUtf8(out);
+  if (text.length() != before) requestUpdate();
 }
 
 void KeyboardEntryActivity::onComplete(std::string text) {

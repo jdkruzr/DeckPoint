@@ -69,7 +69,11 @@ LibraryListActivity::LibraryListActivity(GfxRenderer& renderer, MappedInputManag
     : UiTabListActivity("Library", renderer, mappedInput, true) {
   // Three short tab labels: a full-slot pill would stretch across a third of
   // the screen, so cap it at the label plus padding (slots stay put).
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+  tabPillMaxPad = 4;  // DECKPOINT: 16px a side eats half of a 240px screen's ~64px slot
+#else
   tabPillMaxPad = 16;
+#endif
 }
 
 void LibraryListActivity::onEnter() {
