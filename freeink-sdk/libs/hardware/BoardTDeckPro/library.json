@@ -1,0 +1,14 @@
+{
+  "name": "BoardTDeckPro",
+  "version": "0.1.0",
+  "description": "FreeInk board support for the LilyGo T-Deck Pro (DeckPoint): shared-SPI bus hygiene, peripheral rails, v1.0/v1.1 detection, and the TCA8418 keyboard (keymap, modifiers, KeyEvent queue, button bridge).",
+  "keywords": "lilygo, t-deck, tdeck, keyboard, board",
+  "authors": [{"name": "DeckPoint contributors"}],
+  "dependencies": {
+    "BoardConfig": "*",
+    "InputManager": "*",
+    "KeyMatrix": "*"
+  },
+  "platforms": "espressif32",
+  "frameworks": ["arduino"]
+}

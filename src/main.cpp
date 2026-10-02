@@ -20,6 +20,9 @@
 #include <VectorFontSupport.h>
 #include <WiFi.h>
 #include <XteinkDetect.h>
+#if FREEINK_DEVICE_TDECKPRO
+#include <BoardTDeckPro.h>  // DECKPOINT
+#endif
 #include <builtinFonts/all.h>
 
 #include <cstring>
@@ -443,6 +446,11 @@ void setup() {
 #endif
 
   HalSystem::begin();
+#if FREEINK_DEVICE_TDECKPRO
+  // DECKPOINT: park the shared-SPI chip selects, power down unused rails,
+  // detect v1.0/v1.1 and bring up the keyboard before storage or display.
+  BoardTDeckPro::begin();
+#endif
   // checkPanic() clears the watchdog capture marker after a successful SD
   // dump, so retain the boot classification for the later activity route.
   const bool rebootedFromPanic = HalSystem::isRebootFromPanic();
@@ -547,7 +555,8 @@ void setup() {
     case HalGPIO::WakeupReason::AfterUSBPower:
       // Most devices return to sleep after a USB-powered cold boot.
       LOG_DBG("MAIN", "Wakeup reason: After USB Power");
-#if FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_X4CLASSIC || FREEINK_DEVICE_PAPERMONO || FREEINK_DEVICE_EEGO_A4
+#if FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_X4CLASSIC || FREEINK_DEVICE_PAPERMONO || FREEINK_DEVICE_EEGO_A4 || \
+    FREEINK_DEVICE_TDECKPRO  // DECKPOINT: native USB, same post-flash POWERON misread as the EEGO A4
       // X4 Pro must stay awake so USB Serial/JTAG remains available after leaving
       // USB Drive and reconnecting the cable. Paper Mono has no armable GPIO wake
       // (its button is behind the PMIC). EEGO A4's post-flash reset reads as

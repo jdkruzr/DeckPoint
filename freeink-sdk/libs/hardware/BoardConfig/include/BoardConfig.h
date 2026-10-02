@@ -85,12 +85,17 @@
 #if FREEINK_DEVICE_METALIO_EINK4
 #include "MetalioEInk4Board.h"
 #endif
+// DECKPOINT: LilyGo T-Deck Pro (ESP32-S3, GDEQ031T10 240x320 UC8253, TCA8418 keyboard).
+#ifndef FREEINK_DEVICE_TDECKPRO
+#define FREEINK_DEVICE_TDECKPRO 0
+#endif
 
 // --- 2) Coherence: exactly one MCU family, at least one device ---------------
 #if !(FREEINK_DEVICE_X4 || FREEINK_DEVICE_X3 || FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_X4CLASSIC || FREEINK_DEVICE_M5 || \
       FREEINK_DEVICE_MURPHY || FREEINK_DEVICE_DELINK || FREEINK_DEVICE_LILYGO || FREEINK_DEVICE_M5PAPER ||               \
       FREEINK_DEVICE_STICKY || FREEINK_DEVICE_PAPERMONO || FREEINK_DEVICE_PAPERS3 || FREEINK_DEVICE_MURPHY_M4 ||         \
-      FREEINK_DEVICE_EEGO_A4 || FREEINK_DEVICE_ONEPAGE || FREEINK_DEVICE_WS397 || FREEINK_DEVICE_METALIO_EINK4)
+      FREEINK_DEVICE_EEGO_A4 || FREEINK_DEVICE_ONEPAGE || FREEINK_DEVICE_WS397 || FREEINK_DEVICE_METALIO_EINK4 ||        \
+      FREEINK_DEVICE_TDECKPRO)
 #error \
     "FreeInk: no device selected. Pass at least one -DFREEINK_DEVICE_<NAME> (X4, X3, X4PRO, X4CLASSIC, M5, MURPHY, DELINK, LILYGO, M5PAPER, STICKY, PAPERMONO, PAPERS3, MURPHY_M4, EEGO_A4, ONEPAGE, WS397, METALIO_EINK4) in your build env — see platformio.sample.ini."
 #endif
@@ -103,7 +108,8 @@
 #define FREEINK_MCU_S3                                                                                    \
   (FREEINK_DEVICE_M5 || FREEINK_DEVICE_MURPHY || FREEINK_DEVICE_DELINK || FREEINK_DEVICE_LILYGO ||        \
    FREEINK_DEVICE_STICKY || FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_X4CLASSIC || FREEINK_DEVICE_PAPERMONO ||  \
-   FREEINK_DEVICE_PAPERS3 || FREEINK_DEVICE_MURPHY_M4 || FREEINK_DEVICE_EEGO_A4 || FREEINK_DEVICE_WS397 || FREEINK_DEVICE_METALIO_EINK4)
+   FREEINK_DEVICE_PAPERS3 || FREEINK_DEVICE_MURPHY_M4 || FREEINK_DEVICE_EEGO_A4 || FREEINK_DEVICE_WS397 || FREEINK_DEVICE_METALIO_EINK4 || \
+   FREEINK_DEVICE_TDECKPRO)
 #define FREEINK_MCU_ESP32 (FREEINK_DEVICE_M5PAPER)
 #if (FREEINK_MCU_C3 + FREEINK_MCU_C61 + FREEINK_MCU_S3 + FREEINK_MCU_ESP32) != 1
 #error \
@@ -170,6 +176,14 @@
 #define FREEINK_DRIVER_UC8253_MURPHY 1
 #else
 #define FREEINK_DRIVER_UC8253_MURPHY 0
+#endif
+// DECKPOINT: GDEQ031T10 (T-Deck Pro). Same UC8253 silicon as Murphy/X3 but runs
+// the panel's OTP waveforms and has no RESET line on v1.0 boards, so it gets its
+// own driver rather than Murphy's reset-before-every-refresh custom-LUT path.
+#if FREEINK_DEVICE_TDECKPRO
+#define FREEINK_DRIVER_UC8253_GDEQ031 1
+#else
+#define FREEINK_DRIVER_UC8253_GDEQ031 0
 #endif
 // LilyGo T5 S3 and M5Stack PaperS3: raw-parallel ED047TC1 via LovyanGFX (M5GFX).
 // External-bus driver; each board injects its own bus pins/power in an
@@ -283,7 +297,12 @@
 #ifndef FREEINK_BATTERY_I2C_GAUGE
 #define FREEINK_BATTERY_I2C_GAUGE                                                            \
   (FREEINK_DEVICE_X3 || FREEINK_DEVICE_LILYGO || FREEINK_DEVICE_STICKY || FREEINK_DEVICE_X4PRO || \
-   FREEINK_DEVICE_X4CLASSIC || FREEINK_DEVICE_WS397 || FREEINK_DEVICE_METALIO_EINK4)
+   FREEINK_DEVICE_X4CLASSIC || FREEINK_DEVICE_WS397 || FREEINK_DEVICE_METALIO_EINK4 || FREEINK_DEVICE_TDECKPRO)
+#endif
+// DECKPOINT: physical keyboard (TCA8418 matrix on the T-Deck Pro). Gates the
+// KeyMatrix driver and keyboard-only UI. A BLE keyboard could opt in later.
+#ifndef FREEINK_CAP_KEYBOARD
+#define FREEINK_CAP_KEYBOARD (FREEINK_DEVICE_TDECKPRO)
 #endif
 #ifndef FREEINK_CAP_COLOR
 #define FREEINK_CAP_COLOR (FREEINK_DEVICE_M5)
@@ -412,6 +431,7 @@ enum class Board : uint8_t {
   OnePage,    // OnePage: ESP32-C61, SSD1677 800x480 SPI panel, 4-key ADC ladder + 3 side keys
   WsEpaper397,  // Waveshare ESP32-S3-ePaper-3.97: SSD1677 800x480, 3 keys + BOOT, AXP2101 PMIC
   MetalioEInk4,  // ESP32-S3, GDEM0397T81, CST816S, TCA9555
+  TDeckPro,      // DECKPOINT: LilyGo T-Deck Pro: ESP32-S3, GDEQ031T10 240x320 UC8253, TCA8418 keyboard
 };
 
 // How the board reports button presses.
@@ -1873,6 +1893,48 @@ constexpr BoardProfile ONEPAGE = {
 static_assert(ONEPAGE.displayWidth / 8 * ONEPAGE.displayHeight == 48000,
               "OnePage framebuffer must be 48,000 bytes (800/8 x 480)");
 
+// --- DECKPOINT: LilyGo T-Deck Pro — UC8253 GDEQ031T10, TCA8418 keyboard ------
+// Pins from LilyGo's examples/factory/utilities.h, cross-checked against the
+// v1.0 schematic (hardware/T-DeckPro V1.0 24-05-16.pdf): KEY_INT=IO15,
+// GPS_EN=IO39, keyboard LED_EN=IO42. One SPI bus (SCK36 MOSI33 MISO47) is
+// shared by the panel, the SD card and the SX1262; BoardTDeckPro::begin() parks
+// the LoRa CS before anything touches the bus. The panel is native 240x320
+// portrait — the same way the device is held — so the framebuffer is unrotated.
+// Hardware revision differences (v1.0 vs v1.1) are patched into ACTIVE at boot
+// by BoardTDeckPro::begin(): v1.1 adds EPD RST on GPIO16 and a DRV2605 haptic
+// driver; touch moved from CST328 to CST3530. The only real GPIO button is BOOT
+// (GPIO0), used as power/sleep; everything else comes from the keyboard via
+// InputManager::setButtonHook().
+constexpr BoardProfile TDECK_PRO = {
+    Board::TDeckPro,
+    "tdeck_pro",
+    InputStyle::DigitalButtons,
+    DisplayController::UC8253,
+    240,
+    320,
+    {36, 33, 34, 35, PIN_UNASSIGNED, 37, PIN_UNASSIGNED},  // SCLK MOSI CS DC RST(v1.0 none) BUSY
+    0,  // displaySpiHz: 0 -> GDEQ031 driver default
+    {PIN_UNASSIGNED, 47, PIN_UNASSIGNED, 48, PIN_UNASSIGNED, false, 0},  // SD CS48 on the shared bus, MISO47
+    {PIN_UNASSIGNED, PIN_UNASSIGNED, PIN_UNASSIGNED, PIN_UNASSIGNED, PIN_UNASSIGNED, PIN_UNASSIGNED, 0,
+     false},         // power = BOOT (GPIO0), active-low
+    PIN_UNASSIGNED,  // batteryAdc: none — BQ27220 gauge below
+    PIN_UNASSIGNED,
+    2.0f,
+    PIN_UNASSIGNED,  // usbDetect: none (charging state from the BQ25896)
+    NO_TOUCH,        // CST328/CST3530 touch: not wired up yet
+    NO_FRONTLIGHT,   // v1.1 has an optional front light on GPIO45; not on all units
+    NO_AUDIO,
+    NO_LEDS,
+    NO_FLIP,
+    NO_SDMMC,
+    {13, 14, 400000, 0x55, 0x6B},  // BQ27220 gauge + BQ25896 charger, shared with keyboard/touch I2C
+    NO_MIC,
+    NO_SENSORS,
+    1.0f,  // uiScale: keyboard-driven, no finger targets; 3.1" 240x320 (~129 PPI)
+    {},    // power: no latch pins
+    0,
+    {0, 0, 0, 0}};  // viewableInsets: TODO measure the bezel on hardware
+
 // Largest framebuffer (bytes) over the devices compiled into this build, derived
 // from the profiles above. The display facade sizes its static framebuffer to
 // this so one binary holds whichever panel is runtime-selected; a single-device
@@ -1898,12 +1960,15 @@ constexpr uint32_t MAX_FRAMEBUFFER_BYTES = cmax(
                    cmax(cmax(FREEINK_DEVICE_EEGO_A4 ? panelBytes(EEGO_A4) : 0u,
                              FREEINK_DEVICE_ONEPAGE ? panelBytes(ONEPAGE) : 0u),
                         cmax(FREEINK_DEVICE_WS397 ? panelBytes(WS_EPAPER_397) : 0u,
-                             FREEINK_DEVICE_METALIO_EINK4 ? panelBytes(METALIO_EINK4) : 0u))))));
+                             cmax(FREEINK_DEVICE_METALIO_EINK4 ? panelBytes(METALIO_EINK4) : 0u,
+                                  FREEINK_DEVICE_TDECKPRO ? panelBytes(TDECK_PRO) : 0u)))))));
 
 // Compile-time default device — the profile ACTIVE starts as. With a single
 // device in the build this is the only device; with several same-MCU devices it
 // is the boot default until the consumer calls selectDevice().
-#if FREEINK_DEVICE_METALIO_EINK4
+#if FREEINK_DEVICE_TDECKPRO
+constexpr BoardProfile DEFAULT_DEVICE = TDECK_PRO;
+#elif FREEINK_DEVICE_METALIO_EINK4
 constexpr BoardProfile DEFAULT_DEVICE = METALIO_EINK4;
 #elif FREEINK_DEVICE_WS397
 constexpr BoardProfile DEFAULT_DEVICE = WS_EPAPER_397;
@@ -2040,6 +2105,11 @@ inline bool selectDevice(Board which) {
       ACTIVE = WS_EPAPER_397;
       break;
 #endif
+#if FREEINK_DEVICE_TDECKPRO
+    case Board::TDeckPro:
+      ACTIVE = TDECK_PRO;
+      break;
+#endif
     default:
       return false;
   }
@@ -2064,6 +2134,7 @@ inline bool isEegoA4() { return ACTIVE.board == Board::EegoA4; }
 inline bool isMetalioEInk4() { return ACTIVE.board == Board::MetalioEInk4; }
 inline bool isOnePage() { return ACTIVE.board == Board::OnePage; }
 inline bool isWsEpaper397() { return ACTIVE.board == Board::WsEpaper397; }
+inline bool isTDeckPro() { return ACTIVE.board == Board::TDeckPro; }  // DECKPOINT
 inline bool hasTouch() { return ACTIVE.touch.controller != TouchController::None; }
 inline bool hasHomeKey() { return ACTIVE.touch.hasHomeKey; }
 inline bool hasPwmFrontlight() { return ACTIVE.frontlight.gpio != PIN_UNASSIGNED || ACTIVE.frontlight.viaPm1Pwm; }

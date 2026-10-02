@@ -47,6 +47,9 @@
 #if FREEINK_DRIVER_UC8253_MURPHY
 #include "driver/Uc8253MurphyDriver.h"
 #endif
+#if FREEINK_DRIVER_UC8253_GDEQ031
+#include "driver/Uc8253Gdeq031Driver.h"  // DECKPOINT
+#endif
 #if FREEINK_DRIVER_LGFX_EPD
 #include "driver/LgfxEpdDriver.h"
 #endif
@@ -172,6 +175,8 @@ void FreeInkDisplay::selectDriver() {
       _driver = &paperMonoDriver();
 #elif FREEINK_DRIVER_UC8253_MURPHY
       _driver = &uc8253MurphyDriver();
+#elif FREEINK_DRIVER_UC8253_GDEQ031
+      _driver = &uc8253Gdeq031Driver();  // DECKPOINT
 #elif FREEINK_DRIVER_M5_OFFICIAL
       _driver = &m5OfficialDriver();
 #elif FREEINK_DRIVER_ED2208

@@ -1,0 +1,10 @@
+{
+  "name": "KeyMatrix",
+  "version": "0.1.0",
+  "description": "FreeInk shared KeyEvent model plus a TCA8418 I2C keypad-scanner driver (DeckPoint). Chip-level only; boards own keymaps and modifier semantics.",
+  "keywords": "keyboard, keypad, tca8418, input",
+  "authors": [{"name": "DeckPoint contributors"}],
+  "dependencies": {},
+  "platforms": "espressif32",
+  "frameworks": ["arduino"]
+}

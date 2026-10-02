@@ -23,36 +23,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <KeyEvent.h>
+
 namespace freeink {
 
-// Non-character keys an editor/UI cares about. Printable keys arrive as `ch`.
-enum class SpecialKey : uint8_t {
-  None = 0,
-  Enter,
-  Backspace,
-  Tab,
-  Escape,
-  Delete,
-  Left,
-  Right,
-  Up,
-  Down,
-  Home,
-  End,
-  PageUp,
-  PageDown,
-};
-
-// One decoded key press (or auto-repeat). `pressed` is always true today — the
-// host emits on the press edge and synthesizes repeats while a key is held; key
-// releases are tracked internally for repeat but not surfaced.
-struct KeyEvent {
-  char ch = 0;                          // printable ASCII, or 0 for a special key
-  uint8_t keycode = 0;                  // raw HID usage id
-  uint8_t mods = 0;                     // HID modifier bitmask (ctrl/shift/alt/gui)
-  SpecialKey special = SpecialKey::None;
-  bool pressed = true;
-};
+// DECKPOINT: SpecialKey / KeyEvent / KeyMod now live in KeyMatrix's KeyEvent.h,
+// shared with the T-Deck Pro matrix keyboard.
 
 // One button edge read from the report BYTES, next to the key decode. Its
 // identity is where the report first differs from its rest frame (the frame the
