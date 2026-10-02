@@ -297,13 +297,22 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sleepTimeoutMinutes = 10;
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+  // DECKPOINT: a ~220px column justified without hyphenation leaves rivers.
+  uint8_t hyphenationEnabled = 1;
+#else
   uint8_t hyphenationEnabled = 0;
+#endif
 
   // Reader screen margin settings
   static constexpr uint8_t SCREEN_MARGIN_MIN = 5;
   static constexpr uint8_t SCREEN_MARGIN_MAX = 40;
   static constexpr uint8_t SCREEN_MARGIN_STEP = 5;
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+  uint8_t screenMargin = 10;  // DECKPOINT: 5px is cramped on a 240px-wide page
+#else
   uint8_t screenMargin = SCREEN_MARGIN_MIN;
+#endif
   // OPDS download destination folder ("" = SD root). Global; edited from the
   // OPDS server list. Persisted via a category-less SettingInfo::String in
   // SettingsList.h, so it stays out of the on-device Settings screen.

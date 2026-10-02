@@ -24,6 +24,9 @@
 #include <BoardTDeckPro.h>  // DECKPOINT
 #endif
 #include <builtinFonts/all.h>
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+#include "deckpoint/CompactReaderFonts.h"  // DECKPOINT: pixel-sized reader fonts
+#endif
 
 #include <cstring>
 

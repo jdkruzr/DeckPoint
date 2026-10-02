@@ -39,3 +39,21 @@ for ppem in 15 12 11; do
     echo "Generated $output_path"
   done
 done
+
+# Reader fonts: same families/styles as the stock 12/14/16/18 "pt" (150 DPI)
+# sets, sized in pixels for ~129 PPI glass and registered into the stock reader
+# font slots (12->15px, 14->17px, 16->19px, 18->21px). These stay 2-bit
+# (anti-aliasing-ready); the panel shows them B/W until it has gray LUTs.
+READER_STYLES=(Regular Italic Bold BoldItalic)
+for ppem in 15 17 19 21; do
+  for family in NotoSerif NotoSans; do
+    lower=$(echo $family | tr '[:upper:]' '[:lower:]')
+    for style in "${READER_STYLES[@]}"; do
+      font_name="${lower}_c${ppem}_$(echo $style | tr '[:upper:]' '[:lower:]')"
+      output_path="../builtinFonts/${font_name}.h"
+      "$PY" fontconvert.py "$font_name" 0 "../builtinFonts/source/${family}/${family}-${style}.ttf" \
+        --2bit --compress --pnum --ppem "$ppem" > "$output_path"
+      echo "Generated $output_path"
+    done
+  done
+done

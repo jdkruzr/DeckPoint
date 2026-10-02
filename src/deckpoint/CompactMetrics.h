@@ -54,7 +54,7 @@ constexpr ThemeMetrics compactMetrics(ThemeMetrics m) {
 
   m.progressBarHeight = 8;
   m.statusBarHorizontalMargin = 4;
-  m.statusBarVerticalMargin = 8;
+  m.statusBarVerticalMargin = 16;  // reader status text is the 11px UI face (13px line) + 3px air
   m.keyboardKeyHeight = 28;
 
   m.popupMarginX = 8;
