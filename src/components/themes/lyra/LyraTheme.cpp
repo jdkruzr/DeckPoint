@@ -268,7 +268,17 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     int tileX = LyraMetrics::values.contentSidePadding;
     int textWidth = tileWidth - 2 * hPaddingInSelection - LyraMetrics::values.verticalSpacing - coverWidth;
 
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+    // DECKPOINT: outline the selected card; a dithered fill swallows the
+    // crisp 1-bit title and author drawn on top of it.
     if (bookSelected) {
+      renderer.drawRect(tileX, tileY, tileWidth, LyraMetrics::values.homeCoverHeight + 2 * hPaddingInSelection, 2,
+                        true);
+    }
+    if (false) {
+#else
+    if (bookSelected) {
+#endif
       // Draw selection box
       renderer.fillRoundedRect(tileX, tileY, tileWidth, hPaddingInSelection, cornerRadius, true, true, false, false,
                                Color::LightGray);
