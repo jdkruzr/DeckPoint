@@ -129,6 +129,28 @@ EpdFontFamily notosans18FontFamily(&notosans18RegularFont, &notosans18BoldFont, 
 
 #endif  // OMIT_FONTS
 
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+// DECKPOINT: pixel-sized, mono-hinted Ubuntu for small low-PPI panels
+// (lib/EpdFont/scripts/convert-deckpoint-compact-fonts.sh). Registered into
+// the stock UI slots below so every screen picks them up unchanged.
+#include <builtinFonts/ubuntu_c11_bold.h>
+#include <builtinFonts/ubuntu_c11_regular.h>
+#include <builtinFonts/ubuntu_c12_bold.h>
+#include <builtinFonts/ubuntu_c12_regular.h>
+#include <builtinFonts/ubuntu_c15_bold.h>
+#include <builtinFonts/ubuntu_c15_regular.h>
+EpdFont uiC11RegularFont(&ubuntu_c11_regular);
+EpdFont uiC11BoldFont(&ubuntu_c11_bold);
+EpdFontFamily uiC11FontFamily(&uiC11RegularFont, &uiC11BoldFont);
+EpdFont uiC12RegularFont(&ubuntu_c12_regular);
+EpdFont uiC12BoldFont(&ubuntu_c12_bold);
+EpdFontFamily uiC12FontFamily(&uiC12RegularFont, &uiC12BoldFont);
+EpdFont uiC15RegularFont(&ubuntu_c15_regular);
+EpdFont uiC15BoldFont(&ubuntu_c15_bold);
+EpdFontFamily uiC15FontFamily(&uiC15RegularFont, &uiC15BoldFont);
+#else
+// Stock UI fonts. Compact builds don't construct them, so the linker drops
+// their (file-static) glyph data.
 EpdFont smallFont(&notosans_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
 
@@ -139,6 +161,7 @@ EpdFontFamily ui10FontFamily(&ui10RegularFont, &ui10BoldFont);
 EpdFont ui12RegularFont(&ubuntu_12_regular);
 EpdFont ui12BoldFont(&ubuntu_12_bold);
 EpdFontFamily ui12FontFamily(&ui12RegularFont, &ui12BoldFont);
+#endif
 
 // Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
 RTC_NOINIT_ATTR uint32_t silentRebootMagic;
@@ -421,15 +444,17 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.insertFont(NOTOSANS_16_FONT_ID, notosans16FontFamily);
   renderer.insertFont(NOTOSANS_18_FONT_ID, notosans18FontFamily);
 #endif  // OMIT_FONTS
-  renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
 #if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
-  // DECKPOINT: one UI font tier down on small panels. ~70 call sites name
-  // UI_12_FONT_ID directly, so remap the slot rather than each caller.
-  renderer.insertFont(UI_12_FONT_ID, ui10FontFamily);
+  // DECKPOINT: ~70 call sites name the UI font slots directly, so the compact
+  // set is registered into the slots rather than changing each caller.
+  renderer.insertFont(UI_10_FONT_ID, uiC12FontFamily);
+  renderer.insertFont(UI_12_FONT_ID, uiC15FontFamily);
+  renderer.insertFont(SMALL_FONT_ID, uiC11FontFamily);
 #else
+  renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
-#endif
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
+#endif
 
   // Discover and load SD card fonts
   sdFontSystem.begin(renderer);

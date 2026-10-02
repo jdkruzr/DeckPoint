@@ -888,7 +888,9 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
 
     item.label = title.c_str();
     // Group headings stay bare; every book row gets its file-type icon.
+#if !(defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI)  // DECKPOINT: every row is a book; give the width to the title
     if (!groupsCollapsed && !rowFile.empty()) item.icon = listIconFor(UITheme::getFileIcon(rowFile), 32);
+#endif
     item.actionValue = static_cast<int16_t>(entry);
     winItems.push_back(item);
     rows++;
@@ -1024,7 +1026,15 @@ const char* LibraryListActivity::headerTitle() const {
 
 void LibraryListActivity::drawHoldHelp() const {
   if (mappedInput.hasTouch() || groupsCollapsed) return;
-  if (halKeyboard.present()) return;  // DECKPOINT: "Hold: ..." describes buttons a keyboard doesn't have
+  if (halKeyboard.present()) {
+    // DECKPOINT: "Hold: ..." describes buttons a keyboard doesn't have; show
+    // the keys instead, left of the position readout on the same line.
+    const char* legend = tabsFocused() ? "h/l: tab   k: search   Enter: list" : "j/k: move   Enter: open";
+    const auto& km = UITheme::getInstance().getMetrics();
+    const int ky = renderer.getScreenHeight() - km.buttonHintsHeight - renderer.getLineHeight(SMALL_FONT_ID);
+    renderer.drawText(SMALL_FONT_ID, SIDE_PADDING, ky, legend, true);
+    return;
+  }
   const char* help = nullptr;
   if (tabsFocused() && !degraded)
     help = tr(STR_LIBRARY_HOLD_SORT);

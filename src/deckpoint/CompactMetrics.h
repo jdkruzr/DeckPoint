@@ -16,28 +16,31 @@
 
 namespace deckpoint {
 
-// Pixel metrics for a ~240px-wide portrait UI with 10pt UI fonts (24px line).
+// Pixel metrics for a ~240px-wide portrait UI with the compact Ubuntu set
+// (body 15px em / 17px line, secondary 12px / 14px, labels 11px / 13px).
 constexpr ThemeMetrics compactMetrics(ThemeMetrics m) {
   m.batteryWidth = 12;
   m.batteryHeight = 8;
   m.topPadding = 3;
   m.batteryBarHeight = 14;
-  m.headerHeight = 44;  // 14px status strip + a 24px title line with breathing room
+  m.headerHeight = 36;  // 14px status strip + a 17px title line with breathing room
   m.verticalSpacing = 6;
 
   m.previewPadding = 6;
   m.contentSidePadding = 8;
-  m.listRowHeight = 28;
-  m.listWithSubtitleRowHeight = 44;
+  m.listRowHeight = 24;
+  m.listWithSubtitleRowHeight = 38;
   m.listInset = 4;
   m.listSidePadding = 6;
+  // Solid inverted selection: thin 1-bit glyphs dissolve into dithered pills.
+  m.listSelectionStyle = 0;
   m.headerSidePadding = 8;
   m.headerUnderlineSize = std::min(m.headerUnderlineSize, 2);
 
-  m.menuRowHeight = 30;
+  m.menuRowHeight = 24;
   m.menuSpacing = 2;
   m.tabSpacing = 4;
-  m.tabBarHeight = 30;
+  m.tabBarHeight = 26;
   m.coverGridTabBarHeight = 36;
 
   m.homeTopPadding = 20;

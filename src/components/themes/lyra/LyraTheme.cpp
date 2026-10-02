@@ -319,23 +319,43 @@ void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
                                const std::function<std::string(int index)>& buttonLabel,
                                const std::function<UIIcon(int index)>& rowIcon) const {
   for (int i = 0; i < buttonCount; ++i) {
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+    // DECKPOINT: compact rows: text aligned with the page's content edge, a
+    // small tile margin around it, and a solid inverted selection (thin 1-bit
+    // glyphs dissolve into the light-gray dither).
+    constexpr int tileMargin = 6;
+    const int tileX = rect.x + std::max(0, LyraMetrics::values.contentSidePadding - tileMargin);
+    int tileWidth = rect.width - 2 * (tileX - rect.x);
+#else
     int tileWidth = rect.width - LyraMetrics::values.contentSidePadding * 2;
-    Rect tileRect = Rect{rect.x + LyraMetrics::values.contentSidePadding,
-                         rect.y + i * (LyraMetrics::values.menuRowHeight + LyraMetrics::values.menuSpacing), tileWidth,
-                         LyraMetrics::values.menuRowHeight};
+    const int tileX = rect.x + LyraMetrics::values.contentSidePadding;
+#endif
+    Rect tileRect = Rect{tileX, rect.y + i * (LyraMetrics::values.menuRowHeight + LyraMetrics::values.menuSpacing),
+                         tileWidth, LyraMetrics::values.menuRowHeight};
 
     const bool selected = selectedIndex == i;
 
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+    if (selected) {
+      renderer.fillRoundedRect(tileRect.x, tileRect.y, tileRect.width, tileRect.height, cornerRadius, Color::Black);
+    }
+#else
     if (selected) {
       renderer.fillRoundedRect(tileRect.x, tileRect.y, tileRect.width, tileRect.height, cornerRadius, Color::LightGray);
     }
+#endif
 
     std::string labelStr = buttonLabel(i);
     const char* label = labelStr.c_str();
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+    int textX = rect.x + LyraMetrics::values.contentSidePadding;
+#else
     int textX = tileRect.x + 16;
+#endif
     const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
     const int textY = tileRect.y + (LyraMetrics::values.menuRowHeight - lineHeight) / 2;
 
+#if !(defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI)  // DECKPOINT: compact rows are text-only; 32px icons outgrow 24px rows
     if (rowIcon != nullptr) {
       UIIcon icon = rowIcon(i);
       const uint8_t* iconBitmap = iconForName(icon);
@@ -344,7 +364,12 @@ void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
         textX += mainMenuIconSize + hPaddingInSelection + 2;
       }
     }
+#endif
 
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+    renderer.drawText(UI_12_FONT_ID, textX, textY, label, !selected);
+#else
     renderer.drawText(UI_12_FONT_ID, textX, textY, label, true);
+#endif
   }
 }

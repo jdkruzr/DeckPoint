@@ -172,7 +172,12 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
     tabStyles.selected.foreground = fui::Paint::solid(fui::Color::White);
     tabStyles.selected.radius = screen.theme().listRowRadius;
   } else {
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+    // DECKPOINT: crisp 11px labels dissolve into a dither; underline only.
+    tabStyles.selected.background = fui::Paint::none();
+#else
     tabStyles.selected.background = fui::Paint::dither(fui::Color::LightGray);
+#endif
     tabStyles.selected.foreground = fui::Paint::solid(fui::Color::Black);
     tabProps.selectedUnderline = 2;
   }
@@ -188,9 +193,11 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
   const fui::Rect tabRect{frameRect.x, contentTabRect.y, frameRect.width, contentTabRect.height};
   // Focused band wash is the Lyra treatment; legacy RoundedRaff keeps the
   // band plain in both states.
+#if !(defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI)  // DECKPOINT: no dithered band behind thin compact labels
   if (tabsFocused && !metrics.tabPillFullSlot) {
     screen.target().fill(tabRect, fui::Paint::dither(fui::Color::LightGray));
   }
+#endif
   // The band chrome (wash, divider) spans the full screen width, but the tab
   // slots keep the content side padding so the outer pills never touch the
   // bezel. The divider is drawn here rather than by tabBar(), which would
