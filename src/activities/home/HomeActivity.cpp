@@ -4,6 +4,7 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalKeyboard.h>  // DECKPOINT
 #include <HalDisplay.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -24,6 +25,7 @@
 #include "RecentBooksStore.h"
 #include "activities/plugins/PluginCatalogActivity.h"  // anyPluginInstalled()
 #include "components/UITheme.h"
+#include "deckpoint/KeyLegend.h"  // DECKPOINT
 #include "fontIds.h"
 
 int HomeActivity::getMenuItemCount() const {
@@ -537,6 +539,10 @@ void HomeActivity::render(RenderLock&&) {
   const auto labels = mappedInput.mapLabels(recentBooks.empty() ? "" : tr(STR_RESUME), tr(STR_SELECT), tr(STR_DIR_UP),
                                             tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  // DECKPOINT: keyboard boards have no hint strip; say which keys do what.
+  if (halKeyboard.present()) {
+    deckpoint::drawBottomKeyLegend(renderer, SMALL_FONT_ID, "j/k: move     Enter: open");
+  }
 
   renderer.displayBuffer(cleanInitialRefresh && !firstRenderDone ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
 

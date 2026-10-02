@@ -304,7 +304,11 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
 }
 
 void LyraTheme::drawEmptyRecents(const GfxRenderer& renderer, const Rect rect) const {
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+  const int padding = LyraMetrics::values.contentSidePadding;  // DECKPOINT: left-aligned with the menu
+#else
   constexpr int padding = 48;
+#endif
   renderer.drawText(UI_12_FONT_ID, rect.x + padding,
                     rect.y + rect.height / 2 - renderer.getLineHeight(UI_12_FONT_ID) - 2, tr(STR_NO_OPEN_BOOK), true,
                     EpdFontFamily::BOLD);

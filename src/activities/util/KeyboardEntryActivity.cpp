@@ -11,6 +11,7 @@
 #include "KeyboardLayoutSet.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
+#include "deckpoint/KeyLegend.h"
 #include "fontIds.h"
 
 namespace fui = freeink::ui;
@@ -917,7 +918,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   if (halKeyboard.present()) {
     const int legendLh = renderer.getLineHeight(SMALL_FONT_ID);
     const int legendY = renderer.getScreenHeight() - 2 * legendLh - metrics.verticalSpacing;
-    renderer.drawCenteredText(SMALL_FONT_ID, legendY, "Enter: OK    Esc: cancel", true);
+    deckpoint::drawCenteredEscLegend(renderer, SMALL_FONT_ID, legendY, "Enter: OK    ", ": cancel");
     renderer.drawCenteredText(SMALL_FONT_ID, legendY + legendLh,
                               isPassword ? "Alt+P: show/hide password" : "Alt+H/L: move cursor", true);
     renderer.displayBuffer();

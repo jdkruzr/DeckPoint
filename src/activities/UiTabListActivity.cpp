@@ -129,8 +129,14 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
     // Unfocused state: no bottom inset, so the pill (and the 2px selected
     // underline drawn along its bottom edge) reaches the band's 1px divider —
     // legacy Lyra drew the underline sitting on that rule, not floating above.
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+    // DECKPOINT: ~70px slots can't spare 4px a side around a label + sort arrow.
+    tabProps.tabInset = tabsFocused ? fui::Insets{2, 1, 4, 1} : fui::Insets{2, 1, 0, 1};
+    tabProps.contentInset = fui::Insets{1, 0, 1, 0};
+#else
     tabProps.tabInset = tabsFocused ? fui::Insets{2, 4, 4, 4} : fui::Insets{2, 4, 0, 4};
     tabProps.contentInset = fui::Insets{2, 0, 2, 0};
+#endif
   }
   const int16_t tabLineHeight = screen.target().lineHeight(tabProps.text.font);
   const int16_t preferredTabHeight =

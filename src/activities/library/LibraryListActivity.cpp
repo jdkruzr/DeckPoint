@@ -14,6 +14,8 @@
 #include <cstdio>
 
 #include "CrossPointSettings.h"
+#include <HalKeyboard.h>  // DECKPOINT
+
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "activities/util/ConfirmationActivity.h"
@@ -21,6 +23,7 @@
 #include "components/UIScale.h"
 #include "components/UITheme.h"
 #include "components/icons/headerIcons.h"
+#include "deckpoint/icons/search16.h"  // DECKPOINT
 #include "components/icons/listIcons.h"
 #include "components/icons/search32.h"
 #include "fontIds.h"
@@ -761,6 +764,11 @@ bool LibraryListActivity::handleButtons() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (tabsFocused()) {
+      // DECKPOINT: on a keyboard h/l switch tabs, so Enter drops into the list.
+      if (halKeyboard.present()) {
+        if (count > 0) moveRingTo(1);
+        return true;
+      }
       stepTab(1);
       return true;
     }
@@ -945,7 +953,11 @@ void LibraryListActivity::buildHeader(UiScreen& screen) {
   if (!degraded) {
     // Keep both touch actions together on the right; button boards reach
     // rebuild through the row options menu.
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+    header.trailingIcon = fui::bitmapFromIcon(Search16Icon);  // DECKPOINT: sized to the compact header text
+#else
     header.trailingIcon = fui::bitmapFromIcon(icon_search_32);
+#endif
     header.trailingAction = ACTION_SEARCH;
     if (mappedInput.hasTouch()) {
       header.trailingAdjacentIcon = fui::bitmapFromIcon(icon_refresh_cw_32);
@@ -1012,6 +1024,7 @@ const char* LibraryListActivity::headerTitle() const {
 
 void LibraryListActivity::drawHoldHelp() const {
   if (mappedInput.hasTouch() || groupsCollapsed) return;
+  if (halKeyboard.present()) return;  // DECKPOINT: "Hold: ..." describes buttons a keyboard doesn't have
   const char* help = nullptr;
   if (tabsFocused() && !degraded)
     help = tr(STR_LIBRARY_HOLD_SORT);

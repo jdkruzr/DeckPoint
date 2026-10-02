@@ -50,8 +50,10 @@ void HalStorage::prepareForDeepSleep() {
   SDCard.shutdown();
 }
 
-#if FREEINK_CAP_USB_MSC && !FREEINK_SD_SDMMC
-#error "USB Drive requires an SDMMC-backed storage profile"
+// DECKPOINT: SPI-attached cards work too — SDCardManager's SdFat path exposes
+// its SdCard as the block device when USE_BLOCK_DEVICE_INTERFACE is set.
+#if FREEINK_CAP_USB_MSC && !FREEINK_SD_SDMMC && !(defined(USE_BLOCK_DEVICE_INTERFACE) && USE_BLOCK_DEVICE_INTERFACE)
+#error "USB Drive requires an SDMMC-backed storage profile or USE_BLOCK_DEVICE_INTERFACE=1"
 #endif
 
 bool HalStorage::beginUsbDrive() {

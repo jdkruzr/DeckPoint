@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <LibraryBuilder.h>
 
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
@@ -17,6 +18,11 @@ void UsbDriveActivity::onEnter() {
 
   // Show the safety instructions before giving the raw SD card to the USB host.
   requestUpdateAndWait();
+  // DECKPOINT: the host can add or remove books while it owns the card, and
+  // the session ends in a reboot. Mark the library index dirty now, while the
+  // filesystem is still ours, so the next Library visit rescans (WiFi and OPDS
+  // uploads already do this per file).
+  library::markLibraryIndexDirty();
   if (!Storage.beginUsbDrive()) {
     LOG_ERR("USB", "Unable to start USB Drive");
     preparing = false;
