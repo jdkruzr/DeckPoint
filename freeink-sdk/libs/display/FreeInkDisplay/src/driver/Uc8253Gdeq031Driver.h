@@ -12,8 +12,8 @@
 //     the PANEL SETTING soft reset, never a hardware pulse. That also means deep
 //     sleep (0x07) is only entered when a RESET pin exists — without one the
 //     controller could never be woken again.
-//   * The panel's native scan is 240x320 portrait, the same way the device is
-//     held, so planes are written unrotated.
+//   * The panel scans natively as 240x320 portrait; the facade's framebuffer
+//     is landscape 320x240 and planes are transposed on write (as Murphy M3).
 //
 // Refresh model (single-buffer friendly): the controller's DTM1 plane holds the
 // frame currently on glass. A fast refresh writes the new frame to DTM2 and

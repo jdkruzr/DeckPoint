@@ -1898,8 +1898,11 @@ static_assert(ONEPAGE.displayWidth / 8 * ONEPAGE.displayHeight == 48000,
 // v1.0 schematic (hardware/T-DeckPro V1.0 24-05-16.pdf): KEY_INT=IO15,
 // GPS_EN=IO39, keyboard LED_EN=IO42. One SPI bus (SCK36 MOSI33 MISO47) is
 // shared by the panel, the SD card and the SX1262; BoardTDeckPro::begin() parks
-// the LoRa CS before anything touches the bus. The panel is native 240x320
-// portrait — the same way the device is held — so the framebuffer is unrotated.
+// the LoRa CS before anything touches the bus. The panel scans natively as
+// 240x320 portrait, but consumers (CrossPoint's renderer) assume a landscape
+// native frame that "Portrait" rotates, so — like Murphy M3 — the framebuffer
+// is landscape 320x240 and the GDEQ031 driver transposes each plane into the
+// controller's portrait RAM.
 // Hardware revision differences (v1.0 vs v1.1) are patched into ACTIVE at boot
 // by BoardTDeckPro::begin(): v1.1 adds EPD RST on GPIO16 and a DRV2605 haptic
 // driver; touch moved from CST328 to CST3530. The only real GPIO button is BOOT
@@ -1910,8 +1913,8 @@ constexpr BoardProfile TDECK_PRO = {
     "tdeck_pro",
     InputStyle::DigitalButtons,
     DisplayController::UC8253,
+    320,  // landscape framebuffer; the driver transposes to the 240x320 panel
     240,
-    320,
     {36, 33, 34, 35, PIN_UNASSIGNED, 37, PIN_UNASSIGNED},  // SCLK MOSI CS DC RST(v1.0 none) BUSY
     0,  // displaySpiHz: 0 -> GDEQ031 driver default
     {PIN_UNASSIGNED, 47, PIN_UNASSIGNED, 48, PIN_UNASSIGNED, false, 0},  // SD CS48 on the shared bus, MISO47

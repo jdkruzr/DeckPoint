@@ -19,10 +19,16 @@ constexpr uint8_t CMD_PARTIAL_OUT = 0x92;
 constexpr uint8_t CMD_CASCADE_SETTING = 0xE0;
 constexpr uint8_t CMD_FORCE_TEMPERATURE = 0xE5;
 
+// Controller-native (portrait) geometry. The facade's framebuffer is the
+// transposed landscape frame (FB_W x FB_H); writePlane() rotates into RAM.
 constexpr uint16_t PANEL_W = 240;
 constexpr uint16_t PANEL_H = 320;
 constexpr uint16_t PANEL_WB = PANEL_W / 8;  // 30
+constexpr uint16_t FB_W = PANEL_H;          // 320
+constexpr uint16_t FB_H = PANEL_W;          // 240
+constexpr uint16_t FB_WB = FB_W / 8;        // 40
 constexpr uint32_t PLANE_BYTES = static_cast<uint32_t>(PANEL_WB) * PANEL_H;
+static_assert(static_cast<uint32_t>(FB_WB) * FB_H == PLANE_BYTES, "framebuffer and panel RAM must match in size");
 
 // Values from GxEPD2_310_GDEQ031T10 (_InitDisplay / _Update_Full / _Update_Part).
 constexpr uint8_t PSR_SOFT_RESET[] = {0x1E, 0x0D};
@@ -40,7 +46,7 @@ uint32_t Uc8253Gdeq031Driver::spiHz() const {
   return BoardConfig::ACTIVE.displaySpiHz != 0 ? BoardConfig::ACTIVE.displaySpiHz : DEFAULT_SPI_HZ;
 }
 
-PanelGeometry Uc8253Gdeq031Driver::geometry() const { return {PANEL_W, PANEL_H, PANEL_WB, PLANE_BYTES}; }
+PanelGeometry Uc8253Gdeq031Driver::geometry() const { return {FB_W, FB_H, FB_WB, PLANE_BYTES}; }
 
 int8_t Uc8253Gdeq031Driver::spiMiso() const { return BoardConfig::ACTIVE.sd.miso; }
 
@@ -66,7 +72,25 @@ void Uc8253Gdeq031Driver::writePlane(EpdBus& bus, uint8_t command, const uint8_t
   setFullWindow(bus);
   bus.cmd(command);
   bus.beginTxn();
-  bus.rawWriteBytes(fb, static_cast<uint16_t>(PLANE_BYTES));
+  // Transpose the landscape framebuffer into portrait controller RAM, one
+  // controller row at a time. Controller pixel (cx, cy) takes framebuffer
+  // pixel (x = cy, y = FB_H - 1 - cx) — the same mapping as the Murphy M3.
+  uint8_t row[PANEL_WB];
+  for (uint16_t cy = 0; cy < PANEL_H; cy++) {
+    const uint16_t srcX = cy;
+    const uint8_t srcMask = static_cast<uint8_t>(0x80 >> (srcX & 7));
+    const uint8_t* srcCol = fb + (srcX >> 3);
+    for (uint16_t b = 0; b < PANEL_WB; b++) {
+      uint8_t out = 0;
+      for (uint8_t bit = 0; bit < 8; bit++) {
+        const uint16_t cx = static_cast<uint16_t>(b * 8 + bit);
+        const uint16_t srcY = static_cast<uint16_t>(FB_H - 1 - cx);
+        if (srcCol[static_cast<uint32_t>(srcY) * FB_WB] & srcMask) out |= static_cast<uint8_t>(0x80 >> bit);
+      }
+      row[b] = out;
+    }
+    bus.rawWriteBytes(row, PANEL_WB);
+  }
   bus.endTxn();
   bus.cmd(CMD_PARTIAL_OUT);
 }
