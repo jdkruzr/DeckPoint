@@ -40,6 +40,13 @@ class Uc8253Gdeq031Driver : public PanelDriver {
   void deepSleep(EpdBus& bus) override;
   void display(EpdBus& bus, const uint8_t* fb, const uint8_t* prev, RefreshMode mode, bool turnOff) override;
 
+  // B/W only for now (no gray LUTs yet). Callers still run their grayscale
+  // pipeline: they show a B/W base frame, render gray planes into the
+  // framebuffer, then ask for a gray refresh. The base default would push
+  // that plane to the glass as if it were the image (mostly black), so the
+  // gray overlay is dropped and the B/W base stays on screen.
+  void displayGray(EpdBus& bus, const uint8_t* fb, bool turnOff, const unsigned char* lut, bool factoryMode) override;
+
  private:
   void softInit(EpdBus& bus);
   void writePlane(EpdBus& bus, uint8_t command, const uint8_t* fb);

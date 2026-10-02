@@ -165,6 +165,14 @@ void Uc8253Gdeq031Driver::display(EpdBus& bus, const uint8_t* fb, const uint8_t*
   if (turnOff) powerOff(bus);
 }
 
+void Uc8253Gdeq031Driver::displayGray(EpdBus& bus, const uint8_t* fb, const bool turnOff, const unsigned char* lut,
+                                      const bool factoryMode) {
+  (void)fb;
+  (void)lut;
+  (void)factoryMode;
+  if (turnOff) powerOff(bus);
+}
+
 void Uc8253Gdeq031Driver::deepSleep(EpdBus& bus) {
   powerOff(bus);
   // Without a RESET line the controller cannot leave deep sleep, so a v1.0
