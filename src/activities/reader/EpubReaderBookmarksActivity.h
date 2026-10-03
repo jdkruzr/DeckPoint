@@ -8,6 +8,7 @@
 #include "../../BookmarkEntry.h"
 #include "activities/UiListActivity.h"
 #include "components/OptionPopup.h"
+#include "deckpoint/KeyHelp.h"  // DECKPOINT
 
 class EpubReaderBookmarksActivity final : public UiListActivity {
   // The list rides the UiListActivity scaffold (themed rows, touch routing);
@@ -29,6 +30,7 @@ class EpubReaderBookmarksActivity final : public UiListActivity {
  public:
   explicit EpubReaderBookmarksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                        const std::shared_ptr<Epub>& epub, const std::string& epubPath);
+  const deckpoint::KeyHelp* keyHelp() const override { return &deckpoint::BOOKMARKS_KEY_HELP; }  // DECKPOINT
   void onEnter() override;
   void render(RenderLock&&) override;
 

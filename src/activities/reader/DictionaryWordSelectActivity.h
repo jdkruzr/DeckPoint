@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "activities/Activity.h"
+#include "deckpoint/KeyHelp.h"  // DECKPOINT
 #include "util/Dictionary.h"
 
 // Word selection over the current reader page: Left/Right step through words
@@ -22,6 +23,7 @@ class DictionaryWordSelectActivity final : public Activity {
         marginLeft(marginLeft),
         marginTop(marginTop) {}
 
+  const deckpoint::KeyHelp* keyHelp() const override { return &deckpoint::WORD_SELECT_KEY_HELP; }  // DECKPOINT
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;

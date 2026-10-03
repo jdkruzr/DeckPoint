@@ -7,6 +7,7 @@
 
 #include "activities/UiListActivity.h"
 #include "components/OptionPopup.h"
+#include "deckpoint/KeyHelp.h"  // DECKPOINT
 
 class EpubReaderMenuActivity final : public UiListActivity {
  public:
@@ -41,6 +42,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
                                   const uint8_t currentOrientation, const bool hasFootnotes, bool hasBookmarks);
 
+  const deckpoint::KeyHelp* keyHelp() const override { return &deckpoint::READER_MENU_KEY_HELP; }  // DECKPOINT
   void render(RenderLock&&) override;
   bool handleHomeGesture() override;
 

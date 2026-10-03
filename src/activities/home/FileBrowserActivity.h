@@ -6,6 +6,7 @@
 
 #include "activities/UiListActivity.h"
 #include "components/OptionPopup.h"
+#include "deckpoint/KeyHelp.h"  // DECKPOINT
 
 class FileBrowserActivity final : public UiListActivity {
  public:
@@ -70,6 +71,7 @@ class FileBrowserActivity final : public UiListActivity {
  public:
   explicit FileBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialPath = "/",
                                Mode mode = Mode::Books);
+  const deckpoint::KeyHelp* keyHelp() const override { return &deckpoint::FILE_BROWSER_KEY_HELP; }  // DECKPOINT
   void onEnter() override;
   void onExit() override;
   void render(RenderLock&& lock) override;

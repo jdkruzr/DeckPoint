@@ -10,6 +10,7 @@
 #include "RecentBooksStore.h"
 #include "activities/UiTabListActivity.h"
 #include "components/OptionPopup.h"
+#include "deckpoint/KeyHelp.h"  // DECKPOINT
 
 // One Library screen: every indexed book on the card shown by recency, title,
 // or author. The Recent shelf orders by file modification time (when a book
@@ -33,6 +34,7 @@ class LibraryListActivity final : public UiTabListActivity {
  public:
   LibraryListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
 
+  const deckpoint::KeyHelp* keyHelp() const override { return &deckpoint::LIBRARY_KEY_HELP; }  // DECKPOINT
   void onEnter() override;
   void onExit() override;
 

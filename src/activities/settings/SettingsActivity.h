@@ -9,6 +9,7 @@
 #include "CrossPointSettings.h"
 #include "activities/UiTabListActivity.h"
 #include "components/OptionPopup.h"
+#include "deckpoint/KeyHelp.h"  // DECKPOINT
 
 enum class SettingType { TOGGLE, ENUM, ACTION, VALUE, STRING };
 
@@ -229,6 +230,7 @@ class SettingsActivity final : public UiTabListActivity {
 
  public:
   explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
+  const deckpoint::KeyHelp* keyHelp() const override { return &deckpoint::SETTINGS_KEY_HELP; }  // DECKPOINT
   void onEnter() override;
   void onExit() override;
   void render(RenderLock&& lock) override;

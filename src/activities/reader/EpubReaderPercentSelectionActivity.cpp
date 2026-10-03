@@ -10,6 +10,7 @@
 
 #include "components/UITheme.h"
 #include "components/UiSliderDialog.h"
+#include "deckpoint/KeyHelpActivity.h"  // DECKPOINT
 #include "fontIds.h"
 
 namespace fui = freeink::ui;
@@ -174,6 +175,10 @@ void EpubReaderPercentSelectionActivity::onKey(const freeink::KeyEvent& event) {
       break;
   }
   const char c = static_cast<char>(event.ch);
+  if (c == '?') {
+    deckpoint::openKeyHelp(renderer, mappedInput, name.c_str(), keyHelp());
+    return;
+  }
   if (c >= '0' && c <= '9') {
     const int digit = c - '0';
     percent = typedDigits == 0 ? digit : std::min(100, percent * 10 + digit);

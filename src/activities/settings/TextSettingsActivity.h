@@ -10,6 +10,7 @@
 #include "activities/UiTabListActivity.h"
 #include "components/OptionPopup.h"
 #include "components/themes/BaseTheme.h"
+#include "deckpoint/KeyHelp.h"  // DECKPOINT
 
 // Reader text settings with a shared live preview pane: tab bar
 // (Font | Size | Layout | Style) is position 0 of the Up/Down nav ring, same
@@ -23,6 +24,7 @@ class TextSettingsActivity final : public UiTabListActivity {
   TextSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const SdCardFontRegistry* registry,
                        Tab initialTab = Tab::Family);
 
+  const deckpoint::KeyHelp* keyHelp() const override { return &deckpoint::TEXT_SETTINGS_KEY_HELP; }  // DECKPOINT
   void onEnter() override;
   void render(RenderLock&&) override;
 

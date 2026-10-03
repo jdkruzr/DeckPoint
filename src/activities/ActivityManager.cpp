@@ -17,6 +17,7 @@
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
 #include "components/HeaderBackTapTarget.h"
+#include "deckpoint/KeyHelpActivity.h"  // DECKPOINT
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
@@ -140,7 +141,15 @@ void ActivityManager::loop() {
         freeink::KeyEvent event;
         while (halKeyboard.pop(event)) currentActivity->onKey(event);
       } else {
-        halKeyboard.flush();
+        // DECKPOINT: '?' (Sym+v, never bridged to a button) opens key help
+        // over any screen; the rest of the queue is dropped.
+        freeink::KeyEvent event;
+        bool helpRequested = false;
+        while (halKeyboard.pop(event)) helpRequested = helpRequested || event.ch == '?';
+        if (helpRequested && currentActivity->name != "KeyHelp") {
+          deckpoint::openKeyHelp(renderer, mappedInput, currentActivity->name.c_str(), currentActivity->keyHelp());
+          return;
+        }
       }
     }
 
@@ -384,6 +393,11 @@ void ActivityManager::popActivity() {
     pendingActivity.reset();
   }
   pendingAction = PendingAction::Pop;
+}
+
+// DECKPOINT
+const char* ActivityManager::currentActivityName() const {
+  return currentActivity ? currentActivity->name.c_str() : "";
 }
 
 bool ActivityManager::preventAutoSleep() const { return currentActivity && currentActivity->preventAutoSleep(); }

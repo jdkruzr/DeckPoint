@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "activities/Activity.h"
+#include "deckpoint/KeyHelp.h"  // DECKPOINT
 #include "util/ButtonNavigator.h"
 
 // Paged viewer for one dictionary definition. HTML definitions are laid out
@@ -23,6 +24,7 @@ class DictionaryDefinitionActivity final : public Activity {
         definition(std::move(definition)),
         htmlDefinition(htmlDefinition) {}
 
+  const deckpoint::KeyHelp* keyHelp() const override { return &deckpoint::DEFINITION_KEY_HELP; }  // DECKPOINT
   void onEnter() override;
   void onExit() override;
   void loop() override;

@@ -4,10 +4,13 @@
 #include <HalKeyboard.h>
 #include <I18n.h>
 
+#include <cstdio>
 #include <cstring>
 #include <string>
 
 #include "CrossPointSettings.h"
+#include "KeyHelpText.h"
+#include "activities/Activity.h"  // complete type for ActivityManager.h
 #include "fontIds.h"
 #include "icons/mic12.h"
 
@@ -30,6 +33,7 @@ std::string cleanLabel(const char* label);
 
 namespace {
 const char* s_legendExtra = nullptr;
+LegendSnapshot s_lastLegend{};
 constexpr char MIC = '\x01';  // placeholder for the Esc key's microphone glyph
 constexpr int BOTTOM_MARGIN = 3;
 
@@ -40,6 +44,20 @@ bool isDirection(const char* label) {
     if (strcmp(label, I18N.get(id)) == 0) return true;
   }
   return strcmp(label, "<") == 0 || strcmp(label, ">") == 0 || strcmp(label, "^") == 0 || strcmp(label, "v") == 0;
+}
+
+// Runs on every legend draw, so fixed buffers only (no heap).
+void recordLegend(const char* back, const char* confirm, const char* previous, const char* next) {
+  if (!halKeyboard.present()) return;
+  LegendSnapshot& s = s_lastLegend;
+  snprintf(s.owner, sizeof(s.owner), "%s", activityManager.currentActivityName());
+  cleanLabelInto(back, s.back, sizeof(s.back));
+  cleanLabelInto(confirm, s.confirm, sizeof(s.confirm));
+  cleanLabelInto(previous, s.prev, sizeof(s.prev));
+  cleanLabelInto(next, s.next, sizeof(s.next));
+  splitLegendPart(s_legendExtra, s.extraKeys, sizeof(s.extraKeys), s.extraWhat, sizeof(s.extraWhat));
+  s.prevIsDirection = isDirection(previous);
+  s.nextIsDirection = isDirection(next);
 }
 
 int glyphAwareWidth(const GfxRenderer& renderer, const int fontId, const std::string& text) {
@@ -86,6 +104,8 @@ std::string cleanLabel(const char* label) {
 
 void setLegendExtra(const char* extra) { s_legendExtra = extra; }
 
+void copyLastLegend(LegendSnapshot& out) { out = s_lastLegend; }
+
 bool keyLegendEnabled() { return halKeyboard.present() && SETTINGS.keyLegend != 0; }
 
 int keyLegendBandHeight(const GfxRenderer& renderer) {
@@ -94,9 +114,10 @@ int keyLegendBandHeight(const GfxRenderer& renderer) {
 
 void drawHintLegend(const GfxRenderer& renderer, const char* back, const char* confirm, const char* previous,
                     const char* next) {
+  recordLegend(back, confirm, previous, next);
   if (!keyLegendEnabled()) return;
   const auto nonEmpty = [](const char* s) { return s != nullptr && *s != '\0'; };
-  std::string parts[5];
+  std::string parts[6];
   int count = 0;
   const std::string backL = cleanLabel(back), confirmL = cleanLabel(confirm);
   const std::string prevL = cleanLabel(previous), nextL = cleanLabel(next);
@@ -111,6 +132,7 @@ void drawHintLegend(const GfxRenderer& renderer, const char* back, const char* c
     if (!nextL.empty()) parts[count++] = std::string("j: ") + nextL;
   }
   if (count == 0) return;
+  parts[count++] = tr(STR_KH_LEGEND_HELP);  // last, so it is the first part dropped when the line is full
 
   // Widest spacing that fits, then fewer parts if even single spaces overflow.
   const int maxW = renderer.getScreenWidth() - 8;

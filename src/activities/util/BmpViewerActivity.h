@@ -5,11 +5,13 @@
 
 #include "MappedInputManager.h"
 #include "activities/Activity.h"
+#include "deckpoint/KeyHelp.h"  // DECKPOINT
 
 class BmpViewerActivity final : public Activity {
  public:
   BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string filePath);
 
+  const deckpoint::KeyHelp* keyHelp() const override { return &deckpoint::IMAGE_VIEWER_KEY_HELP; }  // DECKPOINT
   void onEnter() override;
   void onExit() override;
   void loop() override;

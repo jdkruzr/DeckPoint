@@ -3,6 +3,7 @@
 #include "MappedInputManager.h"
 #include "activities/Activity.h"
 #include "components/UiAppHost.h"
+#include "deckpoint/KeyHelp.h"  // DECKPOINT
 #include "util/ButtonNavigator.h"
 
 class EpubReaderPercentSelectionActivity final : public Activity, private UiAppHost {
@@ -11,6 +12,7 @@ class EpubReaderPercentSelectionActivity final : public Activity, private UiAppH
   explicit EpubReaderPercentSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                               int initialPercent);
 
+  const deckpoint::KeyHelp* keyHelp() const override { return &deckpoint::GO_TO_PERCENT_KEY_HELP; }  // DECKPOINT
   void onEnter() override;
   void onExit() override;
   void loop() override;

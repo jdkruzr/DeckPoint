@@ -103,6 +103,10 @@ class ActivityManager {
   // Note: if popActivity() on last activity on the stack, we will goHome()
   void popActivity();
 
+  // DECKPOINT: name of the activity on top ("" when none). Stable while the
+  // caller holds a RenderLock or runs on the main task.
+  const char* currentActivityName() const;
+
   bool preventAutoSleep() const;
   bool requiresExclusiveStorageLoop() const;
   bool isReaderActivity() const;

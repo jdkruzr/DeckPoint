@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "activities/Activity.h"
+#include "deckpoint/KeyHelp.h"  // DECKPOINT
 #include "util/ButtonNavigator.h"
 
 enum class InputType { Text, Password, Url };
@@ -27,6 +28,7 @@ class KeyboardEntryActivity : public Activity {
         maxLength(maxLength),
         inputType(inputType) {}
 
+  const deckpoint::KeyHelp* keyHelp() const override { return &deckpoint::KEYBOARD_ENTRY_KEY_HELP; }  // DECKPOINT
   void onEnter() override;
   void onExit() override;
   void loop() override;

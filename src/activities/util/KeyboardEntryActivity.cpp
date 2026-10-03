@@ -6,11 +6,13 @@
 #include <I18n.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 
 #include "KeyboardLayoutSet.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
+#include "deckpoint/KeyHelpActivity.h"  // DECKPOINT
 #include "deckpoint/KeyLegend.h"
 #include "fontIds.h"
 
@@ -923,8 +925,11 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     const int legendLh = renderer.getLineHeight(SMALL_FONT_ID);
     const int legendY = renderer.getScreenHeight() - 2 * legendLh - metrics.verticalSpacing;
     deckpoint::drawCenteredEscLegend(renderer, SMALL_FONT_ID, legendY, "Enter: OK    ", ": cancel");
-    renderer.drawCenteredText(SMALL_FONT_ID, legendY + legendLh,
-                              isPassword ? "Alt+P: show/hide password" : "Alt+H/L: move cursor", true);
+    const char* keysLegend = isPassword ? "Alt+P: show/hide password" : "Alt+H/L: move cursor";
+    char withHelp[64];
+    snprintf(withHelp, sizeof(withHelp), "%s   Alt+%s", keysLegend, tr(STR_KH_LEGEND_HELP));
+    if (renderer.getTextWidth(SMALL_FONT_ID, withHelp) <= renderer.getScreenWidth() - 8) keysLegend = withHelp;
+    renderer.drawCenteredText(SMALL_FONT_ID, legendY + legendLh, keysLegend, true);
     renderer.displayBuffer();
     return;
   }
@@ -1039,6 +1044,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
 //   printable -> insert at cursor      Backspace / Shift+Backspace -> delete back / forward
 //   Enter -> submit                    Esc (mic key) -> cancel
 //   Alt+H / Alt+L -> cursor left/right Alt+P -> show/hide password  Alt+Backspace -> clear
+//   Alt+? -> key help
 bool KeyboardEntryActivity::wantsRawKeys() const { return halKeyboard.present(); }
 
 void KeyboardEntryActivity::onKey(const freeink::KeyEvent& event) {
@@ -1074,6 +1080,9 @@ void KeyboardEntryActivity::onKey(const freeink::KeyEvent& event) {
   if (event.ch == 0) return;
   if (alt) {
     switch (event.ch) {
+      case '?':  // plain '?' types; Alt+? is key help
+        deckpoint::openKeyHelp(renderer, mappedInput, name.c_str(), keyHelp());
+        return;
       case 'h':
         if (cursorPos == 0) return;
         cursorPos = utf8Prev(text, cursorPos);

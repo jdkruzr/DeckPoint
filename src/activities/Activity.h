@@ -14,6 +14,10 @@
 #include "RenderLock.h"
 #include "util/ScreenshotInfo.h"
 
+namespace deckpoint {
+struct KeyHelp;  // DECKPOINT
+}
+
 class Activity {
   friend class ActivityManager;
 
@@ -62,6 +66,9 @@ class Activity {
   // as ordinary button presses and the rest are discarded.
   virtual bool wantsRawKeys() const { return false; }
   virtual void onKey(const freeink::KeyEvent& /*event*/) {}
+  // DECKPOINT: hand-written key help for the global '?' screen; screens
+  // without one fall back to their last drawn key legend.
+  virtual const deckpoint::KeyHelp* keyHelp() const { return nullptr; }
 
   // Start a new activity without destroying the current one
   // Note: requestUpdate() will be invoked automatically once resultHandler finishes

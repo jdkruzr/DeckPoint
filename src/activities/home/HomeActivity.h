@@ -6,6 +6,7 @@
 #include "RecentBooksStore.h"
 #include "activities/Activity.h"
 #include "components/CoverGridHomeUi.h"
+#include "deckpoint/KeyHelp.h"  // DECKPOINT
 #include "util/ButtonNavigator.h"
 
 struct Rect;
@@ -87,6 +88,7 @@ class HomeActivity final : public Activity {
       : Activity("Home", renderer, mappedInput),
         initialMenuItem(initialMenuItemValue),
         cleanInitialRefresh(cleanInitialRefresh) {}
+  const deckpoint::KeyHelp* keyHelp() const override { return &deckpoint::HOME_KEY_HELP; }  // DECKPOINT
   void onEnter() override;
   void onExit() override;
   void loop() override;

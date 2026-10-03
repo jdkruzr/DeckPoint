@@ -11,9 +11,13 @@ Read `PROGRESS.md` first (dev loop, conventions). Full roadmap with rationale:
 - KOSync verified end to end (register, push, smart pull) against stock koreader/kosync.
   Per-device `device_id` fix (12301d50) is upstream-worthy. Sync Behavior defaults to Smart
   (silent jump); "Ask Every Time" is the setting. No annotation sync in the protocol.
-- TO VERIFY (user doubts it): "KOSync has no annotation sync." Check current KOReader docs/source
-  (kosync plugin, koreader-sync-server API, any newer annotation/highlight sync, e.g. via the
-  cloud-storage "sync" feature) before designing DeckPoint's highlight sync.
+- Annotation sync research (2026-10-03): KOSync protocol/servers are progress-only (confirmed);
+  KOReader syncs annotations via plugins - AnnotationSync.koplugin (WebDAV) and Readest (own
+  server, CFI<->XPointer bridge). KOReader stores EPUB annotations as XPointers (pos0/pos1 + text,
+  note, chapter, datetime, color) in .sdr Lua sidecars - the same position format CrossPoint
+  already produces. OPDS Progression 1.0 (draft) covers progress only. Round-2 proposal: store
+  KOReader-shaped annotations (ids, timestamps, tombstones), sync via AnnotationSync's WebDAV
+  format (read its source first), export Markdown / My Clippings.txt / Readwise JSON.
 - Wi-Fi is per-task (network activities silent-reboot on exit to defragment heap), so there is
   no "associated" state to indicate. Keeping Wi-Fi up (background sync) would be a design change.
 - 180-degree ghost frame after the post-Wi-Fi reboot: softInit now waits BUSY after the PSR soft

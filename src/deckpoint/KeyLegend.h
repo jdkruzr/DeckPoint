@@ -10,6 +10,8 @@ class GfxRenderer;
 
 namespace deckpoint {
 
+struct LegendSnapshot;
+
 // Draw a freeink::Icon (logical-frame bits) at x,y through the renderer.
 void drawIconLogical(const GfxRenderer& renderer, const freeink::Icon& icon, int x, int y);
 
@@ -30,6 +32,11 @@ int keyLegendBandHeight(const GfxRenderer& renderer);
 // keyboard boards, so screens get legends without per-screen code.
 void drawHintLegend(const GfxRenderer& renderer, const char* back, const char* confirm, const char* previous,
                     const char* next);
+
+// Copy of the last legend drawHintLegend() saw (recorded even when legends
+// are switched off), tagged with the activity on top when it was drawn. The
+// key help screen falls back to it. Caller must hold a RenderLock.
+void copyLastLegend(LegendSnapshot& out);
 
 // Draw a one-line key legend in `fontId`, centered, its baseline row at the
 // bottom of the screen (with a small margin). Returns the legend's top y.
