@@ -3,6 +3,8 @@
 #include <ArduinoJson.h>
 #include <HalMemory.h>
 #include <Logging.h>
+#include <MD5Builder.h>
+#include <esp_mac.h>
 #include <SecureHttpClient.h>
 #include <base64.h>
 
@@ -14,8 +16,28 @@ int KOReaderSyncClient::lastHttpCode = 0;
 
 namespace {
 // Device identifier for CrossPoint reader
+#if FREEINK_DEVICE_TDECKPRO
+constexpr char DEVICE_NAME[] = "DeckPoint";  // DECKPOINT
+#else
 constexpr char DEVICE_NAME[] = "CrossPoint";
-constexpr char DEVICE_ID[] = "crosspoint-reader";
+#endif
+
+// DECKPOINT: KOSync tells "this device" from others by device_id, so it must differ per
+// reader. MD5 of a salted factory MAC: stable, KOReader-shaped (32 hex), and not the raw MAC.
+const char* deviceId() {
+  static char id[33] = "";
+  if (id[0] == '\0') {
+    uint8_t mac[6] = {};
+    esp_efuse_mac_get_default(mac);
+    MD5Builder md5;
+    md5.begin();
+    md5.add("crosspoint-kosync:");
+    md5.add(mac, sizeof(mac));
+    md5.calculate();
+    md5.getChars(id);
+  }
+  return id;
+}
 
 // wolfSSL uses the default allocator, which can use PSRAM on supported builds.
 // Keep a free-space floor and room for a full TLS record when the server does
@@ -237,7 +259,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   doc["progress"] = progress.progress;
   doc["percentage"] = progress.percentage;
   doc["device"] = DEVICE_NAME;
-  doc["device_id"] = DEVICE_ID;
+  doc["device_id"] = deviceId();
   if (progress.position.has_value() && KOREADER_STORE.usesCrossPointSyncServer()) {
     // CrossPoint-specific extension: do not send it to third-party KOSync servers.
     const auto& p = *progress.position;
