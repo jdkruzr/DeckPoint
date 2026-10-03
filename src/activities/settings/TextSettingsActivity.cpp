@@ -1,6 +1,7 @@
 #include "TextSettingsActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalKeyboard.h>  // DECKPOINT
 #include <I18n.h>
 
 #include <algorithm>
@@ -194,7 +195,12 @@ bool TextSettingsActivity::handleButtons() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (ringPos() == 0) {
-      switchTab();
+      // DECKPOINT: h/l switch tabs on a keyboard, so Enter enters the list.
+      if (halKeyboard.present()) {
+        if (listCount() > 0) moveRingTo(1);
+      } else {
+        switchTab();
+      }
     } else {
       activateRow(ringPos() - 1);
     }
@@ -258,6 +264,7 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
 
 const char* TextSettingsActivity::confirmLabelText() const {
   if (ringPos() == 0) {
+    if (halKeyboard.present()) return tr(STR_SELECT);  // DECKPOINT: Enter enters the list
     // Confirm on the tab bar advances to the next tab.
     return I18N.get(TAB_NAME_IDS[(static_cast<int>(tab_) + 1) % static_cast<int>(Tab::Count)]);
   }

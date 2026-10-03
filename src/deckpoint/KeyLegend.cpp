@@ -125,6 +125,9 @@ void drawHintLegend(const GfxRenderer& renderer, const char* back, const char* c
     line.clear();
     for (int i = 0; i < count; i++) line += (i ? "  " : "") + parts[i];
   }
+  // Popups draw over the previous screen's legend; clear the band so the two don't overprint.
+  const int bandTop = renderer.getScreenHeight() - keyLegendBandHeight(renderer);
+  renderer.fillRect(0, bandTop, renderer.getScreenWidth(), renderer.getScreenHeight() - bandTop, false);
   const int y = renderer.getScreenHeight() - renderer.getLineHeight(SMALL_FONT_ID) - BOTTOM_MARGIN;
   const int x = (renderer.getScreenWidth() - glyphAwareWidth(renderer, SMALL_FONT_ID, line)) / 2;
   drawGlyphAware(renderer, SMALL_FONT_ID, x, y, line);

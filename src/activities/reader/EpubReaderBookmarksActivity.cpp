@@ -1,6 +1,7 @@
 #include "EpubReaderBookmarksActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalKeyboard.h>  // DECKPOINT
 #include <I18n.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -259,7 +260,8 @@ void EpubReaderBookmarksActivity::buildScreen(UiScreen& screen) {
     const int helpLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
     const fui::Rect band = screen.takeBottom(static_cast<int16_t>(helpLineHeight + metrics.verticalSpacing));
     GUI.drawHelpText(renderer, Rect{band.x, band.y + metrics.verticalSpacing, band.width, helpLineHeight},
-                     tr(STR_HOLD_OPEN_FOR_ACTIONS));
+                     halKeyboard.present() ? tr(STR_HOLD_ENTER_FOR_ACTIONS)  // DECKPOINT: name the real key
+                                           : tr(STR_HOLD_OPEN_FOR_ACTIONS));
   }
 
   // bookmarkSubtitles/bookmarkRowItems are built once whenever `bookmarks`

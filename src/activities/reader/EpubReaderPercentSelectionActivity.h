@@ -14,6 +14,8 @@ class EpubReaderPercentSelectionActivity final : public Activity, private UiAppH
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  bool wantsRawKeys() const override;
+  void onKey(const freeink::KeyEvent& event) override;
   void render(RenderLock&&) override;
 
  private:
@@ -35,6 +37,7 @@ class EpubReaderPercentSelectionActivity final : public Activity, private UiAppH
   // Swallow the swipe/tap fallout of a slider drag so its release can't trigger
   // the back gesture and cancel the dialog, or step the percent as a swipe.
   bool draggingSlider = false;
+  uint8_t typedDigits = 0;  // DECKPOINT: digits typed so far (0 = not typing)
 
   // Change the current percent by a delta and wrap within bounds.
   void adjustPercent(int delta);

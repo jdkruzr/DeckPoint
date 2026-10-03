@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
+#include <HalKeyboard.h>
 #include <I18n.h>
 
 #include <algorithm>
@@ -147,6 +148,49 @@ void EpubReaderPercentSelectionActivity::loop() {
                                        [this, downDelta] { adjustPercent(downDelta); });
 }
 
+// DECKPOINT: on keyboard boards the percent is typed (digits, Backspace, Enter) and
+// h/l, j/k step by 1% / 10%.
+bool EpubReaderPercentSelectionActivity::wantsRawKeys() const { return halKeyboard.present(); }
+
+void EpubReaderPercentSelectionActivity::onKey(const freeink::KeyEvent& event) {
+  using freeink::SpecialKey;
+  switch (event.special) {
+    case SpecialKey::Enter:
+      confirm();
+      return;
+    case SpecialKey::Escape:
+      cancel();
+      return;
+    case SpecialKey::Backspace:
+      if (typedDigits == 0) {
+        cancel();
+        return;
+      }
+      typedDigits--;
+      percent /= 10;
+      requestUpdate();
+      return;
+    default:
+      break;
+  }
+  const char c = static_cast<char>(event.ch);
+  if (c >= '0' && c <= '9') {
+    const int digit = c - '0';
+    percent = typedDigits == 0 ? digit : std::min(100, percent * 10 + digit);
+    if (typedDigits < 3) typedDigits++;
+    requestUpdate();
+    return;
+  }
+  int delta = 0;
+  if (c == 'h') delta = -kSmallStep;
+  if (c == 'l') delta = kSmallStep;
+  if (c == 'j') delta = -kLargeStep;
+  if (c == 'k') delta = kLargeStep;
+  if (delta == 0) return;
+  typedDigits = 0;
+  adjustPercent(delta);
+}
+
 void EpubReaderPercentSelectionActivity::percentScreen(UiScreen& screen, void* user) {
   static_cast<EpubReaderPercentSelectionActivity*>(user)->buildPercentScreen(screen);
 }
@@ -155,9 +199,14 @@ void EpubReaderPercentSelectionActivity::buildPercentScreen(UiScreen& screen) {
   char readout[16];
   snprintf(readout, sizeof(readout), "%d%%", percent);
   char hint1[64];
-  snprintf(hint1, sizeof(hint1), "%s %d%%", I18N.get(StrId::STR_STEP_HINT_FRONT), kSmallStep);
   char hint2[64];
-  snprintf(hint2, sizeof(hint2), "%s %d%%", I18N.get(StrId::STR_STEP_HINT_SIDE), kLargeStep);
+  if (halKeyboard.present()) {  // DECKPOINT
+    snprintf(hint1, sizeof(hint1), "%s", tr(STR_PERCENT_TYPE_HINT));
+    snprintf(hint2, sizeof(hint2), "%s", tr(STR_PERCENT_KEYS_HINT));
+  } else {
+    snprintf(hint1, sizeof(hint1), "%s %d%%", I18N.get(StrId::STR_STEP_HINT_FRONT), kSmallStep);
+    snprintf(hint2, sizeof(hint2), "%s %d%%", I18N.get(StrId::STR_STEP_HINT_SIDE), kLargeStep);
+  }
 
   UiSliderDialogSpec spec;
   spec.title = tr(STR_GO_TO_PERCENT);
@@ -182,7 +231,8 @@ void EpubReaderPercentSelectionActivity::render(RenderLock&&) {
   renderUi();
 
   // Button hints follow the current front button layout.
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "-", "+");
+  const bool keys = halKeyboard.present();  // DECKPOINT: stepping keys are in the dialog hints
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), keys ? "" : "-", keys ? "" : "+");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
