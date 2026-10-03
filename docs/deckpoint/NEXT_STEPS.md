@@ -52,9 +52,11 @@ Read `PROGRESS.md` first (dev loop, conventions). Full roadmap with rationale:
 - AA toggle "off" mode (user, 2026-10-03): Text Settings > Style > Text Anti-Aliasing exists, but
   "off" thresholds 2-bit glyphs (bloats them). Make "off" use FreeType mono hinting instead (as
   the crisp compact UI fonts do): runtime for TTF, pre-generated --mono sets for built-ins.
-- Re-run the font contest with AA (Fira Sans, Atkinson Hyperlegible, IBM Plex Sans, Inter kept as
-  contenders; `tools/fontlab`; pin weights for variable fonts). Specimen BMPs live in
-  `/Font Tests/` on the SD (1-bit; regenerate for AA) - or try direct .ttf loading (Phase 7).
+- Font contest with AA done 2026-10-03 via SD .ttf (`/.fonts/<Family>/`): user picked **Source
+  Sans 3** for reading (Fira Sans close second; Plex crisp/cold, Atkinson heavy, Inter neutral).
+  Its narrow space (200/1000 em) is by design. TTF page cost ~+100 ms first render (glyph raster).
+  Possible: bundle Source Sans 3 as the compact built-in sans (replacing Noto Sans) so fresh
+  installs default to it; serif contenders (Literata, Source Serif 4) not yet tried.
 
 ## 4. Keyboard-native reader (plan Phase 4 — user wants to feel 2 & 3 first)
 - Vim keys (j/k/space/b, counts, gg/G, ]]/[[, `/` search with n/N, marks), command palette home
