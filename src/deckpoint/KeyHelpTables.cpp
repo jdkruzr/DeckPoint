@@ -1,4 +1,5 @@
 #include "KeyHelp.h"
+#include "reader/ReaderCommands.h"
 
 // DECKPOINT: hand-written key help per screen. Keys follow the keyboard
 // bridge (BoardTDeckPro buttonMaskFor): Enter = Confirm, Esc / Backspace =
@@ -69,9 +70,10 @@ constexpr KeyHelpEntry READER[] = {
     {"B", StrId::STR_KH_TOGGLE_BOOKMARK},
     {"Enter", StrId::STR_KH_READER_MENU},
     {"Esc", StrId::STR_KH_READER_ESC},
-    {"d / D", StrId::STR_KH_DICT_SOON},
+    {":", StrId::STR_KH_COMMAND_LINE},
+    {"D", StrId::STR_KH_LOOKUP_TYPED},
+    {"d", StrId::STR_KH_DICT_SOON},
     {"/ n N", StrId::STR_KH_SEARCH_SOON},
-    {":", StrId::STR_KH_COMMAND_SOON},
 };
 
 constexpr KeyHelpEntry READER_MENU[] = {
@@ -135,7 +137,7 @@ constexpr KeyHelp LIBRARY_KEY_HELP = makeKeyHelp(LIBRARY);
 constexpr KeyHelp FILE_BROWSER_KEY_HELP = makeKeyHelp(FILE_BROWSER);
 constexpr KeyHelp SETTINGS_KEY_HELP = makeKeyHelp(SETTINGS_SCREEN);
 constexpr KeyHelp TEXT_SETTINGS_KEY_HELP = makeKeyHelp(TEXT_SETTINGS);
-constexpr KeyHelp READER_KEY_HELP = makeKeyHelp(READER);
+constexpr KeyHelp READER_KEY_HELP = makeKeyHelp(READER, &reader::READER_COMMAND_HELP);
 constexpr KeyHelp READER_MENU_KEY_HELP = makeKeyHelp(READER_MENU);
 constexpr KeyHelp BOOKMARKS_KEY_HELP = makeKeyHelp(BOOKMARKS);
 constexpr KeyHelp WORD_SELECT_KEY_HELP = makeKeyHelp(WORD_SELECT);

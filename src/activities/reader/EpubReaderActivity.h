@@ -17,9 +17,11 @@
 #include "ReaderActivity.h"
 #include "ReaderToolbarUi.h"
 #include "components/OptionPopup.h"
-#include "deckpoint/KeyHelp.h"            // DECKPOINT
-#include "deckpoint/reader/Marks.h"       // DECKPOINT
-#include "deckpoint/reader/ReaderKeys.h"  // DECKPOINT
+#include "deckpoint/CommandLine.h"            // DECKPOINT
+#include "deckpoint/KeyHelp.h"                // DECKPOINT
+#include "deckpoint/reader/Marks.h"           // DECKPOINT
+#include "deckpoint/reader/ReaderCommands.h"  // DECKPOINT
+#include "deckpoint/reader/ReaderKeys.h"      // DECKPOINT
 
 class EpubReaderActivity final : public ReaderActivity {
   std::shared_ptr<Epub> epub;
@@ -209,6 +211,40 @@ class EpubReaderActivity final : public ReaderActivity {
   // Contents list; fromKeys: Esc returns to the page (not the reader menu) and
   // a pick records the jump-back position.
   void openChapterSelect(bool fromKeys);
+  // Bookmarks list; fromKeys: cancel returns to the page, a pick records the jump-back.
+  void openBookmarksList(bool fromKeys);
+  void applyProgressChangeResult(const ActivityResult& result, bool reopenMenuOnCancel);
+
+  // DECKPOINT: `:` command line (deckpoint/reader/ReaderCommands.cpp), drawn as
+  // a band over the status bar. While it is open it owns every key.
+  friend struct deckpoint::reader::ReaderCommandHandlers;
+  deckpoint::CommandLine cmdLine;
+  // The render task repaints the band over any page render while this is set.
+  bool cmdLineShown = false;
+  // The renderer holds the clean page from under the band (storeBwBuffer), so
+  // closing restores it with one FAST refresh instead of a re-render.
+  bool cmdPageStored = false;
+  // Non-empty: the band shows this (error / candidates) instead of the prompt
+  // until the next key or the toast timeout.
+  char cmdMessage[96] = {};
+  unsigned long cmdMessageTime = 0;
+  void openCommandLine(const char* prefill, bool pageDirty);
+  void commandLineKey(const freeink::KeyEvent& event);
+  void submitCommandLine();
+  void completeCommandLine();
+  void closeCommandLine(deckpoint::CommandResult how);
+  void showCommandMessage(const char* text);
+  // Caller must not hold the RenderLock.
+  void paintCommandLine();
+  // Draws the band into the framebuffer; caller holds the RenderLock.
+  void drawCommandLine() const;
+  // From loop(): expires messages; true while the line owns input.
+  bool commandLineTick();
+  // Render-task hooks: before a page render / after it is on the glass.
+  void commandLineBeforeRender();
+  void commandLineAfterRender();
+  // 1-based page of the current chapter (jump-back recorded).
+  void goToChapterPage(int page);
 
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);

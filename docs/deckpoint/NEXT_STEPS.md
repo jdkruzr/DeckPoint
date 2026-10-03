@@ -77,6 +77,11 @@ Read `PROGRESS.md` first (dev loop, conventions). Full roadmap with rationale:
 ## 5. Hardware / power
 - **Wake on keypress**: OR `BoardTDeckPro::keyboardWakeMask()` (GPIO15, RTC-capable) into the ext1
   deep-sleep wake mask and call `BoardTDeckPro::prepareForSleep()` before sleeping (not wired yet).
+- Bluetooth keyboards / page-turner remotes: SDK already has `freeink-sdk/libs/network/BleKeyboardHost`
+  (~1.5k LOC NimBLE HID host, emits the same KeyEvent as the built-in keyboard, raw button
+  learning for remotes). Wire-up: set FREEINK_CAP_BLE_KEYBOARD + add h2zero/NimBLE-Arduino to
+  tdeckpro lib_deps, merge its key queue into HalKeyboard, Settings > Bluetooth (scan/pair/forget).
+  Costs: a few hundred KB flash, ~40-60 KB heap while on, radio power, shared 2.4 GHz with Wi-Fi.
 - Identify the side "volume up" button wiring.
 - Touch word actions (user, 2026-10-02): long-press a word -> popup offering both dictionary
   lookup and annotate/highlight (one entry point for both, shared with hint mode's word targets).

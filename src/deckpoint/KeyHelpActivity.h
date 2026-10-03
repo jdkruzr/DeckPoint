@@ -30,7 +30,10 @@ class KeyHelpActivity final : public Activity {
     const char* what;
     bool heading;
   };
-  static constexpr int MAX_ROWS = 32;
+  static constexpr int MAX_ROWS = 48;
+  // Key text for a table's runtime-composed extra section (KeyHelpExtra).
+  static constexpr int MAX_EXTRA_ROWS = 24;
+  static constexpr int EXTRA_KEYS_LEN = 24;
 
   void buildRows();
   void addRow(const char* keys, const char* what, bool heading = false);
@@ -42,6 +45,7 @@ class KeyHelpActivity final : public Activity {
   const KeyHelp* table;
   LegendSnapshot legend{};
   Row rows[MAX_ROWS]{};
+  char extraKeys[MAX_EXTRA_ROWS][EXTRA_KEYS_LEN]{};
   int rowCount = 0;
   int topRow = 0;  // main task writes under RenderLock; render reads
   // Set by render: first row that did not fit (rowCount when all fit).

@@ -120,6 +120,17 @@ void KeyHelpActivity::buildRows() {
   }
   if (rowCount == screenStart) addRow(nullptr, tr(STR_KH_NO_SCREEN_KEYS));
 
+  if (table && table->extra && table->extra->row) {
+    const KeyHelpExtra& extra = *table->extra;
+    addRow(nullptr, I18N.get(extra.title), true);
+    const int n = std::min<int>(extra.count, MAX_EXTRA_ROWS);
+    for (int i = 0; i < n; i++) {
+      extraKeys[i][0] = '\0';
+      const StrId what = extra.row(static_cast<uint8_t>(i), extraKeys[i], EXTRA_KEYS_LEN);
+      addRow(extraKeys[i], I18N.get(what));
+    }
+  }
+
   addRow(nullptr, tr(STR_KH_SECTION_GLOBAL), true);
   // Text fields type a literal '?', so help there is Alt+?.
   addRow(strcmp(ownerName, "KeyboardEntry") == 0 ? "Alt+?" : "?", tr(STR_KH_THIS_HELP));

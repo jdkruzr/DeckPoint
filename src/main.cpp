@@ -47,7 +47,8 @@
 #include "platform/UsbSerialJtagHandoff.h"
 #include "util/ButtonNavigator.h"
 #include "util/PluginEvents.h"
-#include "deckpoint/TestPattern.h"  // DECKPOINT
+#include "deckpoint/SleepRequest.h"  // DECKPOINT
+#include "deckpoint/TestPattern.h"   // DECKPOINT
 #include "util/ScreenshotUtil.h"
 #include "util/Timezones.h"
 
@@ -912,6 +913,13 @@ void loop() {
     lastX4ProPowerClickAt = 0;
     enterDeepSleep();
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
+    return;
+  }
+
+  // DECKPOINT: `:sleep` from the reader's command line.
+  if (deckpoint::takeSleepRequest()) {
+    LOG_DBG("SLP", "Sleep requested by command");
+    enterDeepSleep();
     return;
   }
 

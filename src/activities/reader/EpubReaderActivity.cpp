@@ -497,6 +497,7 @@ void EpubReaderActivity::loop() {
     requestUpdate();
   }
   keyPopupTick();  // DECKPOINT: expire keyboard toasts
+  if (commandLineTick()) return;  // DECKPOINT: the `:` line owns input while open
 
   // The toolbar reader menu owns all input while shown, ahead of the automatic page turn
   // below: the More panel's rate popup switches automatic turning on and leaves the panel
@@ -826,61 +827,69 @@ void EpubReaderActivity::openChapterSelect(const bool fromKeys) {
       });
 }
 
-void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
-  auto progressChangeResultHandler = [this](const ActivityResult& result) {
-    loadCachedBookmarks();
-    if (result.isCancelled) {
+// DECKPOINT: was the progressChangeResultHandler lambda in onReaderMenuConfirm.
+void EpubReaderActivity::applyProgressChangeResult(const ActivityResult& result, const bool reopenMenuOnCancel) {
+  loadCachedBookmarks();
+  if (result.isCancelled) {
+    if (reopenMenuOnCancel) {
       openReaderMenu();
     } else {
-      const auto& sync = std::get<ProgressChangeResult>(result.data);
-
-      if (sync.hasVisibleTextOffset && sync.spineIndex >= 0 && sync.spineIndex < epub->getSpineItemsCount()) {
-        RenderLock lock;
-        clearDeferredReposition();
-        if (section && currentSpineIndex == sync.spineIndex) {
-          const auto page = section->getPageForVisibleTextOffset(sync.visibleTextOffset);
-          section->currentPage = page.value_or(std::max(0, sync.page));
-        } else {
-          currentSpineIndex = sync.spineIndex;
-          pendingOffsetJump = sync.visibleTextOffset;
-          nextPageNumber = std::max(0, sync.page);
-          section.reset();
-        }
-        requestUpdate();
-        return;
-      }
-
-      int targetSpineIndex = sync.spineIndex;
-      int targetPage = sync.page;
-      const int activeTotalPages = section ? section->estimatedTotalPages() : 0;
-      const bool cachedPageMatchesActiveSection = section && sync.totalPages > 0 &&
-                                                  currentSpineIndex == sync.spineIndex && sync.page >= 0 &&
-                                                  sync.page < sync.totalPages && activeTotalPages == sync.totalPages;
-
-      if (!cachedPageMatchesActiveSection && sync.hasSavedProgress) {
-        const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
-        CrossPointPosition fallback =
-            ProgressMapper::toCrossPoint(epub, {sync.xpath, sync.percentage}, renderer, currentSpineIndex, totalPages);
-        targetSpineIndex = fallback.spineIndex;
-        targetPage = fallback.pageNumber;
-      }
-
-      RenderLock lock;
-      clearDeferredReposition();
-
-      if (currentSpineIndex != targetSpineIndex) {
-        currentSpineIndex = targetSpineIndex;
-        nextPageNumber = targetPage;
-        section.reset();
-      } else if (section && section->currentPage != targetPage) {
-        const int clampedTargetPage = std::max(0, targetPage);
-        section->currentPage = clampedTargetPage;
-      } else if (!section) {
-        nextPageNumber = targetPage;
-      }
       requestUpdate();
     }
-  };
+  } else {
+    const auto& sync = std::get<ProgressChangeResult>(result.data);
+
+    if (sync.hasVisibleTextOffset && sync.spineIndex >= 0 && sync.spineIndex < epub->getSpineItemsCount()) {
+      RenderLock lock;
+      clearDeferredReposition();
+      if (section && currentSpineIndex == sync.spineIndex) {
+        const auto page = section->getPageForVisibleTextOffset(sync.visibleTextOffset);
+        section->currentPage = page.value_or(std::max(0, sync.page));
+      } else {
+        currentSpineIndex = sync.spineIndex;
+        pendingOffsetJump = sync.visibleTextOffset;
+        nextPageNumber = std::max(0, sync.page);
+        section.reset();
+      }
+      requestUpdate();
+      return;
+    }
+
+    int targetSpineIndex = sync.spineIndex;
+    int targetPage = sync.page;
+    const int activeTotalPages = section ? section->estimatedTotalPages() : 0;
+    const bool cachedPageMatchesActiveSection = section && sync.totalPages > 0 &&
+                                                currentSpineIndex == sync.spineIndex && sync.page >= 0 &&
+                                                sync.page < sync.totalPages && activeTotalPages == sync.totalPages;
+
+    if (!cachedPageMatchesActiveSection && sync.hasSavedProgress) {
+      const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
+      CrossPointPosition fallback =
+          ProgressMapper::toCrossPoint(epub, {sync.xpath, sync.percentage}, renderer, currentSpineIndex, totalPages);
+      targetSpineIndex = fallback.spineIndex;
+      targetPage = fallback.pageNumber;
+    }
+
+    RenderLock lock;
+    clearDeferredReposition();
+
+    if (currentSpineIndex != targetSpineIndex) {
+      currentSpineIndex = targetSpineIndex;
+      nextPageNumber = targetPage;
+      section.reset();
+    } else if (section && section->currentPage != targetPage) {
+      const int clampedTargetPage = std::max(0, targetPage);
+      section->currentPage = clampedTargetPage;
+    } else if (!section) {
+      nextPageNumber = targetPage;
+    }
+    requestUpdate();
+  }
+}
+
+void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
+  // DECKPOINT: body moved to applyProgressChangeResult (shared with the `:bm` command).
+  auto progressChangeResultHandler = [this](const ActivityResult& result) { applyProgressChangeResult(result, true); };
 
   switch (action) {
     case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
@@ -1271,6 +1280,7 @@ void EpubReaderActivity::renderBook() {
   // Runs under the render task's RenderLock; catches every requestUpdate()
   // exit from the overlay while its deferred chrome refresh is still pending.
   settleOverlayRefresh();
+  commandLineBeforeRender();  // DECKPOINT: the page under the `:` line is about to change
 
   const auto showPendingSyncSaveError = [this]() {
     if (!pendingSyncSaveError) return;
@@ -1612,6 +1622,7 @@ void EpubReaderActivity::renderBook() {
     // through the sheet (see #2190 for the mechanism).
     pushOverlayRefresh();
   }
+  commandLineAfterRender();  // DECKPOINT: keep an open `:` line on top
 }
 
 void EpubReaderActivity::onEndOfBookRendered() {

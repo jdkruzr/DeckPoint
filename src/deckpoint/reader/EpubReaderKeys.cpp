@@ -43,6 +43,10 @@ bool EpubReaderActivity::wantsRawKeys() const {
 void EpubReaderActivity::onKey(const freeink::KeyEvent& event) {
   // A key earlier in this batch opened a screen or overlay; the rest belong to it.
   if (keysSuspended || !wantsRawKeys()) return;
+  if (cmdLine.isOpen()) {
+    commandLineKey(event);
+    return;
+  }
   runReaderCommand(readerKeys.feed(event));
 }
 
@@ -160,12 +164,15 @@ void EpubReaderActivity::runReaderCommand(const ReaderCommand& cmd) {
       deckpoint::openKeyHelp(renderer, mappedInput, name.c_str(), keyHelp());
       leftReader = true;
       break;
-    case ReaderCmd::Dictionary:
+    case ReaderCmd::CommandLine:
     case ReaderCmd::LookupWord:
+      // A dropped prefix popup is still in the framebuffer: re-render under the line.
+      openCommandLine(cmd.type == ReaderCmd::LookupWord ? "dict " : "", hadPopup);
+      return;
+    case ReaderCmd::Dictionary:
     case ReaderCmd::Search:
     case ReaderCmd::SearchNext:
     case ReaderCmd::SearchPrev:
-    case ReaderCmd::CommandLine:
       rendered = false;
       showKeyPopup(tr(STR_KEYS_COMING_SOON), true);
       break;
