@@ -3,12 +3,11 @@
 Read `PROGRESS.md` first (dev loop, conventions). Full roadmap with rationale:
 `/home/jtd/.claude/plans/abstract-weaving-pike.md`. Last updated 2026-10-02.
 
-## 1. CSS stylesheet scoping (follow-up to the TOC bug, fixed in bef53e2d)
-- `Epub::parseCssFiles` (`lib/Epub/Epub.cpp:240-340`) merges every manifest `.css` into one rule
-  set; pages get rules from sheets they never `<link>`. Red Rising TOC: chapter lines now start at
-  the margin (hanging-indent clamp) but sit left of "Part I: Slave". Proper fix: tag rules with
-  their source sheet, apply only linked sheets (touches `SelectorEntry` + CSS cache format).
-  Upstream-worthy, as is the clamp in `ParsedText::resolveFirstLineIndent`.
+## 1. Done this round (upstream candidates)
+- Stylesheet scoping per document (5f80f808), hanging-indent clamp (bef53e2d), book center/right
+  alignment kept under the user's alignment setting (d6e959a0), per-device KOSync id (12301d50).
+  Caveat: right-aligned blocks in RTL books are only recognized when the element itself
+  declares `direction: rtl`. Package as upstream PRs at some point.
 - KOSync verified end to end (register, push, smart pull) against stock koreader/kosync.
   Per-device `device_id` fix (12301d50) is upstream-worthy. Sync Behavior defaults to Smart
   (silent jump); "Ask Every Time" is the setting. No annotation sync in the protocol.
