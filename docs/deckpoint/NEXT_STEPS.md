@@ -54,6 +54,8 @@ Read `PROGRESS.md` first (dev loop, conventions). Full roadmap with rationale:
 - **Wake on keypress**: OR `BoardTDeckPro::keyboardWakeMask()` (GPIO15, RTC-capable) into the ext1
   deep-sleep wake mask and call `BoardTDeckPro::prepareForSleep()` before sleeping (not wired yet).
 - Identify the side "volume up" button wiring.
+- Touch word actions (user, 2026-10-02): long-press a word -> popup offering both dictionary
+  lookup and annotate/highlight (one entry point for both, shared with hint mode's word targets).
 - Touch (v1.1 CST3530 @0x1A, IRQ-driven; SDK lacks this controller) — user flagged as coming.
   Revisit `hasTouch()`-gated layouts (`hidesButtonHints()` already distinguishes keyboard vs touch).
 - Haptics (DRV2605 on v1.1), light sensor, gyro tilt, LoRa quote sharing (plan Phase 5).
