@@ -16,6 +16,7 @@
 #include "WifiSelectionActivity.h"
 #include "activities/network/CalibreConnectActivity.h"
 #include "components/UITheme.h"
+#include "deckpoint/KeyLegend.h"
 #include "fontIds.h"
 #include "util/PluginEvents.h"
 #include "util/QrUtils.h"
@@ -478,6 +479,38 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     renderWifiIndicator(metrics.topPadding + metrics.headerHeight);
   }
 
+#if DECKPOINT_COMPACT_UI
+  // DECKPOINT: text first (the URL is what a keyboard user types), then one QR code in
+  // whatever height is left; the stock layout's 198px QR codes push the URL off-screen.
+  {
+    const int x = metrics.contentSidePadding;
+    int y = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing * 2;
+    const int h10 = renderer.getLineHeight(UI_10_FONT_ID);
+    const int h12 = renderer.getLineHeight(UI_12_FONT_ID);
+    const std::string ipUrl = "http://" + connectedIP + "/";
+    const std::string hostUrl = std::string("http://") + AP_HOSTNAME + ".local/";
+    if (isApMode) {
+      renderer.drawText(UI_10_FONT_ID, x, y, tr(STR_CONNECT_WIFI_HINT), true, EpdFontFamily::BOLD);
+      y += h10;
+      renderer.drawText(UI_12_FONT_ID, x, y, connectedSSID.c_str(), true);
+      y += h12 + metrics.verticalSpacing;
+    }
+    renderer.drawText(UI_10_FONT_ID, x, y, tr(STR_OPEN_URL_HINT), true, EpdFontFamily::BOLD);
+    y += h10;
+    renderer.drawText(UI_12_FONT_ID, x, y, (isApMode ? hostUrl : ipUrl).c_str(), true, EpdFontFamily::BOLD);
+    y += h12;
+    const std::string altUrl = std::string(tr(STR_OR_HTTP_PREFIX)) + (isApMode ? connectedIP + "/" : AP_HOSTNAME + std::string(".local/"));
+    renderer.drawText(SMALL_FONT_ID, x, y, altUrl.c_str(), true);
+    y += renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing;
+
+    // Hotspot: the QR joins the Wi-Fi; on a network it opens the page.
+    const std::string qrPayload =
+        isApMode ? std::string("WIFI:T:nopass;S:") + connectedSSID + ";;" : ipUrl;
+    const int bottom = renderer.getScreenHeight() - deckpoint::keyLegendBandHeight(renderer) - metrics.verticalSpacing;
+    const int qrSize = std::min(bottom - y, pageWidth - 2 * x);
+    if (qrSize >= 66) QrUtils::drawQrCode(renderer, Rect((pageWidth - qrSize) / 2, y, qrSize, qrSize), qrPayload);
+  }
+#else
   int startY = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing * 2;
   int height10 = renderer.getLineHeight(UI_10_FONT_ID);
   if (isApMode) {
@@ -539,6 +572,8 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     std::string hostnameUrl = std::string(tr(STR_OR_HTTP_PREFIX)) + AP_HOSTNAME + ".local/";
     renderer.drawCenteredText(SMALL_FONT_ID, startY, hostnameUrl.c_str(), true);
   }
+
+#endif
 
   const auto labels = mappedInput.mapLabels(tr(STR_EXIT), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

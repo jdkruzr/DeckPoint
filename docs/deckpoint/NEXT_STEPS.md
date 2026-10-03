@@ -11,6 +11,9 @@ Read `PROGRESS.md` first (dev loop, conventions). Full roadmap with rationale:
 - KOSync verified end to end (register, push, smart pull) against stock koreader/kosync.
   Per-device `device_id` fix (12301d50) is upstream-worthy. Sync Behavior defaults to Smart
   (silent jump); "Ask Every Time" is the setting. No annotation sync in the protocol.
+- TO VERIFY (user doubts it): "KOSync has no annotation sync." Check current KOReader docs/source
+  (kosync plugin, koreader-sync-server API, any newer annotation/highlight sync, e.g. via the
+  cloud-storage "sync" feature) before designing DeckPoint's highlight sync.
 - Wi-Fi is per-task (network activities silent-reboot on exit to defragment heap), so there is
   no "associated" state to indicate. Keeping Wi-Fi up (background sync) would be a design change.
 - 180-degree ghost frame after the post-Wi-Fi reboot: softInit now waits BUSY after the PSR soft
