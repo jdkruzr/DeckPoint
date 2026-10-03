@@ -90,6 +90,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 53
+
+Version 53 keeps the version 52 serialized layout unchanged. It was bumped
+because a book's `text-align: center` (and, outside RTL, `right`) now survives
+the user's paragraph-alignment override, which changes alignment and first-line
+indents of such blocks.
+
 ### Version 52
 
 Version 52 keeps the version 51 serialized layout unchanged. It was bumped

@@ -60,7 +60,7 @@ namespace {
 // DECKPOINT: bumped for the hanging-indent clamp in ParsedText::resolveFirstLineIndent.
 // v52: Each document is styled only by the stylesheets it links, in link order.
 // DECKPOINT: bumped for per-document stylesheet scoping (CssParser::StylesheetScope).
-constexpr uint8_t SECTION_FILE_VERSION = 52;
+constexpr uint8_t SECTION_FILE_VERSION = 53;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

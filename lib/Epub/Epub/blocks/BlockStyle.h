@@ -159,8 +159,16 @@ struct BlockStyle {
     }
     blockStyle.textAlignDefined = cssStyle.hasTextAlign();
     // User setting overrides CSS, unless "Book's Style" alignment setting is selected
+    // DECKPOINT: the user's setting is for body text; a book's centered (or, in LTR, right-
+    // aligned) blocks such as titles, copyright lines and epigraph attributions keep their CSS.
+    const bool declaredRtl = cssStyle.hasDirection() && cssStyle.direction == CssTextDirection::Rtl;
+    const bool deliberateAlign =
+        blockStyle.textAlignDefined && (cssStyle.textAlign == CssTextAlign::Center ||
+                                        (cssStyle.textAlign == CssTextAlign::Right && !declaredRtl));
     if (paragraphAlignment == CssTextAlign::None) {
       blockStyle.alignment = blockStyle.textAlignDefined ? cssStyle.textAlign : CssTextAlign::Justify;
+    } else if (deliberateAlign) {
+      blockStyle.alignment = cssStyle.textAlign;
     } else {
       blockStyle.alignment = paragraphAlignment;
     }

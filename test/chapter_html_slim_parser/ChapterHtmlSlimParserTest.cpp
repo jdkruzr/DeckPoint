@@ -696,3 +696,24 @@ TEST(BlockStyleInsetCap, ScalesPositiveInsetsProportionally) {
   EXPECT_EQ(untouched.marginLeft, 60);
   EXPECT_EQ(untouched.marginRight, 40);
 }
+
+TEST(BlockStyleAlignment, UserAlignmentKeepsBookCenterAndRight) {
+  const auto resolve = [](const CssTextAlign css, const CssTextAlign user) {
+    CssStyle style;
+    style.textAlign = css;
+    style.defined.textAlign = 1;
+    return BlockStyle::fromCssStyle(style, 16.0f, user, 220).alignment;
+  };
+  EXPECT_EQ(resolve(CssTextAlign::Center, CssTextAlign::Justify), CssTextAlign::Center);
+  EXPECT_EQ(resolve(CssTextAlign::Right, CssTextAlign::Justify), CssTextAlign::Right);
+  EXPECT_EQ(resolve(CssTextAlign::Left, CssTextAlign::Justify), CssTextAlign::Justify);
+  EXPECT_EQ(resolve(CssTextAlign::Justify, CssTextAlign::Left), CssTextAlign::Left);
+  EXPECT_EQ(resolve(CssTextAlign::Center, CssTextAlign::None), CssTextAlign::Center);
+
+  CssStyle rtlRight;
+  rtlRight.textAlign = CssTextAlign::Right;
+  rtlRight.defined.textAlign = 1;
+  rtlRight.direction = CssTextDirection::Rtl;
+  rtlRight.defined.direction = 1;
+  EXPECT_EQ(BlockStyle::fromCssStyle(rtlRight, 16.0f, CssTextAlign::Justify, 220).alignment, CssTextAlign::Justify);
+}
