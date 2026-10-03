@@ -109,6 +109,14 @@ int8_t Uc8253Gdeq031Driver::coCs() const { return BoardConfig::ACTIVE.sd.cs; }
 void Uc8253Gdeq031Driver::softInit(EpdBus& bus) {
   bus.cmdData(CMD_PANEL_SETTING, PSR_SOFT_RESET, sizeof(PSR_SOFT_RESET));
   delay(1);
+  // Writes sent while the controller is still resetting are dropped; a lost PSR leaves the
+  // default scan direction and the next frame lands rotated 180 degrees.
+  uint8_t waitedMs = 0;
+  while (bus.isBusy() && waitedMs < 50) {
+    delay(1);
+    waitedMs++;
+  }
+  if (waitedMs > 0 && Serial) Serial.printf("[GDEQ] soft reset busy for %u ms\n", waitedMs);
   bus.cmdData(CMD_PANEL_SETTING, PSR_BW_OTP, sizeof(PSR_BW_OTP));
   // Soft reset drops the analog domain; the next refresh must power on again.
   _powerOn = false;

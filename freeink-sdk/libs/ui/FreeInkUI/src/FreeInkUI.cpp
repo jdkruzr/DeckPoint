@@ -25,8 +25,14 @@ StyleSet defaultButtonStyles() {
   styles.selected.background = Paint::solid(Color::Black);
   styles.selected.foreground = Paint::solid(Color::White);
 
+#if DECKPOINT_COMPACT_UI
+  // DECKPOINT: thin 1-bit text is illegible on a dithered fill; focus inverts instead.
+  styles.focused.background = Paint::solid(Color::Black);
+  styles.focused.foreground = Paint::solid(Color::White);
+#else
   styles.focused.background = Paint::dither(Color::LightGray);
   styles.focused.foreground = Paint::solid(Color::Black);
+#endif
 
   styles.active.background = Paint::solid(Color::Black);
   styles.active.foreground = Paint::solid(Color::White);
@@ -45,8 +51,14 @@ StyleSet defaultListRowStyles() {
   styles.selected.background = Paint::solid(Color::Black);
   styles.selected.foreground = Paint::solid(Color::White);
 
+#if DECKPOINT_COMPACT_UI
+  // DECKPOINT: thin 1-bit text is illegible on a dithered fill; focus inverts instead.
+  styles.focused.background = Paint::solid(Color::Black);
+  styles.focused.foreground = Paint::solid(Color::White);
+#else
   styles.focused.background = Paint::dither(Color::LightGray);
   styles.focused.foreground = Paint::solid(Color::Black);
+#endif
 
   styles.active = styles.selected;
 

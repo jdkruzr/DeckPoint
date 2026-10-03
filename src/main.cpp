@@ -780,6 +780,9 @@ void loop() {
       else if (cmd == "BOARD") {  // DECKPOINT: reprint the board report
         BoardTDeckPro::logStatus();
       }
+      else if (cmd == "RESTART") {  // DECKPOINT: reproduce the post-Wi-Fi silent reboot
+        silentRestartToSettings();
+      }
       // DECKPOINT: "CMD:GRAY:<light>,<dark>" sets the gray waveform frame counts
       // (calibration; takes effect on the next grayscale refresh).
       else if (cmd.startsWith("GRAY:")) {
