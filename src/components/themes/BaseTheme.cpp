@@ -800,7 +800,13 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
 
   // Draw Progress Text
   const auto screenHeight = renderer.getScreenHeight();
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+  // DECKPOINT: the stock -4 lift starts the status text above its reserved
+  // band, into the page, where the last line's descenders hit it. Sit inside.
+  auto textY = screenHeight - UITheme::getInstance().getStatusBarHeight() - orientedMarginBottom - paddingBottom + 1;
+#else
   auto textY = screenHeight - UITheme::getInstance().getStatusBarHeight() - orientedMarginBottom - paddingBottom - 4;
+#endif
 
   const int leftClusterX = metrics.statusBarHorizontalMargin + orientedMarginLeft + 1;
   const int rightClusterX = renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - orientedMarginRight;

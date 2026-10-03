@@ -60,9 +60,10 @@ constexpr uint8_t LVL_VSL = 0x80;
 
 // Calibrated on a v1.1 unit (see plan): with repeats the drive multiplies, so
 // 8/4 frames punched holes in thin glyph strokes; 3/1 better; 4/0 (dark gray
-// stays black, faint edges whitened) gave the cleanest text so far.
-uint8_t s_lightFrames = 4;
-uint8_t s_darkFrames = 0;
+// stays black, faint edges whitened) gave the cleanest text; 2/1 gives a clean
+// solid mid-gray on images AND reads well as text — the shipping default.
+uint8_t s_lightFrames = 2;
+uint8_t s_darkFrames = 1;
 uint8_t s_repeat = 1;
 
 // One group: {group repeat, phase1 level|frames, phase2 (1 frame settle),
