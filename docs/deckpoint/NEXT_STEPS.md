@@ -27,13 +27,14 @@ Read `PROGRESS.md` first (dev loop, conventions). Full roadmap with rationale:
 - Key legend overlaps full-screen images in the BMP viewer (draw it only where there's room, or
   reserve the band / hide it in image views).
 - (done) Compact builds cap a block's combined CSS side insets at 1/6 of the column.
-- File Browser: long names wrap to 2 lines (consider single-line truncation); File Transfer list
-  subtitles. Reader menus toured (425817e0); still to check: Look Up with a StarDict dictionary
+- (done) File Browser compact rows (321597fc); File Transfer URL-first screen (f72616cf);
+  Library single legend (526c9b1b; "k: search" no longer fits on the tab-strip legend).
+  Possible: show the highlighted file's full name somewhere in the File Browser. Reader menus toured (425817e0); still to check: Look Up with a StarDict dictionary
   on the SD (without one it just bounces back), Text Settings preview says "14 pt" while the
   compact font is 17 px.
 - Web UI (Home -> File Transfer -> Join Network / Create Hotspot; `src/network/CrossPointWebServer.cpp`):
-  try it end to end (file manager uploads, settings, fonts, OPDS, Wi-Fi, plugins) and give the
-  on-device File Transfer screens the compact pass. Likely the nicest way to load books.
+  device screen done; still try the browser side end to end (uploads, settings, fonts, OPDS,
+  Wi-Fi, plugins). mDNS name is still crosspoint.local. Likely the nicest way to load books.
 - `KeyboardEntryActivity` legend strings are English literals (fine for now; i18n later).
 - Remove `-DDECKPOINT_KEY_DEBUG` from release builds eventually.
 
