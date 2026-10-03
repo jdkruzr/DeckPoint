@@ -301,12 +301,25 @@ void outputHigh(int8_t pin) {
 // LORA_EN switches its whole supply, and an unpowered radio would be
 // back-powered through the shared SPI lines. A falling edge on its NSS wakes
 // it, so its CS must stay parked high afterwards (it is never touched again).
-bool sleepLoRa() {
+bool waitLoRaReady(unsigned long timeoutMs) {
   const unsigned long start = millis();
-  pinMode(PIN_LORA_BUSY, INPUT);
-  while (digitalRead(PIN_LORA_BUSY) == HIGH) {  // POR + calibration after power-up
-    if (millis() - start > 100) return false;
+  while (digitalRead(PIN_LORA_BUSY) == HIGH) {
+    if (millis() - start > timeoutMs) return false;
     delay(1);
+  }
+  return true;
+}
+
+bool sleepLoRa() {
+  pinMode(PIN_LORA_BUSY, INPUT);
+  // BUSY is high both during power-up calibration and while the radio sleeps: after a
+  // software restart LORA_VDD never dropped, so the SX1262 is still asleep from the last
+  // boot. A falling NSS edge wakes it; then it can take a fresh SetSleep either way.
+  if (!waitLoRaReady(100)) {
+    digitalWrite(PIN_LORA_CS, LOW);
+    delayMicroseconds(100);
+    digitalWrite(PIN_LORA_CS, HIGH);
+    if (!waitLoRaReady(100)) return false;
   }
   // Same pins the SD card and panel use later; a repeat SPI.begin() keeps them.
   SPI.begin(PIN_SPI_SCK, PIN_SPI_MISO, PIN_SPI_MOSI, -1);
