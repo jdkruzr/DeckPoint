@@ -75,6 +75,13 @@ Read `PROGRESS.md` first (dev loop, conventions). Full roadmap with rationale:
   translations (~340 KB). Cheapest win: unused 3.4 MB `spiffs` partition -> bigger app slots.
   Try PSRAM direct .ttf loading (also speeds up the AA font contest).
 
+## 6c. Release plumbing
+- OTA updater still targets crosspoint-reader GitHub releases (`src/network/OtaUpdater.cpp`);
+  point it at jdkruzr/DeckPoint release assets (board tag `tdeckpro`) or disable it.
+- Branding: user-visible names are DeckPoint (boot/sleep logo + text, hotspot SSID, mDNS
+  `deckpoint.local`, DHCP hostname, web UI titles). Internals (`/.crosspoint/`, class names,
+  `window.CrossPoint` plugin API, Calibre plugin protocol, service URLs) intentionally unchanged.
+
 ## 7. Docs & credits (user requirement)
 - README section crediting **CrossPoint Reader** and **CrossInk** as inspirations (not just code
   sources), plus FreeInk SDK, Meshtastic, LilyGo; `CREDITS.md` mapping pieces to origins.

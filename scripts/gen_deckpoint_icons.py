@@ -35,6 +35,29 @@ def mic12() -> Image.Image:
     return im
 
 
+def logo120() -> Image.Image:
+    # DeckPoint mark: a keyboard e-reader in silhouette — a page of text ending in a
+    # block cursor on the screen, three rows of keys below.
+    im = Image.new("1", (120, 120), 1)
+    d = ImageDraw.Draw(im)
+    d.rounded_rectangle((16, 2, 103, 117), radius=12, outline=0, width=5)
+    d.rectangle((26, 12, 93, 66), outline=0, width=3)
+    y = 21
+    for w in (52, 46, 52, 30):
+        d.rectangle((33, y, 33 + w - 1, y + 3), fill=0)
+        y += 9
+    d.rectangle((67, y - 12, 74, y - 3), fill=0)
+    ky = 76
+    for n in (5, 5, 4):
+        kw, gap = 10, 3
+        x = (120 - (n * kw + (n - 1) * gap)) // 2
+        for _ in range(n):
+            d.rounded_rectangle((x, ky, x + kw - 1, ky + 8), radius=2, fill=0)
+            x += kw + gap
+        ky += 12
+    return im
+
+
 def emit(name: str, symbol: str, im: Image.Image) -> None:
     w, h = im.size
     row_bytes = (w + 7) // 8
@@ -67,4 +90,5 @@ def emit(name: str, symbol: str, im: Image.Image) -> None:
 if __name__ == "__main__":
     emit("search16", "Search16Icon", search16())
     emit("mic12", "Mic12Icon", mic12())
+    emit("logo120", "DeckPointLogo120", logo120())
     print(f"wrote {OUT}")
