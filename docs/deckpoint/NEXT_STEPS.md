@@ -28,6 +28,9 @@ Read `PROGRESS.md` first (dev loop, conventions). Full roadmap with rationale:
 - File Browser: long names wrap to 2 lines (consider single-line truncation); File Transfer list
   subtitles; any other screens not yet visited (reader sub-menus: Text Settings, Bookmarks,
   Look Up, Go to %).
+- Web UI (Home -> File Transfer -> Join Network / Create Hotspot; `src/network/CrossPointWebServer.cpp`):
+  try it end to end (file manager uploads, settings, fonts, OPDS, Wi-Fi, plugins) and give the
+  on-device File Transfer screens the compact pass. Likely the nicest way to load books.
 - `KeyboardEntryActivity` legend strings are English literals (fine for now; i18n later).
 - Remove `-DDECKPOINT_KEY_DEBUG` from release builds eventually.
 
