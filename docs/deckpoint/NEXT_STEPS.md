@@ -1,7 +1,15 @@
 # DeckPoint — next steps
 
-Read `PROGRESS.md` first (dev loop, conventions). Full roadmap with rationale:
-`/home/jtd/.claude/plans/abstract-weaving-pike.md`. Last updated 2026-10-02.
+Read `PROGRESS.md` first (dev loop, conventions). Current plan with rationale:
+`/home/jtd/.claude/plans/abstract-weaving-pike.md` (Phase T hybrid touch UX, then round 2).
+
+## 0. In progress — Phase T steps 3-4 (touch in the reader, lists, help, hint tags)
+- Steps 1-2 done (2fea3c0f). Steps 3-4 were being implemented by an agent at the end of session 3:
+  T-Deck defaults TAP_AND_SWIPE + center-tap menu (with a one-time migration if needed), long-press
+  word = instant lookup, keyboard modes take priority over touch, full-pitch list hit areas, touch
+  checks on every screen, a Touch section in `?` help, hint tags moved above words. If a
+  `wip/touch-reader` branch exists, resume from it; otherwise check `git status` for its edits.
+- Then: on-glass round 3 (real use) and commit.
 
 ## 1. Done this round (upstream candidates)
 - Stylesheet scoping per document (5f80f808), hanging-indent clamp (bef53e2d), book center/right

@@ -6,7 +6,7 @@ for the **LilyGo T-Deck Pro** (ESP32-S3, 16MB flash, 8MB quad PSRAM, GoodDisplay
 Branch `deckpoint`, base upstream commit `f331030f`. Inspirations and code sources:
 CrossPoint Reader and CrossInk (credit both prominently in user-facing docs).
 
-Last updated: 2026-10-03 (end of second session).
+Last updated: 2026-10-03 (session 3, afternoon).
 
 ## Repo layout & conventions
 - Monorepo: `freeink-sdk/` is **vendored** (was a submodule), base `bbd528c`
@@ -102,3 +102,17 @@ Last updated: 2026-10-03 (end of second session).
   text 3/1 and image 4/2 gray profiles, photo-calibrated (e9a28515). CMD:CLEAN/GRAYIMG/RESTART.
 - Tooling: glass photos arrive via ntfy (see memory `glass-photos-ntfy`); repo pushed to
   https://github.com/jdkruzr/DeckPoint (private). Bridge daemon: run with the 2 h timeout.
+
+## Session 3 (2026-10-03)
+- Fonts: SD .ttf fonts sized like built-ins (pt+3 px) with light hinting (d4ad3a57); user reads in
+  Source Sans 3 (`/.fonts/SourceSans3`). LoRa re-sleep after warm restarts (dd3f0bc1).
+- Images: reader image pages use the deep base + image gray profile (204b8a76); per-image
+  auto-levels before dithering (b9aa1d13, upstream candidate).
+- Keyboard reader round 1 complete: global `?` help on every screen (3bc38d05), vim keys + marks
+  (08990a60), `:` command line + registry (508be0ad), `d` hint lookup (96e77c7e), `/` search with
+  n/N (335a56de). Home legend shows ?: help; Home help has a keyboard primer.
+- Touch (Phase T): CST3530 driver + CMD:TOUCHTEST (49b8348f), calibration rounds 1-2 passed on the
+  glass; touch input split from touch-first layout + Controls > Touchscreen toggle + per-board
+  gesture mask + small-screen thresholds (2fea3c0f).
+- Tooling: glass photos stream in via an ntfy listener (memory `glass-photos-ntfy`); LAN exempt from
+  ntfy rate limits; keyboard charset rule saved (memory `tdeck-keyboard-charset`).
