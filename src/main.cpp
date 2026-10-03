@@ -22,6 +22,7 @@
 #include <XteinkDetect.h>
 #if FREEINK_DEVICE_TDECKPRO
 #include <BoardTDeckPro.h>  // DECKPOINT
+#include <Gdeq031Tuning.h>  // DECKPOINT
 #endif
 #include <builtinFonts/all.h>
 #if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
@@ -778,6 +779,21 @@ void loop() {
 #if FREEINK_DEVICE_TDECKPRO
       else if (cmd == "BOARD") {  // DECKPOINT: reprint the board report
         BoardTDeckPro::logStatus();
+      }
+      // DECKPOINT: "CMD:GRAY:<light>,<dark>" sets the gray waveform frame counts
+      // (calibration; takes effect on the next grayscale refresh).
+      else if (cmd.startsWith("GRAY:")) {
+        const String arg = cmd.substring(5);
+        const int c1 = arg.indexOf(',');
+        const int c2 = c1 > 0 ? arg.indexOf(',', c1 + 1) : -1;
+        if (c1 > 0) {
+          freeink::gdeq031SetGrayFrames(static_cast<uint8_t>(arg.substring(0, c1).toInt()),
+                                        static_cast<uint8_t>(arg.substring(c1 + 1, c2 > 0 ? c2 : arg.length()).toInt()));
+        }
+        if (c2 > 0) freeink::gdeq031SetGrayRepeat(static_cast<uint8_t>(arg.substring(c2 + 1).toInt()));
+        uint8_t l = 0, d = 0;
+        freeink::gdeq031GetGrayFrames(l, d);
+        logSerial.printf("[GRAY] light=%u dark=%u frames, repeat=%u\n", l, d, freeink::gdeq031GrayRepeat());
       }
       // DECKPOINT: "CMD:KEY:<code>[:p|:r]" injects a keyboard matrix event so
       // host tooling (scripts/deckpoint_serial.py) can drive the UI. A bare

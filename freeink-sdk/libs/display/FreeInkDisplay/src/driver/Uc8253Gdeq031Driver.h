@@ -40,12 +40,24 @@ class Uc8253Gdeq031Driver : public PanelDriver {
   void deepSleep(EpdBus& bus) override;
   void display(EpdBus& bus, const uint8_t* fb, const uint8_t* prev, RefreshMode mode, bool turnOff) override;
 
-  // B/W only for now (no gray LUTs yet). Callers still run their grayscale
-  // pipeline: they show a B/W base frame, render gray planes into the
-  // framebuffer, then ask for a gray refresh. The base default would push
-  // that plane to the glass as if it were the image (mostly black), so the
-  // gray overlay is dropped and the B/W base stays on screen.
+  // Grayscale: overlay masks over a separate B/W base (the simplest contract).
+  //   1. displayGrayscaleBase(): ordinary refresh of the B/W base, in which
+  //      both gray levels are inked black.
+  //   2. copyGrayscaleLsb/Msb(): mask planes -> DTM1 (OLD) / DTM2 (NEW).
+  //      Per pixel {NEW,OLD} picks a LUT (CDI DDX=01): 11 dark -> WW (0x21),
+  //      10 light -> KW (0x22), 00 untouched -> KK (0x24), 01 unused -> WK.
+  //   3. displayGray(): register LUTs (PSR REG=1) that drive only the gray
+  //      pixels toward white with VSL for a tunable number of frames.
+  //   4. cleanupGrayscaleBuffers(): soft init (back to OTP LUTs) and re-seed
+  //      DTM1 with the B/W frame so the next fast refresh diffs correctly.
+  GrayscaleCapabilities grayscaleCapabilities(GrayscaleMode mode = GrayscaleMode::Overlay) const override {
+    if (mode != GrayscaleMode::Overlay) return {};
+    return {GrayscaleEncoding::OverlayMasks, GrayscaleBase::Separate, false, false, false};
+  }
+  void copyGrayscaleLsb(EpdBus& bus, const uint8_t* lsb) override;
+  void copyGrayscaleMsb(EpdBus& bus, const uint8_t* msb) override;
   void displayGray(EpdBus& bus, const uint8_t* fb, bool turnOff, const unsigned char* lut, bool factoryMode) override;
+  void cleanupGrayscaleBuffers(EpdBus& bus, const uint8_t* bw) override;
 
  private:
   void softInit(EpdBus& bus);
@@ -55,7 +67,10 @@ class Uc8253Gdeq031Driver : public PanelDriver {
   void powerOn(EpdBus& bus);
   void powerOff(EpdBus& bus);
 
+  void loadGrayLuts(EpdBus& bus);
+
   bool _powerOn = false;
+  bool _grayLsbValid = false;
   bool _needsFullRefresh = true;  // first refresh after begin() must be full (unknown glass state)
 };
 
