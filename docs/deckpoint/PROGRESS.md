@@ -6,7 +6,7 @@ for the **LilyGo T-Deck Pro** (ESP32-S3, 16MB flash, 8MB quad PSRAM, GoodDisplay
 Branch `deckpoint`, base upstream commit `f331030f`. Inspirations and code sources:
 CrossPoint Reader and CrossInk (credit both prominently in user-facing docs).
 
-Last updated: 2026-10-02 (end of first session).
+Last updated: 2026-10-03 (end of second session).
 
 ## Repo layout & conventions
 - Monorepo: `freeink-sdk/` is **vendored** (was a submodule), base `bbd528c`
@@ -86,3 +86,19 @@ Last updated: 2026-10-02 (end of first session).
 - `scripts/deckpoint_serial.py`, `scripts/deckpoint_flash.sh`, `scripts/gen_deckpoint_icons.py`,
   `tools/fontlab/` (specimen + on-glass BMP pages), `CMD:TESTPATTERN`, gray test card
   (4 bands + gradient; regenerate with PIL, copy via USB Drive).
+
+## Session 2 (2026-10-02 night -> 10-03)
+- EPUB layout (upstream bugs, PR candidates): hanging-indent clamp (bef53e2d); per-document
+  stylesheet scoping with @import (5f80f808, CSS cache v13); book center/right alignment kept
+  under the user's alignment setting (d6e959a0). Section format now v53.
+- Compact UI: nested CSS margin cap (1/6 column); inverted focus instead of dither; key legend
+  clears its band (no popup overprint); single Library legend; File Browser one-line rows,
+  no icons, `ls -F` folders; File Transfer URL-first; images fit above the legend.
+- Keyboard: typed Go to %; Text Settings Enter enters list; "Hold Enter for actions".
+- KOSync verified end to end; per-device hashed `device_id`, device name DeckPoint (12301d50).
+- Dictionary: StarDict en-simple on SD (`/dictionaries/en-simple/`); IPA glyphs in reader fonts.
+- Branding: DeckPoint name + logo on boot/sleep, SSID, mDNS, DHCP, web UI (dd800755).
+- Display: GDEQ031 soft-reset BUSY wait (180-degree ghost theory); deep-clean Full refresh;
+  text 3/1 and image 4/2 gray profiles, photo-calibrated (e9a28515). CMD:CLEAN/GRAYIMG/RESTART.
+- Tooling: glass photos arrive via ntfy (see memory `glass-photos-ntfy`); repo pushed to
+  https://github.com/jdkruzr/DeckPoint (private). Bridge daemon: run with the 2 h timeout.
