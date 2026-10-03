@@ -118,7 +118,7 @@ void ActivityManager::loop() {
     // panels' etched glass makes unreliable). The reader keeps its clean page
     // (no status bar there to tap). Touch boards only, like the swipe itself.
     bool statusBarTap = false;
-    if (mappedInput.hasTouch() &&
+    if (mappedInput.touchGestureEnabled(deckpoint::touch::GESTURE_STATUS_BAR_TAP) &&  // DECKPOINT
         (currentActivity->name == "Home" || currentActivity->name == "FileBrowser" ||
          currentActivity->name == "Settings" || currentActivity->name == "NetworkModeSelection")) {
       int tx = 0;

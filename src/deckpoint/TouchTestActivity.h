@@ -10,9 +10,10 @@
 // after movement also logs
 //   [TOUCH] swipe=<LEFT|RIGHT|UP|DOWN> dx=<px> dy=<px> sdk=<0|1>
 // (sdk = the SDK's own flick classifier accepted it). Reads the ungated
-// InputManager, so it works while DECKPOINT_TOUCH_UI keeps touch out of the UI.
+// InputManager, so it works with the Touchscreen setting off.
 // Any key (or Back) exits.
 
+#include "TouchStroke.h"
 #include "activities/Activity.h"
 
 #include <freertos/FreeRTOS.h>
@@ -53,11 +54,10 @@ class TouchTestActivity final : public Activity {
   char status[64]{};
   Dot renderDots[MAX_DOTS]{};  // render-task copy
 
-  bool wasDown = false;
   bool firstRender = true;
   bool dirty = false;
-  int16_t downX = 0, downY = 0;  // logical Portrait touch-down point
-  int16_t lastX = -1, lastY = -1;
+  TouchStroke stroke;                  // logical Portrait, every sample
+  int16_t loggedX = -1, loggedY = -1;  // last logged/drawn move sample
   unsigned long lastMoveLogMs = 0;
   unsigned long lastRenderRequestMs = 0;
 };

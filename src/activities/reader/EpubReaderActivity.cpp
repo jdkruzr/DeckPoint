@@ -632,7 +632,8 @@ void EpubReaderActivity::loop() {
   }
 
   // Link taps take priority over the reader-menu and page-turn zones.
-  if (!atEndOfBook && !currentPageLinks.empty() && SETTINGS.touchReaderControls && mappedInput.hasTouch()) {
+  if (!atEndOfBook && !currentPageLinks.empty() && SETTINGS.touchReaderControls &&
+      mappedInput.hasTouchInput()) {  // DECKPOINT: input, not layout
     int touchX = 0;
     int touchY = 0;
     if (mappedInput.wasScreenTapped(touchX, touchY)) {

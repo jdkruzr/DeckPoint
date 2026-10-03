@@ -673,10 +673,10 @@ void InputManager::normalizeTouchPoint(const uint16_t x, const uint16_t y, float
 bool InputManager::wasTouchTap(float& nx, float& ny) const {
 #if FREEINK_CAP_TOUCH
   if (!touchReleasedEvent || touchSuppressed || touchMultiContactSequence) return false;
-  // Hold/long-press detection uses the tighter 28 px stationary slop, but a
-  // released tap remains valid until motion reaches the 60 px swipe threshold.
-  // Using the stationary threshold here created a 29..59 px dead band where a
-  // normal finger roll was neither a tap nor a swipe.
+  // Hold/long-press detection uses the tighter stationary slop, but a released
+  // tap remains valid until motion reaches the swipe threshold. Using the
+  // stationary threshold here created a dead band where a normal finger roll
+  // was neither a tap nor a swipe. (DECKPOINT: distances from touchThresholds.)
   if (touchMovedBeyondTapReleaseSlop) return false;
   // Tap position = the FIRST contact sample (touch-down), not the last: the
   // reported centroid drifts 10-20px as a finger rolls off during lift, which
@@ -766,7 +766,7 @@ bool InputManager::wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float&
   const int dy = static_cast<int>(touchUpPoint.y) - static_cast<int>(touchDownPoint.y);
   const int adx = absInt(dx);
   const int ady = absInt(dy);
-  if (adx < TOUCH_SWIPE_MIN_PX && ady < TOUCH_SWIPE_MIN_PX) return false;
+  if (adx < touchThresholds.swipeMinPx && ady < touchThresholds.swipeMinPx) return false;
   normalizeTouchPoint(touchDownPoint.x, touchDownPoint.y, nxStart, nyStart);
   normalizeTouchPoint(touchUpPoint.x, touchUpPoint.y, nxEnd, nyEnd);
   return true;
@@ -1002,8 +1002,8 @@ bool InputManager::expandMultiTouchGesture(const TouchSnapshot& snapshot, const 
   if (!findContactAssignment(snapshot, trackedTouchContactCount, assignment)) return false;
   for (uint8_t i = 0; i < trackedTouchContactCount; ++i) {
     const TouchPoint& current = snapshot.points[assignment[i]].point;
-    if (absInt(static_cast<int>(current.x) - multiTouchContacts[i].start.x) > TOUCH_TAP_SLOP_PX ||
-        absInt(static_cast<int>(current.y) - multiTouchContacts[i].start.y) > TOUCH_TAP_SLOP_PX) {
+    if (absInt(static_cast<int>(current.x) - multiTouchContacts[i].start.x) > touchThresholds.tapSlopPx ||
+        absInt(static_cast<int>(current.y) - multiTouchContacts[i].start.y) > touchThresholds.tapSlopPx) {
       return false;
     }
   }
@@ -1075,17 +1075,17 @@ bool InputManager::isMultiTouchTranslation(const unsigned long now) const {
   const int centerAbsX = absInt(centerDx);
   const int centerAbsY = absInt(centerDy);
 
-  if (centerAbsX >= TOUCH_SWIPE_MIN_PX && centerAbsX * 2 >= centerAbsY * 3) {
+  if (centerAbsX >= touchThresholds.swipeMinPx && centerAbsX * 2 >= centerAbsY * 3) {
     for (uint8_t i = 0; i < trackedTouchContactCount; ++i) {
       const int dx = static_cast<int>(multiTouchContacts[i].last.x) - multiTouchContacts[i].start.x;
-      if (absInt(dx) < TOUCH_SWIPE_MIN_PX || (dx > 0) != (centerDx > 0)) return false;
+      if (absInt(dx) < touchThresholds.swipeMinPx || (dx > 0) != (centerDx > 0)) return false;
     }
     return true;
   }
-  if (centerAbsY >= TOUCH_SWIPE_MIN_PX && centerAbsY * 2 >= centerAbsX * 3) {
+  if (centerAbsY >= touchThresholds.swipeMinPx && centerAbsY * 2 >= centerAbsX * 3) {
     for (uint8_t i = 0; i < trackedTouchContactCount; ++i) {
       const int dy = static_cast<int>(multiTouchContacts[i].last.y) - multiTouchContacts[i].start.y;
-      if (absInt(dy) < TOUCH_SWIPE_MIN_PX || (dy > 0) != (centerDy > 0)) return false;
+      if (absInt(dy) < touchThresholds.swipeMinPx || (dy > 0) != (centerDy > 0)) return false;
     }
     return true;
   }
@@ -1234,6 +1234,8 @@ void InputManager::beginTouch() {
   if (t.controller == BoardConfig::TouchController::None) {
     return;
   }
+  // DECKPOINT: per-board tap/swipe distances (0 fields keep the SDK defaults).
+  touchThresholds = freeink::resolveTouchThresholds(t.swipeMinPx, t.tapSlopPx, t.tapReleaseSlopPx);
   if (t.controller == BoardConfig::TouchController::Cst816s) {
     beginCst816s();
     return;
@@ -1347,10 +1349,10 @@ void InputManager::updateTouchFromIrq(const unsigned long now, const int irqRaw)
         touchUpPoint = point;
         const int dx = static_cast<int>(touchUpPoint.x) - static_cast<int>(touchDownPoint.x);
         const int dy = static_cast<int>(touchUpPoint.y) - static_cast<int>(touchDownPoint.y);
-        if (absInt(dx) > TOUCH_TAP_SLOP_PX || absInt(dy) > TOUCH_TAP_SLOP_PX) {
+        if (absInt(dx) > touchThresholds.tapSlopPx || absInt(dy) > touchThresholds.tapSlopPx) {
           touchMovedBeyondTapSlop = true;
         }
-        if (absInt(dx) > TOUCH_TAP_RELEASE_SLOP_PX || absInt(dy) > TOUCH_TAP_RELEASE_SLOP_PX) {
+        if (absInt(dx) > touchThresholds.tapReleaseSlopPx || absInt(dy) > touchThresholds.tapReleaseSlopPx) {
           touchMovedBeyondTapReleaseSlop = true;
         }
       }
@@ -1611,8 +1613,10 @@ void InputManager::pollCst816s(const unsigned long now) {
     touchUpPoint = touchPoint;
     const int dx = absInt(int(touchPoint.x) - int(touchDownPoint.x));
     const int dy = absInt(int(touchPoint.y) - int(touchDownPoint.y));
-    if (dx > TOUCH_TAP_SLOP_PX || dy > TOUCH_TAP_SLOP_PX) touchMovedBeyondTapSlop = true;
-    if (dx > TOUCH_TAP_RELEASE_SLOP_PX || dy > TOUCH_TAP_RELEASE_SLOP_PX) touchMovedBeyondTapReleaseSlop = true;
+    if (dx > touchThresholds.tapSlopPx || dy > touchThresholds.tapSlopPx) touchMovedBeyondTapSlop = true;
+    if (dx > touchThresholds.tapReleaseSlopPx || dy > touchThresholds.tapReleaseSlopPx) {
+      touchMovedBeyondTapReleaseSlop = true;
+    }
   }
 }
 
@@ -1693,10 +1697,10 @@ void InputManager::pollFt5x06(const unsigned long now) {
     touchUpPoint = touchPoint;
     const int dx = static_cast<int>(touchUpPoint.x) - static_cast<int>(touchDownPoint.x);
     const int dy = static_cast<int>(touchUpPoint.y) - static_cast<int>(touchDownPoint.y);
-    if (absInt(dx) > TOUCH_TAP_SLOP_PX || absInt(dy) > TOUCH_TAP_SLOP_PX) {
+    if (absInt(dx) > touchThresholds.tapSlopPx || absInt(dy) > touchThresholds.tapSlopPx) {
       touchMovedBeyondTapSlop = true;
     }
-    if (absInt(dx) > TOUCH_TAP_RELEASE_SLOP_PX || absInt(dy) > TOUCH_TAP_RELEASE_SLOP_PX) {
+    if (absInt(dx) > touchThresholds.tapReleaseSlopPx || absInt(dy) > touchThresholds.tapReleaseSlopPx) {
       touchMovedBeyondTapReleaseSlop = true;
     }
   }
@@ -1763,8 +1767,10 @@ void InputManager::pollCst3xx(const unsigned long now) {
     touchUpPoint = touchPoint;
     const int dx = absInt(int(touchPoint.x) - int(touchDownPoint.x));
     const int dy = absInt(int(touchPoint.y) - int(touchDownPoint.y));
-    if (dx > TOUCH_TAP_SLOP_PX || dy > TOUCH_TAP_SLOP_PX) touchMovedBeyondTapSlop = true;
-    if (dx > TOUCH_TAP_RELEASE_SLOP_PX || dy > TOUCH_TAP_RELEASE_SLOP_PX) touchMovedBeyondTapReleaseSlop = true;
+    if (dx > touchThresholds.tapSlopPx || dy > touchThresholds.tapSlopPx) touchMovedBeyondTapSlop = true;
+    if (dx > touchThresholds.tapReleaseSlopPx || dy > touchThresholds.tapReleaseSlopPx) {
+      touchMovedBeyondTapReleaseSlop = true;
+    }
   }
 }
 
@@ -1967,8 +1973,10 @@ void InputManager::pollGslx680(const unsigned long now) {
     touchUpPoint = touchPoint;
     const int dx = static_cast<int>(touchUpPoint.x) - static_cast<int>(touchDownPoint.x);
     const int dy = static_cast<int>(touchUpPoint.y) - static_cast<int>(touchDownPoint.y);
-    if (absInt(dx) > TOUCH_TAP_SLOP_PX || absInt(dy) > TOUCH_TAP_SLOP_PX) touchMovedBeyondTapSlop = true;
-    if (absInt(dx) > TOUCH_TAP_RELEASE_SLOP_PX || absInt(dy) > TOUCH_TAP_RELEASE_SLOP_PX)
+    if (absInt(dx) > touchThresholds.tapSlopPx || absInt(dy) > touchThresholds.tapSlopPx) {
+      touchMovedBeyondTapSlop = true;
+    }
+    if (absInt(dx) > touchThresholds.tapReleaseSlopPx || absInt(dy) > touchThresholds.tapReleaseSlopPx)
       touchMovedBeyondTapReleaseSlop = true;
   }
 }
@@ -2300,7 +2308,7 @@ void InputManager::pollFt6336u(const unsigned long now) {
     touchUpPoint = touchPoint;
     const int dx = static_cast<int>(touchUpPoint.x) - static_cast<int>(touchDownPoint.x);
     const int dy = static_cast<int>(touchUpPoint.y) - static_cast<int>(touchDownPoint.y);
-    if (absInt(dx) > TOUCH_TAP_SLOP_PX || absInt(dy) > TOUCH_TAP_SLOP_PX) {
+    if (absInt(dx) > touchThresholds.tapSlopPx || absInt(dy) > touchThresholds.tapSlopPx) {
       touchMovedBeyondTapSlop = true;
     }
     touchPressed = true;
@@ -2407,10 +2415,10 @@ void InputManager::pollGt911(const unsigned long now) {
       touchUpPoint = touchPoint;
       const int dx = static_cast<int>(touchUpPoint.x) - static_cast<int>(touchDownPoint.x);
       const int dy = static_cast<int>(touchUpPoint.y) - static_cast<int>(touchDownPoint.y);
-      if (absInt(dx) > TOUCH_TAP_SLOP_PX || absInt(dy) > TOUCH_TAP_SLOP_PX) {
+      if (absInt(dx) > touchThresholds.tapSlopPx || absInt(dy) > touchThresholds.tapSlopPx) {
         touchMovedBeyondTapSlop = true;
       }
-      if (absInt(dx) > TOUCH_TAP_RELEASE_SLOP_PX || absInt(dy) > TOUCH_TAP_RELEASE_SLOP_PX) {
+      if (absInt(dx) > touchThresholds.tapReleaseSlopPx || absInt(dy) > touchThresholds.tapReleaseSlopPx) {
         touchMovedBeyondTapReleaseSlop = true;
       }
       // A multi-contact gesture must not become a primary-contact tap in

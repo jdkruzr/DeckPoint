@@ -158,6 +158,13 @@ constexpr unsigned long TOUCH_HELD_OVERRIDE_WINDOW_MS = 250;
 
 bool MappedInputManager::hasTouch() const { return gpio.hasTouch(); }
 
+bool MappedInputManager::hasTouchInput() const { return gpio.hasTouchInput(); }  // DECKPOINT
+
+bool MappedInputManager::touchGestureEnabled(const deckpoint::touch::Gesture gesture) const {  // DECKPOINT
+  return gpio.hasTouchInput() &&
+         deckpoint::touch::gestureEnabled(deckpoint::touch::gestureMaskFor(BoardConfig::isTDeckPro()), gesture);
+}
+
 void MappedInputManager::rememberTouchHeldTime() const {
   touchHeldOverrideValid = true;
   touchHeldOverrideMs = gpio.lastTouchHeldMs();
@@ -174,7 +181,9 @@ bool MappedInputManager::wasScreenTapped(int& x, int& y) const {
   // A tap on the header back button is Button::Back (wasBackGesture), not a
   // screen tap: screens that route every tap (the keyboard's key router)
   // would otherwise swallow it before their Back check.
-  if (HeaderBackTapTarget::contains(tapX, tapY)) return false;
+  if (touchGestureEnabled(deckpoint::touch::GESTURE_HEADER_BACK_TAP) &&  // DECKPOINT
+      HeaderBackTapTarget::contains(tapX, tapY))
+    return false;
   x = tapX;
   y = tapY;
   rememberTouchHeldTime();
@@ -308,7 +317,7 @@ bool MappedInputManager::wasBackGesture() const {
   // swipe so every activity's existing Back handling picks it up.
   float nx = 0.0f;
   float ny = 0.0f;
-  if (gpio.wasTouchTap(nx, ny)) {
+  if (touchGestureEnabled(deckpoint::touch::GESTURE_HEADER_BACK_TAP) && gpio.wasTouchTap(nx, ny)) {  // DECKPOINT
     int tapX = 0;
     int tapY = 0;
     renderer.tapToLogical(nx, ny, tapX, tapY);
@@ -320,24 +329,29 @@ bool MappedInputManager::wasBackGesture() const {
   // Back = left-to-right swipe starting near the left edge. Edge-anchored so that
   // mid-screen horizontal swipes stay available to activities that consume
   // SwipeDir::Left/Right (e.g. percent selection, image viewer).
-  return wasEdgeSwipe(fui::ScreenEdge::Left);
+  return touchGestureEnabled(deckpoint::touch::GESTURE_EDGE_BACK) &&  // DECKPOINT
+         wasEdgeSwipe(fui::ScreenEdge::Left);
 }
 
 bool MappedInputManager::wasTopEdgeDownSwipe() const { return wasEdgeSwipe(fui::ScreenEdge::Top); }
 
 bool MappedInputManager::wasBottomEdgeUpSwipe() const { return wasEdgeSwipe(fui::ScreenEdge::Bottom); }
 
-bool MappedInputManager::wasMenuGesture() const { return wasTopEdgeDownSwipe(); }
+bool MappedInputManager::wasMenuGesture() const {
+  return touchGestureEnabled(deckpoint::touch::GESTURE_READER_MENU_SWIPE) && wasTopEdgeDownSwipe();  // DECKPOINT
+}
 
 bool MappedInputManager::wasReaderMenuSwipeUp() const { return gpio.hasHomeKey() && wasBottomEdgeUpSwipe(); }
 
 bool MappedInputManager::wasHomeGesture() const {
-  return gpio.hasHomeKey() ? homeAction == HomeButtonAction::Home : wasBottomEdgeUpSwipe();
+  if (gpio.hasHomeKey()) return homeAction == HomeButtonAction::Home;
+  return touchGestureEnabled(deckpoint::touch::GESTURE_EDGE_HOME) && wasBottomEdgeUpSwipe();  // DECKPOINT
 }
 
 bool MappedInputManager::wasLightPanelGesture() const {
   // On lightless boards the same edge remains available to the reader menu.
-  return Frontlight.present() && wasTopEdgeDownSwipe();
+  return Frontlight.present() && touchGestureEnabled(deckpoint::touch::GESTURE_LIGHT_PANEL_SWIPE) &&  // DECKPOINT
+         wasTopEdgeDownSwipe();
 }
 
 #if FREEINK_CAP_TOUCH

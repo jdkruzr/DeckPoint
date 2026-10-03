@@ -329,6 +329,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED, StrId::STR_NEXT_NEXT,
                            StrId::STR_PREV_PREV},
                           "sideButtonLayout", StrId::STR_CAT_CONTROLS),
+        // DECKPOINT: master touch input switch. Erased below on boards without a controller.
+        SettingInfo::Toggle(StrId::STR_TOUCHSCREEN, &CrossPointSettings::touchscreen, "touchscreen",
+                            StrId::STR_CAT_CONTROLS),
         SettingInfo::Toggle(StrId::STR_TOUCH_READER_CONTROLS, &CrossPointSettings::touchReaderControls,
                             "touchReaderControls", StrId::STR_CAT_CONTROLS),
         SettingInfo::Enum(StrId::STR_NEXT_PAGE_GESTURE, &CrossPointSettings::pageTurnGesture,
@@ -355,7 +358,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         // Erased below unless the board is an X4 Pro.
         SettingInfo::Toggle(StrId::STR_DBL_CLICK_PWR_LIGHT, &CrossPointSettings::doubleClickPwrLight,
                             "doubleClickPwrLight", StrId::STR_CAT_CONTROLS),
-#if FREEINK_CAP_TOUCH && DECKPOINT_TOUCH_UI  // DECKPOINT: Confirm needs touch-first UI
+#if FREEINK_CAP_TOUCH && DECKPOINT_TOUCH_FIRST_UI  // DECKPOINT: Confirm needs touch-first UI
         SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
                           {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
                            StrId::STR_FOOTNOTES, StrId::STR_CONFIRM},
@@ -511,12 +514,16 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   }();
 
   std::vector<SettingInfo> v = baseList;
-  if (!BoardConfig::hasTouch()) {
+  // DECKPOINT: keyed on the controller, not the touch-first layout (a keyboard
+  // board has touch input too) and not the Touchscreen switch: this list is
+  // also the persistence schema, so hiding entries would drop their saved values.
+  if (!BoardConfig::hasTouchController()) {
     // The reader menu style stays available on button boards (the toolbar
     // chrome is button-navigable); only the touch controls are hidden.
     v.erase(std::remove_if(v.begin(), v.end(),
                            [](const SettingInfo& s) {
-                             return s.nameId == StrId::STR_TOUCH_READER_CONTROLS ||
+                             return s.nameId == StrId::STR_TOUCHSCREEN ||
+                                    s.nameId == StrId::STR_TOUCH_READER_CONTROLS ||
                                     s.nameId == StrId::STR_NEXT_PAGE_GESTURE ||
                                     s.nameId == StrId::STR_PREV_PAGE_GESTURE;
                            }),

@@ -514,10 +514,13 @@ void setup() {
     // DECKPOINT: the touch controller is probed in gpio.begin(); report what answered.
     const auto& touch = freeink::cst3xx::info();
     const auto& tc = BoardConfig::ACTIVE.touch;
-    LOG_INF("TOUCH", "%s rst=%d irq=%d res=%ux%u fw=0x%08lX panel range %u..%u x %u..%u swap=%d flipX=%d flipY=%d ui=%d",
+    const auto& th = gpio.rawInput().getTouchThresholds();
+    LOG_INF("TOUCH",
+            "%s rst=%d irq=%d res=%ux%u fw=0x%08lX panel range %u..%u x %u..%u swap=%d flipX=%d flipY=%d "
+            "touchFirstUi=%d swipe=%d tapSlop=%d releaseSlop=%d",
             freeink::cst3xx::chipName(touch.chip), tc.reset, tc.irq, touch.resolutionX, touch.resolutionY,
             static_cast<unsigned long>(touch.firmware), tc.rawMinX, tc.rawMaxX, tc.rawMinY, tc.rawMaxY, tc.swapXY,
-            tc.flipX, tc.flipY, DECKPOINT_TOUCH_UI);
+            tc.flipX, tc.flipY, DECKPOINT_TOUCH_FIRST_UI, th.swipeMinPx, th.tapSlopPx, th.tapReleaseSlopPx);
   }
 #endif
 
@@ -572,6 +575,8 @@ void setup() {
     SETTINGS.readerMenuStyle = CrossPointSettings::READER_MENU_TOOLBAR;
   }
   SETTINGS.loadFromFile();
+  // DECKPOINT: touch event accessors read the Touchscreen setting live.
+  gpio.bindTouchInputSetting(&SETTINGS.touchscreen);
   // Push the saved timezone's POSIX rule into the clock (migrating the legacy
   // UTC-offset setting on first boot after the update).
   timezones::applyToClock();

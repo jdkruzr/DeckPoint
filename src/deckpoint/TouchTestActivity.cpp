@@ -124,41 +124,44 @@ void TouchTestActivity::loop() {
 
   if (pressedEdge && point.valid) {
     const freeink::TouchXY p = toPortrait(point.x, point.y);
-    downX = static_cast<int16_t>(p.x);
-    downY = static_cast<int16_t>(p.y);
-    lastX = downX;
-    lastY = downY;
+    stroke.begin(static_cast<int16_t>(p.x), static_cast<int16_t>(p.y));
+    loggedX = stroke.downX;
+    loggedY = stroke.downY;
     lastMoveLogMs = now;
     logEvent("down", p);
-    addDot(downX, downY, true);
-    wasDown = true;
-  } else if (wasDown && in.isTouchPressed() && point.valid && now - lastMoveLogMs >= MOVE_LOG_INTERVAL_MS) {
+    addDot(stroke.downX, stroke.downY, true);
+  } else if (stroke.active && in.isTouchPressed() && point.valid) {
     const freeink::TouchXY p = toPortrait(point.x, point.y);
-    if (p.x != static_cast<uint16_t>(lastX) || p.y != static_cast<uint16_t>(lastY)) {
-      lastX = static_cast<int16_t>(p.x);
-      lastY = static_cast<int16_t>(p.y);
+    stroke.track(static_cast<int16_t>(p.x), static_cast<int16_t>(p.y));
+    if (now - lastMoveLogMs >= MOVE_LOG_INTERVAL_MS && (stroke.lastX != loggedX || stroke.lastY != loggedY)) {
+      loggedX = stroke.lastX;
+      loggedY = stroke.lastY;
       lastMoveLogMs = now;
       logEvent("move", p);
-      addDot(lastX, lastY, false);
+      addDot(loggedX, loggedY, false);
     }
   }
 
-  if (releasedEdge && wasDown) {
-    wasDown = false;
-    const freeink::TouchXY p = {static_cast<uint16_t>(lastX), static_cast<uint16_t>(lastY)};
-    logEvent("up", p);
-    const int dx = lastX - downX;
-    const int dy = lastY - downY;
-    const int adx = dx < 0 ? -dx : dx;
-    const int ady = dy < 0 ? -dy : dy;
-    if (adx >= SWIPE_LOG_MIN_PX || ady >= SWIPE_LOG_MIN_PX) {
-      float sx = 0, sy = 0, ex = 0, ey = 0;
-      const bool sdkSwipe = in.wasSwipe(sx, sy, ex, ey);
-      LOG_INF("TOUCH", "swipe=%s dx=%d dy=%d sdk=%d held=%lums",
-              swipeName(freeink::ui::swipeDirection(downX, downY, lastX, lastY)), dx, dy, sdkSwipe ? 1 : 0,
-              in.lastTouchHeldMs());
+  // On the release edge the SDK's touchPoint still holds the final contact
+  // report (only `valid` drops), the same sample `raw` shows.
+  if (releasedEdge) {
+    const freeink::TouchXY p = toPortrait(point.x, point.y);
+    if (stroke.end(static_cast<int16_t>(p.x), static_cast<int16_t>(p.y))) {
+      logEvent("up", p);
+      if (stroke.lastX != loggedX || stroke.lastY != loggedY) addDot(stroke.lastX, stroke.lastY, false);
+      const int dx = stroke.dx();
+      const int dy = stroke.dy();
+      const int adx = dx < 0 ? -dx : dx;
+      const int ady = dy < 0 ? -dy : dy;
+      if (adx >= SWIPE_LOG_MIN_PX || ady >= SWIPE_LOG_MIN_PX) {
+        float sx = 0, sy = 0, ex = 0, ey = 0;
+        const bool sdkSwipe = in.wasSwipe(sx, sy, ex, ey);
+        LOG_INF("TOUCH", "swipe=%s dx=%d dy=%d sdk=%d held=%lums min=%d",
+                swipeName(freeink::ui::swipeDirection(stroke.downX, stroke.downY, stroke.lastX, stroke.lastY)), dx,
+                dy, sdkSwipe ? 1 : 0, in.lastTouchHeldMs(), in.getTouchThresholds().swipeMinPx);
+      }
+      forceRender = true;
     }
-    forceRender = true;
   }
 
   if (dirty && (forceRender || now - lastRenderRequestMs >= RENDER_INTERVAL_MS)) {

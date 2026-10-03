@@ -50,6 +50,7 @@ class HalGPIO {
   enum class DeviceType : uint8_t { X4, X3 };
 
  private:
+  const uint8_t* touchInputSetting = nullptr;  // DECKPOINT: see bindTouchInputSetting()
   DeviceType _deviceType = DeviceType::X4;
 
  public:
@@ -82,11 +83,17 @@ class HalGPIO {
   // hardware (ADC ladder off its idle rail, or the power GPIO asserted), without
   // going through the debounced state. Cheap enough to call every few ms.
   bool rawInputActive();
-  // DECKPOINT: touch-first UI is active (controller present AND DECKPOINT_TOUCH_UI).
-  // While the gate is off every app-facing touch event below reports nothing.
+  // DECKPOINT: touch-first LAYOUT (controller present AND DECKPOINT_TOUCH_FIRST_UI).
+  // Layout only: legends, row sizes, header back buttons. Never gates events.
   bool hasTouch() const;
-  // DECKPOINT: the touch controller answered at boot, regardless of the UI gate.
+  // DECKPOINT: the touch controller answered at boot, regardless of settings.
   bool hasTouchHardware() const;
+  // DECKPOINT: touch INPUT is live (controller present AND the Touchscreen
+  // setting on). Every app-facing touch event below reports nothing otherwise.
+  bool hasTouchInput() const;
+  // DECKPOINT: the persisted Touchscreen setting byte (nonzero = on), read live
+  // so Settings and the web UI take effect at once. Unbound = on.
+  void bindTouchInputSetting(const uint8_t* enabled) { touchInputSetting = enabled; }
   // DECKPOINT: ungated SDK input for diagnostics (CMD:TOUCHTEST). Read-only use;
   // update() still owns sampling.
   const InputManager& rawInput() const { return inputMgr; }

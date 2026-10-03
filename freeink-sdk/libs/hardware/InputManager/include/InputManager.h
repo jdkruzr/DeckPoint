@@ -14,6 +14,8 @@
 #include <freertos/queue.h>
 #include <freertos/task.h>
 
+#include "TouchThresholds.h"  // DECKPOINT
+
 #include <cstdint>
 
 class InputManager {
@@ -118,6 +120,8 @@ class InputManager {
 
   // True if this board has a touch controller configured.
   bool hasTouch() const;
+  // DECKPOINT: the active tap/swipe distances (board TouchConfig over SDK defaults).
+  const freeink::TouchThresholds& getTouchThresholds() const { return touchThresholds; }
   // True only while a GT911 controller is present. Other touch controllers
   // retain their existing single-contact contract.
   bool supportsMultiTouch() const;
@@ -407,6 +411,8 @@ class InputManager {
   bool twoButtonLongPressActive;
 
   bool touchDataEnabled = false;         // I2C up, controller present
+  // DECKPOINT: tap/swipe distances, resolved from the board's TouchConfig in beginTouch().
+  freeink::TouchThresholds touchThresholds = freeink::DEFAULT_TOUCH_THRESHOLDS;
   uint8_t gt911Addr = 0;                 // resolved GT911 address (0 until probed)
   unsigned long touchIrqPulseUntil = 0;  // synthesized-confirm window after a press
   unsigned long touchReadAt = 0;         // next scheduled I2C poll
@@ -474,9 +480,6 @@ class InputManager {
   // driver).
   static constexpr unsigned long TOUCH_IRQ_PULSE_MS = 120;   // release hold-over after last valid read
   static constexpr unsigned long TOUCH_SAMPLE_DELAY_MS = 8;  // I2C poll cadence
-  static constexpr int TOUCH_TAP_SLOP_PX = 28;
-  static constexpr int TOUCH_SWIPE_MIN_PX = 60;
-  static constexpr int TOUCH_TAP_RELEASE_SLOP_PX = TOUCH_SWIPE_MIN_PX - 1;
   static constexpr unsigned long TOUCH_SWIPE_MAX_MS = 700;
   static constexpr unsigned long TOUCH_MULTI_SWIPE_MAX_MS = 2000;
   static constexpr int TOUCH_MULTI_CONTACT_SEPARATION_SLOP_PX = 45;

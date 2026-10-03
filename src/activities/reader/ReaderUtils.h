@@ -92,7 +92,7 @@ struct TouchPageTurn {
 inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const MappedInputManager& input,
                                          const bool rtlBook = false) {
   TouchPageTurn result{false, false, 0};
-  if (!SETTINGS.touchReaderControls || !input.hasTouch()) {
+  if (!SETTINGS.touchReaderControls || !input.hasTouchInput()) {  // DECKPOINT: input, not layout
     return result;
   }
 
@@ -145,7 +145,7 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
 // alternatives are only surfaced on home-key boards (SettingsList), where the
 // menu stays reachable through the key's long-press function.
 inline bool isTouchMenuTap(const GfxRenderer& renderer, const MappedInputManager& input) {
-  if (!input.hasTouch()) return false;
+  if (!input.hasTouchInput()) return false;  // DECKPOINT: input, not layout
   if (SETTINGS.showReaderMenu != CrossPointSettings::READER_MENU_TAP) return false;
   int x = 0;
   int y = 0;
@@ -162,7 +162,7 @@ inline bool isTouchMenuTap(const GfxRenderer& renderer, const MappedInputManager
 // Menu gestures honor showReaderMenu independently of touchReaderControls,
 // which only gates page-turn touch zones in detectTouchPageTurn().
 inline bool isTouchMenuGesture(const GfxRenderer& renderer, const MappedInputManager& input) {
-  if (!input.hasTouch()) return false;
+  if (!input.hasTouchInput()) return false;  // DECKPOINT: input, not layout
   if (input.wasMenuGesture()) return true;
   // Bottom-edge up-swipe variant: only selectable on home-key boards, where
   // Home is the capacitive key and the bottom edge is otherwise unused.

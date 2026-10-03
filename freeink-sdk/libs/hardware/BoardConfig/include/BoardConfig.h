@@ -305,12 +305,13 @@
 #ifndef FREEINK_CAP_KEYBOARD
 #define FREEINK_CAP_KEYBOARD (FREEINK_DEVICE_TDECKPRO)
 #endif
-// DECKPOINT: touch-first UI gate. 0 = the touch controller is driven (raw
-// input, diagnostics) but BoardConfig::hasTouch() / HalGPIO::hasTouch() and the
-// app-facing touch events stay off, so a keyboard board keeps its key legends
-// and button-era layouts. The T-Deck Pro holds this at 0 until the hybrid-UX step.
-#ifndef DECKPOINT_TOUCH_UI
-#define DECKPOINT_TOUCH_UI (!FREEINK_DEVICE_TDECKPRO)
+// DECKPOINT: touch-first LAYOUT gate (BoardConfig::hasTouch() /
+// HalGPIO::hasTouch()): hidden key legends, finger-sized rows, touch keyboard
+// layout, header back buttons. 0 on the T-Deck Pro, a keyboard board whose
+// touch is an addition: it keeps the compact keyboard layout while touch
+// INPUT stays on (HalGPIO::hasTouchInput(): controller + Touchscreen setting).
+#ifndef DECKPOINT_TOUCH_FIRST_UI
+#define DECKPOINT_TOUCH_FIRST_UI (!FREEINK_DEVICE_TDECKPRO)
 #endif
 #ifndef FREEINK_CAP_COLOR
 #define FREEINK_CAP_COLOR (FREEINK_DEVICE_M5)
@@ -608,6 +609,12 @@ struct TouchConfig {
   // controller). false = active-LOW (drive LOW to power it, e.g. X4 Pro's GPIO2). The
   // reset path drives the ON level; the sleep path drives the OFF level.
   bool powerEnableActiveHigh = true;
+  // DECKPOINT: single-contact classifier distances in mapped panel px; 0 keeps
+  // the SDK default (swipe 60, tap slop 28, release slop swipe-1). Resolved and
+  // made consistent by freeink::resolveTouchThresholds (TouchThresholds.h).
+  uint8_t swipeMinPx = 0;
+  uint8_t tapSlopPx = 0;
+  uint8_t tapReleaseSlopPx = 0;
 };
 
 // PWM frontlight description (gpio == PIN_UNASSIGNED disables it).
@@ -1928,6 +1935,10 @@ static_assert(ONEPAGE.displayWidth / 8 * ONEPAGE.displayHeight == 48000,
 constexpr bool TDECK_TOUCH_SWAP_XY = true;
 constexpr bool TDECK_TOUCH_FLIP_X = false;
 constexpr bool TDECK_TOUCH_FLIP_Y = true;
+// 3.1" 320x240 glass: natural swipes measured 46-65 px in calibration round 1,
+// so the SDK's 60 px swipe rule (sized for 6"+ panels) missed half of them.
+constexpr uint8_t TDECK_TOUCH_SWIPE_MIN_PX = 30;
+constexpr uint8_t TDECK_TOUCH_TAP_SLOP_PX = 16;
 // CST3530 (v1.1) / CST328 (v1.0) at 0x1A on the shared keyboard/gauge bus
 // (SDA13 SCL14), active-low INT on GPIO12. Reset is GPIO45 on v1.0 and GPIO38 on
 // v1.1 (where 45 drives the front light); BoardTDeckPro::begin() patches it in
@@ -1950,7 +1961,12 @@ constexpr TouchConfig TDECK_PRO_TOUCH = {TouchController::Cst3xx,
                                          PIN_UNASSIGNED,  // always powered
                                          TDECK_TOUCH_SWAP_XY,
                                          TDECK_TOUCH_FLIP_X,
-                                         TDECK_TOUCH_FLIP_Y};
+                                         TDECK_TOUCH_FLIP_Y,
+                                         false,  // hasHomeKey
+                                         true,   // powerEnableActiveHigh (unused)
+                                         TDECK_TOUCH_SWIPE_MIN_PX,
+                                         TDECK_TOUCH_TAP_SLOP_PX,
+                                         0};  // tap release slop: swipe min - 1
 
 constexpr BoardProfile TDECK_PRO = {
     Board::TDeckPro,
@@ -2182,9 +2198,9 @@ inline bool isMetalioEInk4() { return ACTIVE.board == Board::MetalioEInk4; }
 inline bool isOnePage() { return ACTIVE.board == Board::OnePage; }
 inline bool isWsEpaper397() { return ACTIVE.board == Board::WsEpaper397; }
 inline bool isTDeckPro() { return ACTIVE.board == Board::TDeckPro; }  // DECKPOINT
-// DECKPOINT: hasTouch() means "touch-first UI"; hasTouchController() is the hardware.
+// DECKPOINT: hasTouch() means "touch-first layout"; hasTouchController() is the hardware.
 inline bool hasTouchController() { return ACTIVE.touch.controller != TouchController::None; }
-inline bool hasTouch() { return DECKPOINT_TOUCH_UI && hasTouchController(); }
+inline bool hasTouch() { return DECKPOINT_TOUCH_FIRST_UI && hasTouchController(); }
 inline bool hasHomeKey() { return ACTIVE.touch.hasHomeKey; }
 inline bool hasPwmFrontlight() { return ACTIVE.frontlight.gpio != PIN_UNASSIGNED || ACTIVE.frontlight.viaPm1Pwm; }
 inline bool hasI2cFrontlight() { return ACTIVE.i2cFrontlight.controller != I2cFrontlightController::None; }

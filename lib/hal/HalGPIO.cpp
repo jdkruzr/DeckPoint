@@ -139,9 +139,13 @@ unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
 
 unsigned long HalGPIO::getPowerButtonHeldTime() const { return inputMgr.getPowerButtonHeldTime(); }
 
-bool HalGPIO::hasTouch() const { return DECKPOINT_TOUCH_UI && inputMgr.hasTouch(); }  // DECKPOINT: UI gate
+bool HalGPIO::hasTouch() const { return DECKPOINT_TOUCH_FIRST_UI && inputMgr.hasTouch(); }  // DECKPOINT: layout
 
 bool HalGPIO::hasTouchHardware() const { return inputMgr.hasTouch(); }  // DECKPOINT
+
+bool HalGPIO::hasTouchInput() const {  // DECKPOINT
+  return inputMgr.hasTouch() && (touchInputSetting == nullptr || *touchInputSetting != 0);
+}
 
 bool HalGPIO::hidesButtonHints() const { return hasTouch() || FREEINK_CAP_KEYBOARD; }  // DECKPOINT
 
@@ -153,32 +157,37 @@ bool HalGPIO::wasHomeKeyTapped() const { return inputMgr.wasHomeKeyTapped(); }
 
 bool HalGPIO::wasHomeKeyLongPressed() const { return inputMgr.wasHomeKeyLongPressed(); }
 
-// DECKPOINT: the touch event accessors below are gated by hasTouch() (DECKPOINT_TOUCH_UI).
-bool HalGPIO::wasTouchTap(float& nx, float& ny) const { return hasTouch() && inputMgr.wasTouchTap(nx, ny); }
+// DECKPOINT: the touch event accessors below are gated by hasTouchInput().
+bool HalGPIO::wasTouchTap(float& nx, float& ny) const { return hasTouchInput() && inputMgr.wasTouchTap(nx, ny); }
 
-bool HalGPIO::wasTouchDown(float& nx, float& ny) const { return hasTouch() && inputMgr.wasTouchPressedAt(nx, ny); }
+bool HalGPIO::wasTouchDown(float& nx, float& ny) const { return hasTouchInput() && inputMgr.wasTouchPressedAt(nx, ny); }
 
-bool HalGPIO::wasTouchReleased() const { return hasTouch() && inputMgr.wasTouchReleased(); }
+bool HalGPIO::wasTouchReleased() const { return hasTouchInput() && inputMgr.wasTouchReleased(); }
 
 bool HalGPIO::isTouchTapCandidate(float& nx, float& ny, unsigned long& heldMs) const {
-  return hasTouch() && inputMgr.isTouchTapCandidate(nx, ny, heldMs);
+  return hasTouchInput() && inputMgr.isTouchTapCandidate(nx, ny, heldMs);
 }
 
-bool HalGPIO::isTouchHeldAt(float& nx, float& ny) const { return hasTouch() && inputMgr.isTouchHeldAt(nx, ny); }
+bool HalGPIO::isTouchHeldAt(float& nx, float& ny) const { return hasTouchInput() && inputMgr.isTouchHeldAt(nx, ny); }
 
 bool HalGPIO::wasTouchLongPress(float& nx, float& ny) const {
-  return hasTouch() && inputMgr.wasTouchLongPress(nx, ny);
+  return hasTouchInput() && inputMgr.wasTouchLongPress(nx, ny);
 }
 
 void HalGPIO::suppressTouchContact() { inputMgr.suppressTouchContact(); }
 
-unsigned long HalGPIO::lastTouchHeldMs() const { return hasTouch() ? inputMgr.lastTouchHeldMs() : 0; }
+unsigned long HalGPIO::lastTouchHeldMs() const { return hasTouchInput() ? inputMgr.lastTouchHeldMs() : 0; }
 
 bool HalGPIO::wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEnd) const {
-  return hasTouch() && inputMgr.wasSwipe(nxStart, nyStart, nxEnd, nyEnd);
+  return hasTouchInput() && inputMgr.wasSwipe(nxStart, nyStart, nxEnd, nyEnd);
 }
 
-bool HalGPIO::wasTouchActivity() const { return inputMgr.wasTouchActivity(); }
+bool HalGPIO::wasTouchActivity() const {
+  if (hasTouchInput()) return inputMgr.wasTouchActivity();
+  // DECKPOINT: with the Touchscreen off, glass contact (a pocket, a palm) is not
+  // activity; a capacitive Home key still is.
+  return inputMgr.wasHomeKeyPressed() || inputMgr.wasHomeKeyTapped() || inputMgr.wasHomeKeyLongPressed();
+}
 
 void HalGPIO::setSharedConfirmPowerShortPressEmitsPower(const bool enabled) {
   InputManager::setSharedConfirmPowerShortPressEmitsPower(enabled);

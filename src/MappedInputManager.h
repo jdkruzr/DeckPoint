@@ -2,6 +2,7 @@
 
 #include <HalGPIO.h>
 
+#include "deckpoint/TouchGestures.h"  // DECKPOINT
 #include "util/HomeButtonInput.h"
 
 class GfxRenderer;
@@ -56,7 +57,14 @@ class MappedInputManager {
   bool wasLongPressed(Button button, unsigned long thresholdMs) const;
   bool consumeSuppressedRelease() const;
   bool isPressed(Button button) const;
+  // Touch-first LAYOUT (legends, row sizes, header back buttons); see HalGPIO::hasTouch().
   bool hasTouch() const;
+  // DECKPOINT: touch INPUT is live (controller + Touchscreen setting). Gate any
+  // touch event handling on this, never on hasTouch().
+  bool hasTouchInput() const;
+  // DECKPOINT: touch input is live and this board answers `gesture`
+  // (deckpoint/TouchGestures.h).
+  bool touchGestureEnabled(deckpoint::touch::Gesture gesture) const;
   bool wasScreenTapped(int& x, int& y) const;
   bool wasScreenTouchDown(int& x, int& y) const;
   // One-shot long-press from the SDK touch classifier, fired WHILE the finger
