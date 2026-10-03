@@ -9,6 +9,14 @@ Read `PROGRESS.md` first (dev loop, conventions). Full roadmap with rationale:
   the margin (hanging-indent clamp) but sit left of "Part I: Slave". Proper fix: tag rules with
   their source sheet, apply only linked sheets (touches `SelectorEntry` + CSS cache format).
   Upstream-worthy, as is the clamp in `ParsedText::resolveFirstLineIndent`.
+- KOSync verified end to end (register, push, smart pull) against stock koreader/kosync.
+  Per-device `device_id` fix (12301d50) is upstream-worthy. Sync Behavior defaults to Smart
+  (silent jump); "Ask Every Time" is the setting. No annotation sync in the protocol.
+- Wi-Fi is per-task (network activities silent-reboot on exit to defragment heap), so there is
+  no "associated" state to indicate. Keeping Wi-Fi up (background sync) would be a design change.
+- 180-degree ghost frame after the post-Wi-Fi reboot: softInit now waits BUSY after the PSR soft
+  reset; the log has shown `[GDEQ] soft reset busy for 1 ms` once, supporting the dropped-PSR
+  theory. Watch for recurrence; `CMD:RESTART` reproduces the silent reboot.
 - KOSync: throwaway server `podman run -d --rm --name kosync-test -p 17200:17200
   docker.io/koreader/kosync` → `http://192.168.8.95:17200`. KOSync syncs progress only, no
   annotations.
