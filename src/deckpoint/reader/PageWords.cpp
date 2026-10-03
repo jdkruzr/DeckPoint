@@ -13,6 +13,7 @@ uint16_t extractPageWords(const GfxRenderer& renderer, const Page& page, const i
   // A full 800x480 page runs ~100-150 words; one block avoids regrowth copies.
   out.reserve(128);
   uint16_t rowCount = 0;
+  uint16_t token = 0;
 
   // Single walk: collect the selectable words while accumulating their text
   // and styles (~2KB transient string, freed on return). Widths are measured
@@ -32,7 +33,7 @@ uint16_t extractPageWords(const GfxRenderer& renderer, const Page& page, const i
 
     bool rowHasWords = false;
     const int rubyShift = block->getRubyShift(ascender);
-    for (uint16_t i = 0; i < block->wordCount(); i++) {
+    for (uint16_t i = 0; i < block->wordCount(); i++, token++) {
       const char* text = block->wordText(i);
       if (!isSelectableToken(text)) continue;
 
@@ -42,6 +43,7 @@ uint16_t extractPageWords(const GfxRenderer& renderer, const Page& page, const i
       box.style = block->wordStyle(i);
       box.width = 0;  // measured below, once the advance table is ready
       box.row = rowCount;
+      box.token = token;
       box.text = text;
       out.push_back(box);
       rowHasWords = true;

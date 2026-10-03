@@ -27,6 +27,17 @@ void CommandLine::remember() {
   memcpy(history, buf, len + 1);
 }
 
+void CommandLine::setHistory(const char* text) {
+  size_t n = 0;
+  if (text) {
+    while (text[n] && n < MAX_LEN) {
+      history[n] = text[n];
+      ++n;
+    }
+  }
+  history[n] = '\0';
+}
+
 CommandLine::Action CommandLine::feed(const freeink::KeyEvent& event) {
   using freeink::SpecialKey;
   const bool alt = (event.mods & freeink::KeyMod::Alt) != 0;

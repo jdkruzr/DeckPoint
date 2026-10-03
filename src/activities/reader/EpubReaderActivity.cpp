@@ -179,6 +179,8 @@ EpubReaderActivity::~EpubReaderActivity() {
   settleOverlayRefresh();
   discardOverlayPage();  // free the overlay's page snapshot if one is held
   if (hints && hints->pageStored) renderer.discardStoredBwBuffer();  // DECKPOINT: `d` hints' page copy
+  if (searchMark.pageStored) renderer.discardStoredBwBuffer();       // DECKPOINT: page under a search hit
+  search.reset();                                                    // DECKPOINT: a running search's Section
 
   if (footnoteDepth > 0 && epub) saveLinkStack();
 
@@ -413,6 +415,10 @@ void EpubReaderActivity::loop() {
     requestUpdate();
     return;
   }
+
+  // DECKPOINT: a running `/` search owns input and does its own layout builds
+  // (one at a time), so the prewarm / build ticks below wait for it.
+  if (searchTick()) return;
 
   constexpr unsigned long IDLE_PREWARM_DEBOUNCE_MS = 400;
   {
@@ -1273,7 +1279,7 @@ bool EpubReaderActivity::backgroundBuildWanted() const {
 
 bool EpubReaderActivity::skipLoopDelay() {
   // The main loop holds the render lock while querying this hint.
-  return !buildHeapPaused && backgroundBuildWanted();
+  return (!buildHeapPaused && backgroundBuildWanted()) || search != nullptr;  // DECKPOINT: search slices
 }
 
 void EpubReaderActivity::renderBook() {
@@ -1284,6 +1290,7 @@ void EpubReaderActivity::renderBook() {
   settleOverlayRefresh();
   commandLineBeforeRender();  // DECKPOINT: the page under the `:` line is about to change
   hintsBeforeRender();        // DECKPOINT: ...and the page under the `d` hint labels
+  searchBeforeRender();       // DECKPOINT: ...and the page under a search hit
 
   const auto showPendingSyncSaveError = [this]() {
     if (!pendingSyncSaveError) return;
@@ -1627,6 +1634,7 @@ void EpubReaderActivity::renderBook() {
   }
   commandLineAfterRender();  // DECKPOINT: keep an open `:` line on top
   hintsAfterRender();        // DECKPOINT: put up / redraw the `d` hint labels
+  searchAfterRender();        // DECKPOINT: invert the search hit on its page
 }
 
 void EpubReaderActivity::onEndOfBookRendered() {

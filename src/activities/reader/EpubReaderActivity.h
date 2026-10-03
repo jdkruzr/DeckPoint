@@ -19,6 +19,7 @@
 #include "components/OptionPopup.h"
 #include "deckpoint/CommandLine.h"            // DECKPOINT
 #include "deckpoint/KeyHelp.h"                // DECKPOINT
+#include "deckpoint/reader/BookSearch.h"      // DECKPOINT
 #include "deckpoint/reader/HintSession.h"     // DECKPOINT
 #include "deckpoint/reader/Marks.h"           // DECKPOINT
 #include "deckpoint/reader/ReaderCommands.h"  // DECKPOINT
@@ -230,7 +231,13 @@ class EpubReaderActivity final : public ReaderActivity {
   // until the next key or the toast timeout.
   char cmdMessage[96] = {};
   unsigned long cmdMessageTime = 0;
-  void openCommandLine(const char* prefill, bool pageDirty);
+  // `/` prompt instead of `:` (deckpoint/reader/EpubReaderSearch.cpp runs it).
+  bool cmdSearchMode = false;
+  // The other prompt's one-entry history, swapped in when the mode changes.
+  char cmdOtherHistory[deckpoint::CommandLine::MAX_LEN + 1] = {};
+  // message: shown in the band right away instead of the prompt (untimed).
+  void openCommandLine(const char* prefill, bool pageDirty, bool searchMode = false, const char* message = nullptr);
+  void setCommandLineMode(bool searchMode);
   void commandLineKey(const freeink::KeyEvent& event);
   void submitCommandLine();
   void completeCommandLine();
@@ -270,6 +277,32 @@ class EpubReaderActivity final : public ReaderActivity {
   // opens the definition (Left) or writes why not into msg (Message).
   // Progress shows in the command band, or as a popup for the hints.
   deckpoint::CommandResult lookUpWord(const char* word, char* msg, size_t msgSize, bool fromHints);
+
+  // DECKPOINT: `/` search with n / N (deckpoint/reader/EpubReaderSearch.cpp).
+  // The session runs in slices from loop() and owns input while it exists;
+  // searchMark (shared with the render task, RenderLock) is the inverted hit.
+  std::unique_ptr<deckpoint::reader::SearchSession> search;
+  deckpoint::reader::SearchMark searchMark;
+  char lastSearch[deckpoint::CommandLine::MAX_LEN + 1] = {};
+  void openSearchPrompt(bool pageDirty);
+  // Runs `query` (empty: the last one) from the current page; false (with msg
+  // filled) when it cannot start.
+  bool startSearch(const char* query, bool forward, bool fromPrompt, char* msg, size_t msgSize);
+  void searchNextKey(bool forward);
+  bool searchKey(const freeink::KeyEvent& event);
+  // From loop(): true while a search runs.
+  bool searchTick();
+  enum class SearchStep : uint8_t { Continue, Yield, Hit, NotFound, Failed, Cancelled };
+  SearchStep searchStep(char* msg, size_t msgSize);
+  void finishSearch(SearchStep how, const char* msg);
+  void paintSearchProgress();
+  // Drops the inverted hit; restore = put the clean page back now (else the
+  // caller is about to render a page anyway).
+  void clearSearchMark(bool restore);
+  // Caller holds the RenderLock for these.
+  bool drawSearchMarkLocked();
+  void searchBeforeRender();
+  void searchAfterRender();
 
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);

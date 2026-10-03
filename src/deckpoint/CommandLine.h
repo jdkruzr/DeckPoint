@@ -37,6 +37,7 @@ class CommandLine {
   // Alt+k / Up brings it back.
   void remember();
   const char* lastCommand() const { return history; }
+  void setHistory(const char* text);
 
  private:
   char buf[MAX_LEN + 1] = {};

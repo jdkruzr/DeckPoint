@@ -215,6 +215,21 @@ struct ReaderCommandHandlers {
     return CommandResult::Left;
   }
 
+  // `:search text` / `:s text`: the line turns into the `/` prompt and searches
+  // (no text: the last search again).
+  static CommandResult search(void* ctx, const char* args, char* msg, const size_t msgSize) {
+    auto* r = reader(ctx);
+    r->setCommandLineMode(true);
+    r->cmdLine.setText(args);
+    r->cmdLine.remember();
+    {
+      RenderLock lock;
+      r->cmdLineShown = true;
+    }
+    if (!r->startSearch(args, true, true, msg, msgSize)) return CommandResult::Message;
+    return CommandResult::Kept;
+  }
+
   static CommandResult help(void* ctx, const char*, char*, size_t) {
     auto* r = reader(ctx);
     openKeyHelp(r->renderer, r->mappedInput, r->name.c_str(), r->keyHelp());
@@ -233,6 +248,7 @@ constexpr CommandSpec READER_COMMANDS[] = {
     {"goto", "g", "N | pN", StrId::STR_CMD_HELP_GOTO, &H::gotoCmd},
     {"sync", nullptr, nullptr, StrId::STR_CMD_HELP_SYNC, &H::sync},
     {"dict", nullptr, "word", StrId::STR_CMD_HELP_DICT, &H::dict},
+    {"search", "s", "text", StrId::STR_KH_SEARCH_BOOK, &H::search},
     {"night", nullptr, nullptr, StrId::STR_CMD_HELP_NIGHT, &H::night},
     {"clean", nullptr, nullptr, StrId::STR_CMD_HELP_CLEAN, &H::clean},
     {"font", nullptr, "name", StrId::STR_CMD_HELP_FONT, &H::font},
@@ -291,12 +307,23 @@ using deckpoint::reader::ReaderCommandHandlers;
 // Command line band
 // ---------------------------------------------------------------------------
 
-void EpubReaderActivity::openCommandLine(const char* prefill, const bool pageDirty) {
+void EpubReaderActivity::setCommandLineMode(const bool searchMode) {
+  if (searchMode == cmdSearchMode) return;
+  char other[CommandLine::MAX_LEN + 1];
+  snprintf(other, sizeof(other), "%s", cmdOtherHistory);
+  snprintf(cmdOtherHistory, sizeof(cmdOtherHistory), "%s", cmdLine.lastCommand());
+  cmdLine.setHistory(other);
+  cmdSearchMode = searchMode;
+}
+
+void EpubReaderActivity::openCommandLine(const char* prefill, const bool pageDirty, const bool searchMode,
+                                         const char* message) {
   readerKeys.reset();
   pendingManualTurn = 0;
   keyPopupShown = false;
+  setCommandLineMode(searchMode);
   cmdLine.open(prefill);
-  cmdMessage[0] = '\0';
+  snprintf(cmdMessage, sizeof(cmdMessage), "%s", message ? message : "");
   cmdMessageTime = 0;
   if (pageDirty || !section) {
     // A popup is still painted on the page (or there is no page yet): let the
@@ -341,7 +368,7 @@ void EpubReaderActivity::drawCommandLine() const {
   }
 
   char line[CommandLine::MAX_LEN + 2];
-  snprintf(line, sizeof(line), ":%s", cmdLine.text());
+  snprintf(line, sizeof(line), "%c%s", cmdSearchMode ? '/' : ':', cmdLine.text());
   const int cursorW = std::max(4, lineH / 3);
   // Long lines scroll left so the end (and the cursor) stays visible.
   const char* shown = line;
@@ -409,6 +436,12 @@ void EpubReaderActivity::completeCommandLine() {
 
 void EpubReaderActivity::submitCommandLine() {
   cmdLine.remember();
+  if (cmdSearchMode) {
+    char msg[96];
+    msg[0] = '\0';
+    if (!startSearch(cmdLine.text(), true, true, msg, sizeof(msg))) showCommandMessage(msg);
+    return;
+  }
   const ParsedCommand parsed = deckpoint::parseCommandLine(cmdLine.text(), READER_COMMANDS, READER_COMMAND_COUNT);
   char msg[96];
   msg[0] = '\0';
@@ -451,6 +484,7 @@ void EpubReaderActivity::submitCommandLine() {
       break;
   }
 
+  if (result == CommandResult::Kept) return;
   if (result == CommandResult::Message) {
     {
       RenderLock lock;
@@ -479,6 +513,10 @@ void EpubReaderActivity::commandLineKey(const freeink::KeyEvent& event) {
       closeCommandLine(CommandResult::Restore);
       return;
     case CommandLine::Action::Complete:
+      if (cmdSearchMode) {
+        if (hadMessage) paintCommandLine();
+        return;
+      }
       completeCommandLine();
       if (hadMessage && cmdMessage[0] == '\0') paintCommandLine();
       return;

@@ -22,13 +22,14 @@ struct WordBox {
   int16_t x;
   int16_t y;  // top of the line
   int16_t width;
-  uint16_t row;  // index among the page's lines that have selectable words
+  uint16_t row;    // index among the page's lines that have selectable words
+  uint16_t token;  // index among all the page's words (punctuation too), in page order
   const char* text;
   EpdFontFamily::Style style;
 };
 
 // Fills `out` (cleared first) with the page's selectable words in reading
-// order, at the offsets the page was rendered with. Widths are measured with
+// order (token numbering: every word of every valid TextBlock line counts), at the offsets the page was rendered with. Widths are measured with
 // `fontId`; SD-card fonts get the page's codepoints merged in first so the
 // measuring stays on the in-RAM advance table. Returns the row count.
 // Callers that share the renderer with a render task hold its RenderLock.

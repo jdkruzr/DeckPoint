@@ -31,7 +31,6 @@ enum class ReaderCmd : uint8_t {
   Help,            // ?
   Dictionary,  // d   hint labels on the page's words
   LookupWord,  // D   `:dict ` prompt
-  // Reserved for later steps; parsed now so the bindings are stable.
   Search,       // /
   SearchNext,   // n
   SearchPrev,   // N

@@ -18,6 +18,7 @@ enum class CommandResult : uint8_t {
   Redraw,   // close; the handler requested a page re-render
   Left,     // close; the handler opened another screen or left the screen
   Message,  // stay open and show `message` (error or info); the typed text is kept
+  Kept,     // the handler took the line over (it stays open, in the handler's hands)
 };
 
 // `args` is the trimmed rest of the line after the command name (never null,

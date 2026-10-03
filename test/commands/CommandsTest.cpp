@@ -336,6 +336,22 @@ TEST(CommandLineEdit, BlankLinesAreNotRemembered) {
   EXPECT_STREQ(line.lastCommand(), "toc");
 }
 
+TEST(CommandLineEdit, SwappedHistory) {
+  // The reader keeps one history per prompt (`:` and `/`) and swaps them in.
+  CommandLine line;
+  line.open("toc");
+  line.remember();
+  const std::string commands = line.lastCommand();
+  line.setHistory("whale");
+  line.open();
+  EXPECT_EQ(line.feed(ch('k', KeyMod::Alt)), CommandLine::Action::Edited);
+  EXPECT_STREQ(line.text(), "whale");
+  line.setHistory(commands.c_str());
+  EXPECT_STREQ(line.lastCommand(), "toc");
+  line.setHistory(nullptr);
+  EXPECT_STREQ(line.lastCommand(), "");
+}
+
 TEST(CommandLineEdit, IgnoredKeys) {
   CommandLine line;
   line.open("a");

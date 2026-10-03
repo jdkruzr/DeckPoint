@@ -43,6 +43,7 @@ bool EpubReaderActivity::wantsRawKeys() const {
 void EpubReaderActivity::onKey(const freeink::KeyEvent& event) {
   // A key earlier in this batch opened a screen or overlay; the rest belong to it.
   if (keysSuspended || !wantsRawKeys()) return;
+  if (searchKey(event)) return;  // a running search takes Esc, drops the rest
   if (hintsOpen) {
     hintKey(event);
     return;
@@ -51,7 +52,28 @@ void EpubReaderActivity::onKey(const freeink::KeyEvent& event) {
     commandLineKey(event);
     return;
   }
-  runReaderCommand(readerKeys.feed(event));
+  const ReaderCommand cmd = readerKeys.feed(event);
+  if (searchMark.active) {
+    // Any key takes the inverted hit down; commands that render a page anyway
+    // skip the extra refresh that restoring the clean page costs.
+    bool rendersPage;
+    switch (cmd.type) {
+      case ReaderCmd::NextPage:
+      case ReaderCmd::PrevPage:
+      case ReaderCmd::BookStart:
+      case ReaderCmd::BookEnd:
+      case ReaderCmd::NextChapter:
+      case ReaderCmd::PrevChapter:
+      case ReaderCmd::GoPercent:
+        rendersPage = true;
+        break;
+      default:
+        rendersPage = false;
+        break;
+    }
+    clearSearchMark(!rendersPage);
+  }
+  runReaderCommand(cmd);
 }
 
 void EpubReaderActivity::runReaderCommand(const ReaderCommand& cmd) {
@@ -178,11 +200,14 @@ void EpubReaderActivity::runReaderCommand(const ReaderCommand& cmd) {
       openHints(hadPopup);
       return;
     case ReaderCmd::Search:
+      // Like the `:` line: a dropped prefix popup means a clean render first.
+      openSearchPrompt(hadPopup);
+      return;
     case ReaderCmd::SearchNext:
     case ReaderCmd::SearchPrev:
-      rendered = false;
-      showKeyPopup(tr(STR_KEYS_COMING_SOON), true);
-      break;
+      if (hadPopup) requestUpdate();
+      searchNextKey(cmd.type == ReaderCmd::SearchNext);
+      return;
     case ReaderCmd::Cancel:
     case ReaderCmd::None:
     default:
