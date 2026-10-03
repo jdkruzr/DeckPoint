@@ -59,6 +59,9 @@ class ChapterHtmlSlimParser {
   bool hyphenationEnabled;
   bool focusReadingEnabled;
   const CssParser* cssParser;
+  // DECKPOINT: stylesheets linked by this document, in cascade order.
+  CssParser::StylesheetScope stylesheetScope;
+  bool sawStylesheetLink = false;
   bool embeddedStyle;
   uint8_t imageRendering;
   std::string contentBase;
@@ -162,6 +165,7 @@ class ChapterHtmlSlimParser {
   HalFile parseFile_;
   uint32_t parseStartTime_ = 0;
 
+  void addStylesheetLink(const XML_Char** atts);
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle);
   void flushPendingAnchor();

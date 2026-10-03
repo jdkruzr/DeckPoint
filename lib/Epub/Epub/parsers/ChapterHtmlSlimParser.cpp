@@ -710,6 +710,46 @@ void ChapterHtmlSlimParser::finishTableRow() {
   clearLayoutLines();
 }
 
+// DECKPOINT: append a <link rel="stylesheet"> target to this document's stylesheet scope.
+void ChapterHtmlSlimParser::addStylesheetLink(const XML_Char** atts) {
+  const char* rel = nullptr;
+  const char* href = nullptr;
+  for (int i = 0; atts[i]; i += 2) {
+    if (strcasecmp(atts[i], "rel") == 0) {
+      rel = atts[i + 1];
+    } else if (strcasecmp(atts[i], "href") == 0) {
+      href = atts[i + 1];
+    }
+  }
+  if (!rel || !href || href[0] == '\0') return;
+
+  bool isStylesheet = false;
+  bool isAlternate = false;
+  const std::string_view relView(rel);
+  size_t start = 0;
+  while (start <= relView.size()) {
+    size_t end = relView.find_first_of(" \t\r\n", start);
+    if (end == std::string_view::npos) end = relView.size();
+    const std::string_view token = relView.substr(start, end - start);
+    if (token.size() == 10 && strncasecmp(token.data(), "stylesheet", 10) == 0) isStylesheet = true;
+    if (token.size() == 9 && strncasecmp(token.data(), "alternate", 9) == 0) isAlternate = true;
+    start = end + 1;
+  }
+  if (!isStylesheet || isAlternate) return;
+  sawStylesheetLink = true;
+
+  std::string_view target(href);
+  target = target.substr(0, target.find_first_of("#?"));
+  if (target.empty() || target.find(':') != std::string_view::npos) return;  // external or data: URL
+
+  std::string path = target.front() == '/' ? std::string() : contentBase;
+  path.append(target.data(), target.size());
+  path = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(path));
+  if (!cssParser->appendToScope(path, stylesheetScope)) {
+    LOG_DBG("EHP", "Linked stylesheet not in book: %s", path.c_str());
+  }
+}
+
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
   if (strcasecmp(name, "body") == 0) {
@@ -717,6 +757,15 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     // mismatch here would leave visibleTextOffset at 0 for the whole section, so every page
     // would record offset 0 while the sync resolver still counts a non-zero offset.
     self->insideBody = true;
+    // DECKPOINT: when no linked sheet resolves, our href resolution is the likelier
+    // culprit than the book, so fall back to the book-wide rule set.
+    if (self->sawStylesheetLink && self->stylesheetScope.count == 0) {
+      LOG_DBG("EHP", "No linked stylesheet resolved; applying all book stylesheets");
+      self->stylesheetScope.all = true;
+    }
+  }
+  if (!self->stylesheetScope.all && atts != nullptr && strcasecmp(name, "link") == 0) {
+    self->addStylesheetLink(atts);
   }
   if (self->insideBody && (self->nonVisibleTextDepth > 0 || isNonVisibleTextTag(name))) {
     self->nonVisibleTextDepth++;
@@ -784,7 +833,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   // before tag-specific branches emit any content or metadata.
   CssStyle cssStyle;
   if (self->cssParser) {
-    cssStyle = self->cssParser->resolveStyle(name, classAttr);
+    cssStyle = self->cssParser->resolveStyle(name, classAttr, self->stylesheetScope);
     if (!styleAttr.empty()) {
       CssStyle inlineStyle = CssParser::parseInlineStyle(styleAttr);
       cssStyle.applyOver(inlineStyle);
@@ -2060,6 +2109,10 @@ bool ChapterHtmlSlimParser::beginParse() {
 
   listStack.clear();
   listStack.reserve(4);
+  // DECKPOINT: a scoped rule set styles this document only with the sheets it links.
+  stylesheetScope = CssParser::StylesheetScope{};
+  stylesheetScope.all = cssParser == nullptr || !cssParser->isScoped();
+  sawStylesheetLink = false;
   tableDepth = 0;
   insideTableCell = false;
   tableRowStacked = false;

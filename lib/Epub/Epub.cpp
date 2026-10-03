@@ -327,18 +327,33 @@ CssParser::ParseResult Epub::parseCssFiles(const CssParser::CacheStatus existing
   size_t skippedDuplicates = 0;
   CssParser::ParseResult parseResult = CssParser::ParseResult::Complete;
 
+  // DECKPOINT: register every stylesheet path so each document is styled only by
+  // the sheets it links. Too many sheets (or no heap for the 8-byte-per-sheet
+  // table) leaves the parser unscoped: every rule applies to every document.
+  const bool scoped = cssParser->reserveStylesheets(cssFiles.size());
+  if (!scoped && !cssFiles.empty()) {
+    LOG_ERR("EBP", "Stylesheet scoping unavailable for %zu CSS files; applying all rules book-wide", cssFiles.size());
+  }
+
   // No cache yet - parse CSS files
   for (size_t cssIndex = 0; cssIndex < cssFiles.size(); cssIndex++) {
     const auto& cssPath = cssFiles[cssIndex];
     const uint64_t dedupKey = dedupEntries ? dedupEntries[cssIndex].contentKey : 0;
+    // A byte-identical sheet shares the id (and rules) of its first occurrence.
+    size_t canonicalIndex = cssIndex;
     if (dedupKey != 0) {
-      const bool seen =
-          std::any_of(dedupEntries.get(), dedupEntries.get() + cssIndex,
-                      [dedupKey](const CssDedupEntry& candidate) { return candidate.contentKey == dedupKey; });
-      if (seen) {
-        skippedDuplicates++;
-        continue;
-      }
+      const auto* first =
+          std::find_if(dedupEntries.get(), dedupEntries.get() + cssIndex,
+                       [dedupKey](const CssDedupEntry& candidate) { return candidate.contentKey == dedupKey; });
+      canonicalIndex = static_cast<size_t>(first - dedupEntries.get());
+    }
+    const auto sheet = static_cast<uint16_t>(scoped ? canonicalIndex : 0);
+    if (scoped) {
+      cssParser->addStylesheet(cssPath, sheet);
+    }
+    if (canonicalIndex != cssIndex) {
+      skippedDuplicates++;
+      continue;
     }
     LOG_DBG("EBP", "Parsing CSS file: %s", cssPath.c_str());
 
@@ -392,7 +407,7 @@ CssParser::ParseResult Epub::parseCssFiles(const CssParser::CacheStatus existing
       parseResult = CssParser::ParseResult::Error;
       continue;
     }
-    const CssParser::ParseResult streamResult = cssParser->loadFromStream(tempCssFile);
+    const CssParser::ParseResult streamResult = cssParser->loadFromStream(tempCssFile, sheet, cssPath);
     // Explicitly close() file before calling Storage.remove()
     tempCssFile.close();
     Storage.remove(tmpCssPath.c_str());

@@ -90,6 +90,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 52
+
+Version 52 keeps the version 51 serialized layout unchanged. It was bumped
+because each document is now styled only by the stylesheets it links (see
+`css_rules.cache` version 13), so word positions laid out from the book-wide
+merged rule set no longer match.
+
 ### Version 51
 
 Version 51 keeps the version 50 serialized layout unchanged. It was bumped
@@ -422,6 +429,64 @@ u32 parsedSize = $;
 if (parsedSize != fileSize) {
     std::warning(std::format("Unparsed data detected: {} bytes remaining at offset 0x{:X}", fileSize - parsedSize, parsedSize));
 }
+```
+
+## `css_rules.cache`
+
+### Version 13
+
+The resolved stylesheet rules for one EPUB. Written by `CssParser::saveToCache`
+after `Epub::parseCssFiles`, then loaded on demand for every section build.
+Version 13 tags each rule with the stylesheet it came from and adds the tables
+used to scope a document to the stylesheets it links.
+
+Stylesheet ids are the manifest index of a sheet's first byte-identical copy,
+so duplicate sheets share one id and one set of rules. The path table maps a
+32-bit FNV-1a hash of every normalised archive path to its id. A cache with no
+path table (`sheetCount == 0`; too many sheets or no heap for the table) is
+unscoped: every rule is tagged id 0 and applies to every document, which was
+the only behaviour before version 13.
+
+Rules are sorted by (lower-cased selector, sheet id). Hydration re-shares the
+selector text between rules with the same selector.
+
+ImHex pattern:
+
+```c++
+#define EXPECTED_VERSION 13
+
+struct SheetRecord {
+    u32 pathHash [[comment("FNV-1a of the normalised archive path")]];
+    u16 sheet [[comment("Stylesheet id")]];
+};
+
+struct ImportRecord {
+    u32 targetHash [[comment("FNV-1a of the imported sheet's normalised path")]];
+    u16 sheet [[comment("Importing stylesheet id")]];
+};
+
+struct Rule {
+    u16 selectorLength;
+    char selector[selectorLength] [[comment("tag, .class or tag.class, lower-cased")]];
+    u16 sheet [[comment("Stylesheet id")]];
+    u8 style[67] [[comment("CssStyle wire encoding: 5 enum bytes, 11 x (f32 value + u8 unit), 3 enum bytes, u32 definedBits")]];
+};
+
+struct CssRulesCache {
+    u8 version;
+    if (version != EXPECTED_VERSION) {
+        std::error(std::format("Unsupported version: {} (expected {})", version, EXPECTED_VERSION));
+    }
+    u8 flags [[comment("bit 0: partial (retry the source stylesheets on next load)")]];
+    u16 ruleCount [[comment("<= 1500")]];
+    u16 sheetCount [[comment("<= 512; 0 = unscoped")]];
+    u8 importCount [[comment("<= 32")]];
+    SheetRecord sheets[sheetCount];
+    ImportRecord imports[importCount];
+    Rule rules[ruleCount];
+};
+
+CssRulesCache cache @ 0x00;
 ```
 
 ## CLX1 — library index (`.crosspoint/library.idx`)

@@ -16,7 +16,8 @@ namespace {
 
 constexpr size_t kMaxRules = 1500;
 constexpr size_t kMaxUniqueStyles = 256;
-constexpr size_t kCacheHeaderBytes = sizeof(uint8_t) * 2 + sizeof(uint16_t);
+// version, flags, rule count, stylesheet count, import count (unscoped: no table records).
+constexpr size_t kCacheHeaderBytes = sizeof(uint8_t) * 2 + sizeof(uint16_t) * 2 + sizeof(uint8_t);
 constexpr size_t kStyleEnumPrefixBytes = 5;
 constexpr size_t kStyleLengthFieldCount = 11;
 constexpr size_t kStyleLengthBytes = sizeof(decltype(CssLength::value)) + sizeof(uint8_t);
@@ -60,6 +61,26 @@ class CssParserTest : public ::testing::Test {
     HalFile source;
     EXPECT_TRUE(HalStorage::getInstance().openFileForRead("TST", sourcePath.string(), source));
     return parser.loadFromStream(source);
+  }
+
+  CssParser::ParseResult loadSheet(CssParser& parser, const std::string& css, const uint16_t sheet,
+                                   const std::string& sheetPath) const {
+    const fs::path sourcePath = directory_ / "input.css";
+    std::ofstream output(sourcePath, std::ios::binary | std::ios::trunc);
+    output.write(css.data(), static_cast<std::streamsize>(css.size()));
+    output.close();
+
+    HalFile source;
+    EXPECT_TRUE(HalStorage::getInstance().openFileForRead("TST", sourcePath.string(), source));
+    parser.addStylesheet(sheetPath, sheet);
+    return parser.loadFromStream(source, sheet, sheetPath);
+  }
+
+  static CssParser::StylesheetScope scopeOf(const CssParser& parser, std::initializer_list<const char*> links) {
+    CssParser::StylesheetScope scope;
+    scope.all = false;
+    for (const char* link : links) EXPECT_TRUE(parser.appendToScope(link, scope)) << link;
+    return scope;
   }
 
   fs::path directory_;
@@ -241,7 +262,7 @@ TEST_F(CssParserTest, CacheHydrationRejectsInvalidStyleEnumBytes) {
   ASSERT_GE(validCache.size(), kCacheHeaderBytes + sizeof(uint16_t));
   uint16_t selectorLength = 0;
   memcpy(&selectorLength, validCache.data() + kCacheHeaderBytes, sizeof(selectorLength));
-  const size_t styleOffset = kCacheHeaderBytes + sizeof(selectorLength) + selectorLength;
+  const size_t styleOffset = kCacheHeaderBytes + sizeof(selectorLength) + selectorLength + sizeof(uint16_t);
 
   std::vector<size_t> enumOffsets = {0, 1, 2, 3, 4};
   for (size_t i = 0; i < kStyleLengthFieldCount; ++i) {
@@ -272,7 +293,8 @@ TEST_F(CssParserTest, CacheHydrationRejectsNonFiniteStyleLengths) {
   ASSERT_GE(validCache.size(), kCacheHeaderBytes + sizeof(uint16_t));
   uint16_t selectorLength = 0;
   memcpy(&selectorLength, validCache.data() + kCacheHeaderBytes, sizeof(selectorLength));
-  const size_t firstLengthOffset = kCacheHeaderBytes + sizeof(selectorLength) + selectorLength + kStyleEnumPrefixBytes;
+  const size_t firstLengthOffset =
+      kCacheHeaderBytes + sizeof(selectorLength) + selectorLength + sizeof(uint16_t) + kStyleEnumPrefixBytes;
 
   using LengthValue = decltype(CssLength::value);
   for (const LengthValue invalidValue :
@@ -287,6 +309,95 @@ TEST_F(CssParserTest, CacheHydrationRejectsNonFiniteStyleLengths) {
     EXPECT_EQ(reader.loadFromCache(), CssParser::CacheLoadResult::Invalid);
     EXPECT_TRUE(reader.empty());
   }
+}
+
+TEST_F(CssParserTest, ScopedResolutionIgnoresUnlinkedSheets) {
+  CssParser parser(cachePath());
+  ASSERT_TRUE(parser.reserveStylesheets(2));
+  ASSERT_EQ(loadSheet(parser, "div.toc_chap { margin-left: 1.6em; text-indent: 0; }", 0, "OEBPS/css/style1.css"),
+            CssParser::ParseResult::Complete);
+  ASSERT_EQ(loadSheet(parser, "div.toc_chap { text-indent: -1.7em; margin-left: 3%; }", 1, "OEBPS/css/style2.css"),
+            CssParser::ParseResult::Complete);
+  EXPECT_EQ(parser.ruleCount(), 2u);
+
+  const CssStyle linked = parser.resolveStyle("div", "toc_chap", scopeOf(parser, {"OEBPS/css/style1.css"}));
+  EXPECT_FLOAT_EQ(linked.marginLeft.value, 1.6f);
+  EXPECT_EQ(linked.marginLeft.unit, CssUnit::Em);
+  EXPECT_FLOAT_EQ(linked.textIndent.value, 0.0f);
+
+  CssParser::StylesheetScope none;
+  none.all = false;
+  EXPECT_FALSE(parser.resolveStyle("div", "toc_chap", none).hasMarginLeft());
+
+  // Unscoped resolution keeps the book-wide cascade in manifest order.
+  const CssStyle merged = parser.resolveStyle("div", "toc_chap");
+  EXPECT_FLOAT_EQ(merged.textIndent.value, -1.7f);
+  EXPECT_EQ(merged.marginLeft.unit, CssUnit::Percent);
+}
+
+TEST_F(CssParserTest, LinkOrderDecidesEqualSpecificityCascade) {
+  CssParser parser(cachePath());
+  ASSERT_TRUE(parser.reserveStylesheets(2));
+  loadSheet(parser, "p { text-align: center; } .a { font-weight: bold; }", 0, "a.css");
+  loadSheet(parser, "p { text-align: right; } .b { font-weight: normal; }", 1, "b.css");
+
+  EXPECT_EQ(parser.resolveStyle("p", "", scopeOf(parser, {"a.css", "b.css"})).textAlign, CssTextAlign::Right);
+  EXPECT_EQ(parser.resolveStyle("p", "", scopeOf(parser, {"b.css", "a.css"})).textAlign, CssTextAlign::Center);
+  // Different selectors of equal specificity follow sheet order, not class-attribute order.
+  EXPECT_EQ(parser.resolveStyle("p", "b a", scopeOf(parser, {"a.css", "b.css"})).fontWeight, CssFontWeight::Normal);
+  EXPECT_EQ(parser.resolveStyle("p", "b a", scopeOf(parser, {"b.css", "a.css"})).fontWeight, CssFontWeight::Bold);
+}
+
+TEST_F(CssParserTest, ImportedSheetPrecedesImportingSheet) {
+  CssParser parser(cachePath());
+  ASSERT_TRUE(parser.reserveStylesheets(3));
+  loadSheet(parser, "@import url(\"../shared/base.css\");\n p { text-align: right; }", 0, "OEBPS/css/main.css");
+  loadSheet(parser, "p { text-align: center; margin-top: 1em; }", 1, "OEBPS/shared/base.css");
+  loadSheet(parser, "@import 'print.css' print; p { font-style: italic; }", 2, "OEBPS/css/other.css");
+
+  CssParser::StylesheetScope scope = scopeOf(parser, {"OEBPS/css/main.css"});
+  ASSERT_EQ(scope.count, 2u);
+  EXPECT_EQ(scope.sheets[0], 1u);
+  EXPECT_EQ(scope.sheets[1], 0u);
+  const CssStyle style = parser.resolveStyle("p", "", scope);
+  EXPECT_EQ(style.textAlign, CssTextAlign::Right);
+  EXPECT_FLOAT_EQ(style.marginTop.value, 1.0f);
+
+  // Media-qualified imports are ignored.
+  EXPECT_EQ(scopeOf(parser, {"OEBPS/css/other.css"}).count, 1u);
+  CssParser::StylesheetScope unknown;
+  EXPECT_FALSE(parser.appendToScope("OEBPS/css/missing.css", unknown));
+}
+
+TEST_F(CssParserTest, ScopedCacheRoundTripPreservesSheetsAndImports) {
+  CssParser writer(cachePath());
+  ASSERT_TRUE(writer.reserveStylesheets(3));
+  loadSheet(writer, "@import \"b.css\"; .x { margin-left: 2em; }", 0, "a.css");
+  loadSheet(writer, ".x { text-indent: 1em; margin-left: 5%; }", 1, "b.css");
+  writer.addStylesheet("a-copy.css", 0);  // byte-identical duplicate shares sheet 0
+  ASSERT_TRUE(writer.saveToCache(true));
+  EXPECT_EQ(writer.inspectCache(), CssParser::CacheStatus::Complete);
+  ASSERT_TRUE(writer.saveToCache(false));
+  EXPECT_EQ(writer.inspectCache(), CssParser::CacheStatus::Partial);
+  ASSERT_TRUE(writer.saveToCache(true));
+
+  CssParser reader(cachePath());
+  ASSERT_EQ(reader.loadFromCache(), CssParser::CacheLoadResult::Complete);
+  EXPECT_TRUE(reader.isScoped());
+  EXPECT_EQ(reader.ruleCount(), 2u);
+  const CssStyle onlyB = reader.resolveStyle("div", "x", scopeOf(reader, {"b.css"}));
+  EXPECT_EQ(onlyB.marginLeft.unit, CssUnit::Percent);
+  const CssStyle viaCopy = reader.resolveStyle("div", "x", scopeOf(reader, {"a-copy.css"}));
+  EXPECT_FLOAT_EQ(viaCopy.marginLeft.value, 2.0f);
+  EXPECT_EQ(viaCopy.marginLeft.unit, CssUnit::Em);
+  EXPECT_FLOAT_EQ(viaCopy.textIndent.value, 1.0f);  // from the imported b.css
+}
+
+TEST_F(CssParserTest, TooManyStylesheetsLeavesParserUnscoped) {
+  CssParser parser(cachePath());
+  EXPECT_FALSE(parser.reserveStylesheets(CssParser::MAX_STYLESHEETS + 1));
+  EXPECT_FALSE(parser.isScoped());
+  EXPECT_TRUE(parser.reserveStylesheets(CssParser::MAX_STYLESHEETS));
 }
 
 }  // namespace

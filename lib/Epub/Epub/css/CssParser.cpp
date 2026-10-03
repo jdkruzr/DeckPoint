@@ -1,6 +1,7 @@
 #include "CssParser.h"
 
 #include <Arduino.h>
+#include <FsHelpers.h>
 #include <Logging.h>
 #include <Memory.h>
 
@@ -43,6 +44,10 @@ constexpr size_t READ_BUFFER_SIZE = 512;
 // bounded to 32KB, and deduplicated style bodies are bounded to about 26KB.
 constexpr size_t MAX_RULES = 1500;
 constexpr size_t SELECTOR_POOL_CAP = 32 * 1024;
+// DECKPOINT: SelectorEntry stores 16-bit offsets into the selector pool.
+static_assert(SELECTOR_POOL_CAP <= 65536);
+// Nested @import chains deeper than this are ignored.
+constexpr uint8_t MAX_IMPORT_DEPTH = 4;
 constexpr size_t MAX_UNIQUE_STYLES = 256;
 
 // Minimum free heap required to apply CSS during rendering
@@ -277,27 +282,39 @@ int CssParser::compareEntryToPieces(const SelectorEntry& entry, const std::strin
   return index == entry.length ? 0 : 1;
 }
 
+// DECKPOINT: entries are ordered by (selector, sheet).
 size_t CssParser::lowerBound(const std::string_view p0, const std::string_view p1, const std::string_view p2,
-                             bool& exact) const {
+                             const uint16_t sheet, bool& exact) const {
   size_t low = 0;
   size_t high = entryCount_;
   while (low < high) {
     const size_t middle = low + (high - low) / 2;
-    if (compareEntryToPieces(entries_[middle], p0, p1, p2) < 0) {
+    int compare = compareEntryToPieces(entries_[middle], p0, p1, p2);
+    if (compare == 0) compare = entries_[middle].sheet < sheet ? -1 : (entries_[middle].sheet > sheet ? 1 : 0);
+    if (compare < 0) {
       low = middle + 1;
     } else {
       high = middle;
     }
   }
-  exact = low < entryCount_ && compareEntryToPieces(entries_[low], p0, p1, p2) == 0;
+  exact = low < entryCount_ && entries_[low].sheet == sheet && compareEntryToPieces(entries_[low], p0, p1, p2) == 0;
   return low;
 }
 
-const CssStyle* CssParser::findStyle(const std::string_view p0, const std::string_view p1,
+const CssStyle* CssParser::findStyle(const uint16_t sheet, const std::string_view p0, const std::string_view p1,
                                      const std::string_view p2) const {
   bool exact = false;
-  const size_t index = lowerBound(p0, p1, p2, exact);
+  const size_t index = lowerBound(p0, p1, p2, sheet, exact);
   return exact ? &stylePool_[entries_[index].styleIndex] : nullptr;
+}
+
+void CssParser::applyAllSheets(CssStyle& result, const std::string_view p0, const std::string_view p1,
+                               const std::string_view p2) const {
+  bool exact = false;
+  for (size_t index = lowerBound(p0, p1, p2, 0, exact);
+       index < entryCount_ && compareEntryToPieces(entries_[index], p0, p1, p2) == 0; ++index) {
+    result.applyOver(stylePool_[entries_[index].styleIndex]);
+  }
 }
 
 std::string_view CssParser::selectorAt(const size_t index) const {
@@ -378,9 +395,10 @@ CssParser::PoolResult CssParser::internStyle(const CssStyle& style, uint16_t& in
   return PoolResult::Ready;
 }
 
-CssParser::RuleInsertResult CssParser::insertOrMerge(const std::string_view selector, const CssStyle& style) {
+CssParser::RuleInsertResult CssParser::insertOrMerge(const std::string_view selector, const uint16_t sheet,
+                                                     const CssStyle& style) {
   bool exact = false;
-  const size_t position = lowerBound(selector, {}, {}, exact);
+  const size_t position = lowerBound(selector, {}, {}, sheet, exact);
   if (exact) {
     const uint16_t currentStyleIndex = entries_[position].styleIndex;
     CssStyle merged = stylePool_[currentStyleIndex];
@@ -410,24 +428,40 @@ CssParser::RuleInsertResult CssParser::insertOrMerge(const std::string_view sele
   if (entryResult == PoolResult::Limit) return RuleInsertResult::Limit;
   if (entryResult == PoolResult::OutOfMemory) return RuleInsertResult::OutOfMemory;
 
-  const size_t requiredSelectorBytes = static_cast<size_t>(selectorPoolSize_) + selector.size();
-  const PoolResult selectorResult = ensureSelectorPoolCapacity(requiredSelectorBytes);
-  if (selectorResult == PoolResult::Limit) return RuleInsertResult::Limit;
-  if (selectorResult == PoolResult::OutOfMemory) return RuleInsertResult::OutOfMemory;
+  // The same selector from another sheet sorts next to this position; share its text.
+  int sharedSelector = -1;
+  if (position < entryCount_ && compareEntryToPieces(entries_[position], selector, {}, {}) == 0) {
+    sharedSelector = static_cast<int>(position);
+  } else if (position > 0 && compareEntryToPieces(entries_[position - 1], selector, {}, {}) == 0) {
+    sharedSelector = static_cast<int>(position - 1);
+  }
+
+  const size_t requiredSelectorBytes =
+      static_cast<size_t>(selectorPoolSize_) + (sharedSelector >= 0 ? 0 : selector.size());
+  if (sharedSelector < 0) {
+    const PoolResult selectorResult = ensureSelectorPoolCapacity(requiredSelectorBytes);
+    if (selectorResult == PoolResult::Limit) return RuleInsertResult::Limit;
+    if (selectorResult == PoolResult::OutOfMemory) return RuleInsertResult::OutOfMemory;
+  }
 
   uint16_t styleIndex = 0;
   const PoolResult styleResult = internStyle(style, styleIndex);
   if (styleResult == PoolResult::Limit) return RuleInsertResult::Limit;
   if (styleResult == PoolResult::OutOfMemory) return RuleInsertResult::OutOfMemory;
 
-  const uint32_t selectorOffset = selectorPoolSize_;
-  char* destination = selectorPool_.get() + selectorOffset;
-  for (const char c : selector) *destination++ = asciiToLower(c);
-  selectorPoolSize_ = static_cast<uint32_t>(requiredSelectorBytes);
+  uint16_t selectorOffset = 0;
+  if (sharedSelector >= 0) {
+    selectorOffset = entries_[sharedSelector].offset;
+  } else {
+    selectorOffset = static_cast<uint16_t>(selectorPoolSize_);
+    char* destination = selectorPool_.get() + selectorOffset;
+    for (const char c : selector) *destination++ = asciiToLower(c);
+    selectorPoolSize_ = static_cast<uint32_t>(requiredSelectorBytes);
+  }
 
   SelectorEntry* entries = entries_.get();
   memmove(entries + position + 1, entries + position, (entryCount_ - position) * sizeof(SelectorEntry));
-  entries[position] = {selectorOffset, styleIndex, static_cast<uint16_t>(selector.size())};
+  entries[position] = {selectorOffset, styleIndex, static_cast<uint16_t>(selector.size()), sheet};
   ++entryCount_;
   return RuleInsertResult::Inserted;
 }
@@ -694,10 +728,10 @@ void CssParser::processRuleBlockWithStyle(std::string_view selectorGroup, const 
           // Continue the cascade for stored selectors without retrying failed
           // allocations for new rules.
           bool exact = false;
-          const size_t matchingIndex = lowerBound(sel, {}, {}, exact);
+          const size_t matchingIndex = lowerBound(sel, {}, {}, currentSheet_, exact);
           if (!exact || matchingIndex >= entryCount_) return;
         }
-        const RuleInsertResult result = insertOrMerge(sel, style);
+        const RuleInsertResult result = insertOrMerge(sel, currentSheet_, style);
         if (result == RuleInsertResult::Limit) {
           LOG_ERR("CSS", "CSS rule store limit reached at %u rules", entryCount_);
           ruleGrowthStopped_ = true;
@@ -710,11 +744,13 @@ void CssParser::processRuleBlockWithStyle(std::string_view selectorGroup, const 
 
 // Main parsing entry point
 
-CssParser::ParseResult CssParser::loadFromStream(HalFile& source) {
+CssParser::ParseResult CssParser::loadFromStream(HalFile& source, const uint16_t sheet,
+                                                 const std::string_view sheetPath) {
   if (!source) {
     LOG_ERR("CSS", "Cannot read from invalid file");
     return ParseResult::Error;
   }
+  currentSheet_ = sheet;
 
   size_t totalRead = 0;
 
@@ -738,13 +774,20 @@ CssParser::ParseResult CssParser::loadFromStream(HalFile& source) {
 
   auto handleChar = [&](const char c) {
     if (inAtRule) {
+      // DECKPOINT: the top-level at-rule prelude is collected in the idle selector
+      // buffer so @import can be recorded without another buffer.
       if (c == '{') {
+        if (atDepth == 0) selector.clear();
         ++atDepth;
       } else if (c == '}') {
         if (atDepth > 0) --atDepth;
         if (atDepth == 0) inAtRule = false;
       } else if (c == ';' && atDepth == 0) {
+        recordImport(selector.view(), sheetPath);
+        selector.clear();
         inAtRule = false;
+      } else if (atDepth == 0) {
+        selector.push_back(c);
       }
       return;
     }
@@ -867,9 +910,112 @@ CssParser::ParseResult CssParser::loadFromStream(HalFile& source) {
   return ruleGrowthStopped_ || inputTruncated || incompleteInput ? ParseResult::Partial : ParseResult::Complete;
 }
 
+// DECKPOINT: stylesheet scoping
+
+void CssParser::recordImport(std::string_view prelude, const std::string_view sheetPath) {
+  constexpr std::string_view IMPORT = "import";
+  if (!isScoped() || prelude.size() < IMPORT.size() || !iequalsAscii(prelude.substr(0, IMPORT.size()), IMPORT)) {
+    return;
+  }
+  prelude = trimCssWhitespace(prelude.substr(IMPORT.size()));
+
+  std::string_view url;
+  std::string_view rest;
+  if (prelude.size() > 4 && iequalsAscii(prelude.substr(0, 4), "url(")) {
+    const size_t close = prelude.find(')');
+    if (close == std::string_view::npos) return;
+    url = trimCssWhitespace(prelude.substr(4, close - 4));
+    rest = prelude.substr(close + 1);
+  } else {
+    url = prelude;
+  }
+  if (!url.empty() && (url.front() == '"' || url.front() == '\'')) {
+    const size_t close = url.find(url.front(), 1);
+    if (close == std::string_view::npos) return;
+    if (rest.empty()) rest = url.substr(close + 1);
+    url = url.substr(1, close - 1);
+  } else if (rest.empty()) {
+    const size_t space = url.find_first_of(" \t\r\n");
+    if (space != std::string_view::npos) {
+      rest = url.substr(space);
+      url = url.substr(0, space);
+    }
+  }
+  rest = trimCssWhitespace(rest);
+  // Media-qualified imports are ignored unless they target every medium or screens.
+  if (url.empty() || (!rest.empty() && !iequalsAscii(rest, "all") && !iequalsAscii(rest, "screen"))) return;
+  if (url.find("://") != std::string_view::npos) return;
+
+  if (!imports_) {
+    imports_ = makeUniqueNoThrow<ImportEntry[]>(MAX_IMPORTS);
+    if (!imports_) {
+      LOG_ERR("CSS", "OOM: @import table");
+      return;
+    }
+  }
+  if (importCount_ >= MAX_IMPORTS) {
+    LOG_DBG("CSS", "@import limit reached, ignoring %.*s", static_cast<int>(url.size()), url.data());
+    return;
+  }
+
+  std::string resolved;
+  if (url.front() != '/') {
+    const size_t slash = sheetPath.find_last_of('/');
+    if (slash != std::string_view::npos) resolved.assign(sheetPath.data(), slash + 1);
+  }
+  resolved.append(url.data(), url.size());
+  resolved = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(resolved));
+  imports_[importCount_++] = {hashStylesheetPath(resolved), currentSheet_};
+}
+
+bool CssParser::reserveStylesheets(const size_t count) {
+  sheetTable_.reset();
+  sheetCount_ = sheetCapacity_ = 0;
+  if (count == 0 || count > MAX_STYLESHEETS) return false;
+  sheetTable_ = makeUniqueNoThrow<SheetPathEntry[]>(count);
+  if (!sheetTable_) {
+    LOG_ERR("CSS", "OOM: stylesheet table (%zu sheets)", count);
+    return false;
+  }
+  sheetCapacity_ = static_cast<uint16_t>(count);
+  return true;
+}
+
+void CssParser::addStylesheet(const std::string_view path, const uint16_t sheet) {
+  if (sheetCount_ >= sheetCapacity_) return;
+  sheetTable_[sheetCount_++] = {hashStylesheetPath(path), sheet};
+}
+
+bool CssParser::appendToScope(const std::string_view normalisedPath, StylesheetScope& scope) const {
+  return appendToScope(hashStylesheetPath(normalisedPath), scope, 0);
+}
+
+bool CssParser::appendToScope(const uint32_t pathHash, StylesheetScope& scope, const uint8_t depth) const {
+  const SheetPathEntry* begin = sheetTable_.get();
+  const SheetPathEntry* end = begin + sheetCount_;
+  const SheetPathEntry* match = std::find_if(begin, end, [pathHash](const SheetPathEntry& entry) {
+    return entry.pathHash == pathHash;
+  });
+  if (match == end) return false;
+
+  // @import rules precede every other rule of the importing sheet.
+  if (depth < MAX_IMPORT_DEPTH) {
+    for (uint8_t i = 0; i < importCount_; ++i) {
+      if (imports_[i].sheet == match->sheet) appendToScope(imports_[i].targetHash, scope, depth + 1);
+    }
+  }
+  if (scope.count >= MAX_SCOPE_SHEETS) {
+    LOG_DBG("CSS", "Document links more than %u stylesheets; ignoring the rest", MAX_SCOPE_SHEETS);
+    return true;
+  }
+  scope.sheets[scope.count++] = match->sheet;
+  return true;
+}
+
 // Style resolution
 
-CssStyle CssParser::resolveStyle(std::string_view tagName, std::string_view classAttr) const {
+CssStyle CssParser::resolveStyle(std::string_view tagName, std::string_view classAttr,
+                                 const StylesheetScope& scope) const {
   static bool lowHeapWarningLogged = false;
   if (ESP.getFreeHeap() < MIN_FREE_HEAP_FOR_CSS) {
     if (!lowHeapWarningLogged) {
@@ -881,29 +1027,46 @@ CssStyle CssParser::resolveStyle(std::string_view tagName, std::string_view clas
   }
 
   CssStyle result;
+  if (entryCount_ == 0) return result;
+
+  // DECKPOINT: within each specificity level, sheets apply in scope (link) order
+  // so a later sheet wins ties; unscoped resolution applies every sheet in id order.
+  const auto applyLevel = [&](const std::string_view p0, const bool perClass) {
+    const auto applySelector = [&](const std::string_view cls) {
+      const std::string_view p1 = perClass ? std::string_view(".") : std::string_view{};
+      if (scope.all) {
+        applyAllSheets(result, p0, p1, cls);
+        return;
+      }
+      for (uint8_t i = 0; i < scope.count; ++i) {
+        if (const CssStyle* style = findStyle(scope.sheets[i], p0, p1, cls)) result.applyOver(*style);
+      }
+    };
+    if (!perClass) {
+      applySelector({});
+    } else if (scope.all || scope.count <= 1) {
+      forEachDelimitedToken(classAttr, isCssWhitespace, applySelector);
+    } else {
+      for (uint8_t i = 0; i < scope.count; ++i) {
+        forEachDelimitedToken(classAttr, isCssWhitespace, [&](const std::string_view cls) {
+          if (const CssStyle* style = findStyle(scope.sheets[i], p0, ".", cls)) result.applyOver(*style);
+        });
+      }
+    }
+  };
 
   // 1. Apply element-level style (lowest priority).
-  if (const CssStyle* style = findStyle(tagName)) {
-    result.applyOver(*style);
-  }
+  applyLevel(tagName, false);
 
   if (classAttr.empty()) return result;
 
   // TODO: Support combinations of classes (e.g. style on .class1.class2)
   // 2. Apply class styles (medium priority).
-  forEachDelimitedToken(classAttr, isCssWhitespace, [&](std::string_view cls) {
-    if (const CssStyle* style = findStyle(".", cls)) {
-      result.applyOver(*style);
-    }
-  });
+  applyLevel({}, true);
 
   // TODO: Support combinations of classes (e.g. style on p.class1.class2)
   // 3. Apply element.class styles (higher priority).
-  forEachDelimitedToken(classAttr, isCssWhitespace, [&](std::string_view cls) {
-    if (const CssStyle* style = findStyle(tagName, ".", cls)) {
-      result.applyOver(*style);
-    }
-  });
+  applyLevel(tagName, true);
 
   return result;
 }
@@ -920,6 +1083,8 @@ constexpr char rulesCacheTmp[] = "/css_rules.cache.tmp";
 constexpr char rulesCacheBackup[] = "/css_rules.cache.bak";
 constexpr uint8_t CSS_CACHE_FLAG_PARTIAL = 1 << 0;
 constexpr uint8_t CSS_CACHE_KNOWN_FLAGS = CSS_CACHE_FLAG_PARTIAL;
+// DECKPOINT: stylesheet-table and @import records are both u32 path hash + u16 sheet id.
+constexpr size_t SHEET_WIRE_BYTES = sizeof(uint32_t) + sizeof(uint16_t);
 
 bool CssParser::hasCache() const { return Storage.exists((cachePath + rulesCache).c_str()); }
 
@@ -966,9 +1131,13 @@ CssParser::CacheStatus CssParser::inspectCache() const {
   uint8_t version = 0;
   uint8_t flags = 0;
   uint16_t ruleCount = 0;
+  uint16_t sheetCount = 0;
+  uint8_t importCount = 0;
   if (file.read(&version, sizeof(version)) != sizeof(version) || version != CSS_CACHE_VERSION ||
       file.read(&flags, sizeof(flags)) != sizeof(flags) || (flags & ~CSS_CACHE_KNOWN_FLAGS) != 0 ||
-      file.read(&ruleCount, sizeof(ruleCount)) != sizeof(ruleCount) || ruleCount > MAX_RULES) {
+      file.read(&ruleCount, sizeof(ruleCount)) != sizeof(ruleCount) || ruleCount > MAX_RULES ||
+      file.read(&sheetCount, sizeof(sheetCount)) != sizeof(sheetCount) || sheetCount > MAX_STYLESHEETS ||
+      file.read(&importCount, sizeof(importCount)) != sizeof(importCount) || importCount > MAX_IMPORTS) {
     return CacheStatus::Invalid;
   }
 
@@ -982,6 +1151,9 @@ CssParser::CacheStatus CssParser::inspectCache() const {
   const auto skipBytes = [&file](const size_t byteCount) {
     return static_cast<size_t>(file.available()) >= byteCount && file.seekCur(byteCount);
   };
+  if (!skipBytes((static_cast<size_t>(sheetCount) + importCount) * SHEET_WIRE_BYTES)) {
+    return CacheStatus::Invalid;
+  }
   size_t selectorBytes = 0;
   for (uint16_t i = 0; i < ruleCount; ++i) {
     uint16_t selectorLen = 0;
@@ -990,7 +1162,8 @@ CssParser::CacheStatus CssParser::inspectCache() const {
       return CacheStatus::Invalid;
     }
     selectorBytes += selectorLen;
-    if (selectorBytes > SELECTOR_POOL_CAP || !skipBytes(static_cast<size_t>(selectorLen) + STYLE_WIRE_BYTES)) {
+    if (selectorBytes > SELECTOR_POOL_CAP ||
+        !skipBytes(static_cast<size_t>(selectorLen) + sizeof(uint16_t) + STYLE_WIRE_BYTES)) {
       return CacheStatus::Invalid;
     }
   }
@@ -1036,6 +1209,18 @@ bool CssParser::saveToCache(const bool complete) const {
   const uint16_t ruleCount = entryCount_;
   writeBytes(&ruleCount, sizeof(ruleCount));
 
+  // DECKPOINT: stylesheet table and @import edges (both empty when unscoped).
+  writeBytes(&sheetCount_, sizeof(sheetCount_));
+  writeByte(importCount_);
+  for (uint16_t i = 0; i < sheetCount_; ++i) {
+    writeBytes(&sheetTable_[i].pathHash, sizeof(uint32_t));
+    writeBytes(&sheetTable_[i].sheet, sizeof(uint16_t));
+  }
+  for (uint8_t i = 0; i < importCount_; ++i) {
+    writeBytes(&imports_[i].targetHash, sizeof(uint32_t));
+    writeBytes(&imports_[i].sheet, sizeof(uint16_t));
+  }
+
   // Write each rule: selector string + CssStyle fields
   for (uint16_t i = 0; i < entryCount_; ++i) {
     const std::string_view selector = selectorAt(i);
@@ -1043,6 +1228,7 @@ bool CssParser::saveToCache(const bool complete) const {
     const auto selectorLen = static_cast<uint16_t>(selector.size());
     writeBytes(&selectorLen, sizeof(selectorLen));
     writeBytes(selector.data(), selectorLen);
+    writeBytes(&entries_[i].sheet, sizeof(uint16_t));
 
     uint8_t styleWire[STYLE_WIRE_BYTES];
     encodeStyleWire(stylePool_[entries_[i].styleIndex], styleWire);
@@ -1126,6 +1312,44 @@ CssParser::CacheLoadResult CssParser::loadFromCache() {
     return CacheLoadResult::Invalid;
   }
 
+  uint16_t sheetCount = 0;
+  uint8_t importCount = 0;
+  if (file.read(&sheetCount, sizeof(sheetCount)) != sizeof(sheetCount) || sheetCount > MAX_STYLESHEETS ||
+      file.read(&importCount, sizeof(importCount)) != sizeof(importCount) || importCount > MAX_IMPORTS ||
+      (importCount > 0 && sheetCount == 0)) {
+    return CacheLoadResult::Invalid;
+  }
+  const auto readSheetRecord = [&file](uint32_t& hash, uint16_t& sheet) {
+    return file.read(&hash, sizeof(hash)) == sizeof(hash) && file.read(&sheet, sizeof(sheet)) == sizeof(sheet);
+  };
+  if (sheetCount > 0 && !reserveStylesheets(sheetCount)) {
+    clear();
+    return CacheLoadResult::LowMemory;
+  }
+  for (uint16_t i = 0; i < sheetCount; ++i) {
+    uint32_t hash = 0;
+    uint16_t sheet = 0;
+    if (!readSheetRecord(hash, sheet)) {
+      clear();
+      return CacheLoadResult::Invalid;
+    }
+    sheetTable_[sheetCount_++] = {hash, sheet};
+  }
+  if (importCount > 0) {
+    imports_ = makeUniqueNoThrow<ImportEntry[]>(MAX_IMPORTS);
+    if (!imports_) {
+      clear();
+      return CacheLoadResult::LowMemory;
+    }
+    for (uint8_t i = 0; i < importCount; ++i) {
+      if (!readSheetRecord(imports_[i].targetHash, imports_[i].sheet)) {
+        clear();
+        return CacheLoadResult::Invalid;
+      }
+    }
+    importCount_ = importCount;
+  }
+
   const PoolResult entryCapacityResult = ensureEntryCapacity(ruleCount);
   if (entryCapacityResult == PoolResult::OutOfMemory) {
     clear();
@@ -1157,7 +1381,9 @@ CssParser::CacheLoadResult CssParser::loadFromCache() {
       return CacheLoadResult::Invalid;
     }
 
-    if (file.read(selectorBuffer.get(), selectorLen) != selectorLen) {
+    uint16_t sheet = 0;
+    if (file.read(selectorBuffer.get(), selectorLen) != selectorLen ||
+        file.read(&sheet, sizeof(sheet)) != sizeof(sheet)) {
       clear();
       return CacheLoadResult::Invalid;
     }
@@ -1174,7 +1400,8 @@ CssParser::CacheLoadResult CssParser::loadFromCache() {
       return CacheLoadResult::Invalid;
     }
 
-    const RuleInsertResult insertResult = insertOrMerge(std::string_view(selectorBuffer.get(), selectorLen), style);
+    const RuleInsertResult insertResult =
+        insertOrMerge(std::string_view(selectorBuffer.get(), selectorLen), sheet, style);
     if (insertResult == RuleInsertResult::OutOfMemory) {
       clear();
       return CacheLoadResult::LowMemory;
@@ -1196,6 +1423,7 @@ CssParser::CacheLoadResult CssParser::loadFromCache() {
   }
 
   const bool partial = (flags & CSS_CACHE_FLAG_PARTIAL) != 0;
-  LOG_DBG("CSS", "Loaded %u rules from %s cache", ruleCount, partial ? "partial" : "complete");
+  LOG_DBG("CSS", "Loaded %u rules (%u stylesheets) from %s cache", ruleCount, sheetCount,
+          partial ? "partial" : "complete");
   return CacheLoadResult::Complete;
 }

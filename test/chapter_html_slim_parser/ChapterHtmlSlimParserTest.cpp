@@ -549,6 +549,136 @@ TEST(ParagraphIndentation, MergedStylesheetsKeepHangingIndentOnPage) {
   EXPECT_EQ(starts[1].second, 16 + 8);  // 1.4em margin + default 2-space paragraph indent
 }
 
+// Lays out `doc` (stored at OEBPS/xhtml/doc.xhtml) against stylesheets registered as a
+// scoped rule set in manifest order, returning each line's first word and its x.
+struct ScopedSheet {
+  const char* path;
+  const char* css;
+};
+std::vector<std::pair<std::string, int>> layoutWithScopedSheets(const char* testName, const std::string& doc,
+                                                                 std::initializer_list<ScopedSheet> sheets) {
+  namespace fs = std::filesystem;
+  const fs::path dir = fs::temp_directory_path() / testName;
+  fs::create_directories(dir);
+  const auto html = (dir / "doc.xhtml").string();
+  {
+    HalFile out;
+    EXPECT_TRUE(out.open(html.c_str(), "wb"));
+    out.write(doc.data(), doc.size());
+  }
+  CssParser cssParser{dir.string()};
+  EXPECT_TRUE(cssParser.reserveStylesheets(sheets.size()));
+  uint16_t sheetId = 0;
+  for (const ScopedSheet& sheet : sheets) {
+    const auto path = (dir / ("s" + std::to_string(sheetId) + ".css")).string();
+    {
+      HalFile out;
+      EXPECT_TRUE(out.open(path.c_str(), "wb"));
+      out.write(sheet.css, strlen(sheet.css));
+    }
+    HalFile in;
+    EXPECT_TRUE(in.open(path.c_str(), "rb"));
+    cssParser.addStylesheet(sheet.path, sheetId);
+    cssParser.loadFromStream(in, sheetId, sheet.path);
+    ++sheetId;
+  }
+
+  GfxRenderer renderer;
+  std::vector<std::pair<std::string, int>> starts;
+  ChapterHtmlSlimParser parser{nullptr, html, renderer, 0, 1.0f, false, 0, 220, 300, false, false,
+                               [&](std::unique_ptr<Page> page, auto, auto, auto) {
+                                 for (const auto& el : page->elements) {
+                                   if (el->getTag() != TAG_PageLine) continue;
+                                   const auto& block = *static_cast<const PageLine&>(*el).getBlock();
+                                   if (block.wordCount() == 0) continue;
+                                   starts.emplace_back(block.wordText(0), el->xPos + block.wordXpos(0));
+                                 }
+                               },
+                               true, "OEBPS/xhtml/", "", 0, {}, nullptr, &cssParser};
+  EXPECT_TRUE(parser.parseAndBuildPages());
+  return starts;
+}
+
+std::string xhtmlWithLinks(const char* links, const char* body) {
+  return std::string("<html xmlns=\"http://www.w3.org/1999/xhtml\"><head><title>t</title>") + links +
+         "</head><body>" + body + "</body></html>";
+}
+
+// The Red Rising omnibus TOC links only style1; style2 and style6 (linked by other
+// documents) define the same selector with a hanging indent and a 3% margin.
+TEST(StylesheetScoping, TocUsesOnlyItsLinkedStylesheet) {
+  const std::string doc = xhtmlWithLinks(
+      "<link href=\"../css/9780593725320_style1.css\" rel=\"stylesheet\" type=\"text/css\"/>",
+      "<div class=\"toc\"><div class=\"toc_part0\">\n<a class=\"hlink\" href=\"p01.xhtml\">Part I: Slave</a>\n</div>"
+      "<div class=\"toc_chap\">\n<a class=\"hlink\" href=\"c01.xhtml\">1: Helldiver</a>\n</div></div>");
+  const auto starts = layoutWithScopedSheets(
+      "crosspoint-scoped-css-toc", doc,
+      {
+          {"OEBPS/css/9780593725320_style.css", "div.toc_chap {margin-left:0; text-indent:-3em}"},
+          {"OEBPS/css/9780593725320_style1.css",
+           "div.toc_chap {margin-left:1.6em; text-align:left; text-indent:0; font-size:0.9em; line-height:1.4em}"
+           "div.toc_part0 {margin-top:0; text-align:left; margin-left:1.4em; line-height:1.5em; font-size:1em}"
+           "div.toc {margin-right:2em; text-align:justify}"},
+          {"OEBPS/css/9780593725320_style2.css", "div.toc_chap {text-align:left; text-indent:-1.7em; font-size:0.9em}"},
+          {"OEBPS/css/9780593725320_style6.css", "div.toc_chap, div.toc_sub {margin-left:3%}"},
+      });
+  ASSERT_EQ(starts.size(), 2u);
+  EXPECT_EQ(starts[0].first, "Part");
+  EXPECT_EQ(starts[1].first, "1:");
+  // 1.6em margin from style1 alone: clearly inset, and right of the part heading.
+  EXPECT_GT(starts[1].second, 0);
+  EXPECT_GT(starts[1].second, starts[0].second);
+  EXPECT_EQ(starts[1].second, 19 + 8);  // 1.6em margin + default 2-space paragraph indent
+}
+
+TEST(StylesheetScoping, UnlinkedSheetDoesNotApply) {
+  const char* body = "<p class=\"x\">Alpha</p>";
+  const std::initializer_list<ScopedSheet> sheets = {
+      {"OEBPS/css/a.css", "p.x {margin-left:2em; text-indent:0}"},
+      {"OEBPS/css/b.css", "p.x {margin-left:0; text-indent:0}"},
+  };
+  const auto linkedA = layoutWithScopedSheets(
+      "crosspoint-scoped-css-a", xhtmlWithLinks("<link rel=\"stylesheet\" href=\"../css/a.css\"/>", body), sheets);
+  ASSERT_EQ(linkedA.size(), 1u);
+  const auto linkedB = layoutWithScopedSheets(
+      "crosspoint-scoped-css-b", xhtmlWithLinks("<link rel=\"stylesheet\" href=\"../css/b.css\"/>", body), sheets);
+  ASSERT_EQ(linkedB.size(), 1u);
+  EXPECT_GT(linkedA[0].second, linkedB[0].second);
+
+  // Linking both: the later link wins ties, so order matters.
+  const auto ab = layoutWithScopedSheets(
+      "crosspoint-scoped-css-ab",
+      xhtmlWithLinks("<link rel=\"stylesheet\" href=\"../css/a.css\"/><link rel=\"stylesheet\" href=\"../css/b.css\"/>",
+                     body),
+      sheets);
+  const auto ba = layoutWithScopedSheets(
+      "crosspoint-scoped-css-ba",
+      xhtmlWithLinks("<link rel=\"stylesheet\" href=\"../css/b.css\"/><link rel=\"stylesheet\" href=\"../css/a.css\"/>",
+                     body),
+      sheets);
+  ASSERT_EQ(ab.size(), 1u);
+  ASSERT_EQ(ba.size(), 1u);
+  EXPECT_EQ(ab[0].second, linkedB[0].second);
+  EXPECT_EQ(ba[0].second, linkedA[0].second);
+
+  // No links: no external rules. Alternate sheets are not applied either.
+  const auto none = layoutWithScopedSheets("crosspoint-scoped-css-none", xhtmlWithLinks("", body), sheets);
+  const auto alternate = layoutWithScopedSheets(
+      "crosspoint-scoped-css-alt",
+      xhtmlWithLinks("<link rel=\"alternate stylesheet\" href=\"../css/a.css\"/>", body), sheets);
+  ASSERT_EQ(none.size(), 1u);
+  ASSERT_EQ(alternate.size(), 1u);
+  EXPECT_EQ(none[0].second, alternate[0].second);
+  EXPECT_LT(none[0].second, linkedA[0].second);
+
+  // Links that resolve to no known sheet fall back to every sheet in manifest order (b wins).
+  const auto unresolved = layoutWithScopedSheets(
+      "crosspoint-scoped-css-unresolved",
+      xhtmlWithLinks("<link rel=\"stylesheet\" href=\"../styles/missing.css\"/>", body), sheets);
+  ASSERT_EQ(unresolved.size(), 1u);
+  EXPECT_EQ(unresolved[0].second, linkedB[0].second);
+}
+
 TEST(BlockStyleInsetCap, ScalesPositiveInsetsProportionally) {
   BlockStyle style;
   style.marginLeft = 60;

@@ -13,6 +13,7 @@
 
 #include "CrossPointSettings.h"
 #include "components/UITheme.h"
+#include "deckpoint/KeyLegend.h"
 #include "fontIds.h"
 
 namespace {
@@ -75,12 +76,13 @@ bool BmpViewerActivity::renderPng() {
   if (!PngToFramebufferConverter::getDimensionsStatic(filePath, dimensions)) return false;
   if (dimensions.width <= 0 || dimensions.height <= 0) return false;
 
+  // DECKPOINT: fit above the key legend band (0 when legends are off).
+  const int areaHeight = renderer.getScreenHeight() - deckpoint::keyLegendBandHeight(renderer);
   const float scale = std::min(static_cast<float>(renderer.getScreenWidth()) / dimensions.width,
-                               static_cast<float>(renderer.getScreenHeight()) / dimensions.height);
+                               static_cast<float>(areaHeight) / dimensions.height);
   const int width = std::min(renderer.getScreenWidth(), static_cast<int>(dimensions.width * std::min(scale, 1.0f)));
-  const int height = std::min(renderer.getScreenHeight(), static_cast<int>(dimensions.height * std::min(scale, 1.0f)));
-  RenderConfig config{(renderer.getScreenWidth() - width) / 2, (renderer.getScreenHeight() - height) / 2, width,
-                      height};
+  const int height = std::min(areaHeight, static_cast<int>(dimensions.height * std::min(scale, 1.0f)));
+  RenderConfig config{(renderer.getScreenWidth() - width) / 2, (areaHeight - height) / 2, width, height};
 
   PngToFramebufferConverter converter;
   return converter.decodeToFramebuffer(filePath, renderer, config);
@@ -95,6 +97,8 @@ void BmpViewerActivity::onEnter() {
 
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
+  // DECKPOINT: BMPs fit above the key legend band (0 when legends are off).
+  const int imageAreaHeight = pageHeight - deckpoint::keyLegendBandHeight(renderer);
   Rect popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
   GUI.fillPopupProgress(renderer, popupRect, 20);  // Initial 20% progress
   if (FsHelpers::hasPngExtension(filePath)) {
@@ -126,23 +130,23 @@ void BmpViewerActivity::onEnter() {
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       int x, y;
 
-      if (bitmap.getWidth() > pageWidth || bitmap.getHeight() > pageHeight) {
+      if (bitmap.getWidth() > pageWidth || bitmap.getHeight() > imageAreaHeight) {
         float ratio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
-        const float screenRatio = static_cast<float>(pageWidth) / static_cast<float>(pageHeight);
+        const float screenRatio = static_cast<float>(pageWidth) / static_cast<float>(imageAreaHeight);
 
         if (ratio > screenRatio) {
           // Wider than screen
           x = 0;
-          y = std::round((static_cast<float>(pageHeight) - static_cast<float>(pageWidth) / ratio) / 2);
+          y = std::round((static_cast<float>(imageAreaHeight) - static_cast<float>(pageWidth) / ratio) / 2);
         } else {
           // Taller than screen
-          x = std::round((static_cast<float>(pageWidth) - static_cast<float>(pageHeight) * ratio) / 2);
+          x = std::round((static_cast<float>(pageWidth) - static_cast<float>(imageAreaHeight) * ratio) / 2);
           y = 0;
         }
       } else {
         // Center small images
         x = (pageWidth - bitmap.getWidth()) / 2;
-        y = (pageHeight - bitmap.getHeight()) / 2;
+        y = (imageAreaHeight - bitmap.getHeight()) / 2;
       }
 
       // 4. Prepare Rendering
@@ -156,7 +160,7 @@ void BmpViewerActivity::onEnter() {
       GUI.fillPopupProgress(renderer, popupRect, 50);
 
       renderer.clearScreen();
-      if (!renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0)) {
+      if (!renderer.drawBitmap(bitmap, x, y, pageWidth, imageAreaHeight, 0, 0)) {
         renderer.clearScreen();
         renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_FILE_OPEN_FAILED));
         renderer.displayBuffer(HalDisplay::HALF_REFRESH);
@@ -178,7 +182,7 @@ void BmpViewerActivity::onEnter() {
           }
           renderer.clearScreen(absolute ? 0xFF : 0x00);
           renderer.setRenderMode(mode);
-          if (!renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0)) {
+          if (!renderer.drawBitmap(bitmap, x, y, pageWidth, imageAreaHeight, 0, 0)) {
             planesReady = false;
             break;
           }
@@ -195,7 +199,7 @@ void BmpViewerActivity::onEnter() {
         renderer.setRenderMode(GfxRenderer::BW);
         renderer.clearScreen();
         if (bitmap.rewindToData() != BmpReaderError::Ok ||
-            !renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0)) {
+            !renderer.drawBitmap(bitmap, x, y, pageWidth, imageAreaHeight, 0, 0)) {
           LOG_ERR("BMP", "Failed to rewind bitmap to restore the BW framebuffer");
           renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_FILE_OPEN_FAILED));
           planesReady = false;
