@@ -22,6 +22,7 @@
 #include <XteinkDetect.h>
 #if FREEINK_DEVICE_TDECKPRO
 #include <BoardTDeckPro.h>  // DECKPOINT
+#include <Cst3xxTouch.h>    // DECKPOINT
 #include <Gdeq031Tuning.h>  // DECKPOINT
 #endif
 #include <builtinFonts/all.h>
@@ -49,6 +50,7 @@
 #include "util/PluginEvents.h"
 #include "deckpoint/SleepRequest.h"  // DECKPOINT
 #include "deckpoint/TestPattern.h"   // DECKPOINT
+#include "deckpoint/TouchTestActivity.h"  // DECKPOINT
 #include "util/ScreenshotUtil.h"
 #include "util/Timezones.h"
 
@@ -406,6 +408,9 @@ void enterDeepSleep(bool fromTimeout = false) {
   }
 
   halTiltSensor.deepSleep();
+#if FREEINK_DEVICE_TDECKPRO
+  BoardTDeckPro::prepareForSleep();  // DECKPOINT: keyboard backlight off, touch controller asleep
+#endif
   display.deepSleep();
   Storage.prepareForDeepSleep();
   LOG_DBG("MAIN", "Entering deep sleep");
@@ -504,6 +509,17 @@ void setup() {
 
   gpio.begin();
   powerManager.begin();
+#if FREEINK_DEVICE_TDECKPRO
+  {
+    // DECKPOINT: the touch controller is probed in gpio.begin(); report what answered.
+    const auto& touch = freeink::cst3xx::info();
+    const auto& tc = BoardConfig::ACTIVE.touch;
+    LOG_INF("TOUCH", "%s rst=%d irq=%d res=%ux%u fw=0x%08lX panel range %u..%u x %u..%u swap=%d flipX=%d flipY=%d ui=%d",
+            freeink::cst3xx::chipName(touch.chip), tc.reset, tc.irq, touch.resolutionX, touch.resolutionY,
+            static_cast<unsigned long>(touch.firmware), tc.rawMinX, tc.rawMaxX, tc.rawMinY, tc.rawMaxY, tc.swapXY,
+            tc.flipX, tc.flipY, DECKPOINT_TOUCH_UI);
+  }
+#endif
 
   const auto wakeupReason = gpio.getWakeupReason();
   // Sample the wake hold now — a click wake is released within milliseconds of
@@ -780,6 +796,9 @@ void loop() {
 #if FREEINK_DEVICE_TDECKPRO
       else if (cmd == "BOARD") {  // DECKPOINT: reprint the board report
         BoardTDeckPro::logStatus();
+      }
+      else if (cmd == "TOUCHTEST") {  // DECKPOINT: touch calibration screen
+        deckpoint::openTouchTest(renderer, mappedInputManager);
       }
       else if (cmd == "CLEAN") {  // DECKPOINT: deep-clean the glass (white, standard waveform)
         RenderLock lock;

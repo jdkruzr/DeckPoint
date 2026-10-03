@@ -82,7 +82,14 @@ class HalGPIO {
   // hardware (ADC ladder off its idle rail, or the power GPIO asserted), without
   // going through the debounced state. Cheap enough to call every few ms.
   bool rawInputActive();
+  // DECKPOINT: touch-first UI is active (controller present AND DECKPOINT_TOUCH_UI).
+  // While the gate is off every app-facing touch event below reports nothing.
   bool hasTouch() const;
+  // DECKPOINT: the touch controller answered at boot, regardless of the UI gate.
+  bool hasTouchHardware() const;
+  // DECKPOINT: ungated SDK input for diagnostics (CMD:TOUCHTEST). Read-only use;
+  // update() still owns sampling.
+  const InputManager& rawInput() const { return inputMgr; }
   // DECKPOINT: true when the board has no physical front/side buttons to label
   // (touch-only or keyboard-driven); themes skip their button-hint strips.
   bool hidesButtonHints() const;

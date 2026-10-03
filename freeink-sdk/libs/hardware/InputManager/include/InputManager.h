@@ -105,6 +105,17 @@ class InputManager {
     MultiTouchPoint points[MAX_TOUCH_CONTACTS];
   };
 
+  // DECKPOINT: the controller's last report before swap/flip/scale, for
+  // calibration tooling. count = contacts in that report (0 = lifted).
+  // Only the CST3xx backend fills it.
+  struct TouchRawSample {
+    uint16_t x;
+    uint16_t y;
+    uint8_t count;
+    unsigned long timestamp;
+  };
+  TouchRawSample getTouchRawSample() const { return touchRawSample; }
+
   // True if this board has a touch controller configured.
   bool hasTouch() const;
   // True only while a GT911 controller is present. Other touch controllers
@@ -344,6 +355,8 @@ class InputManager {
   void gt911ClearStatus();
   void beginFt6336u();
   void pollFt6336u(unsigned long now);
+  void beginCst3xx();  // DECKPOINT
+  void pollCst3xx(unsigned long now);
   void beginGslx680();
   void pollGslx680(unsigned long now);
   bool gslWrite(uint8_t reg, const uint8_t* data, uint8_t len);
@@ -410,6 +423,7 @@ class InputManager {
   unsigned long touchHomeKeyDownAt = 0;
   static constexpr unsigned long HOME_KEY_LONG_PRESS_MS = 700;
   TouchPoint touchPoint = {false, 0, 0, 0};
+  TouchRawSample touchRawSample = {0, 0, 0, 0};  // DECKPOINT
   TouchSnapshot touchSnapshot{};
   MultiTouchGestureState multiTouchGestureState = MultiTouchGestureState::Idle;
   TrackedTouchContact multiTouchContacts[MAX_TOUCH_CONTACTS] = {};
@@ -469,6 +483,10 @@ class InputManager {
   static constexpr int64_t TOUCH_CONTACT_ASSIGNMENT_AMBIGUITY_PX_SQ = 64;
   static constexpr unsigned long TOUCH_LONG_PRESS_MS = 500;  // shorter than HOME_KEY_LONG_PRESS_MS: a screen hold has
                                                              // no button travel to absorb
+  // DECKPOINT: CST3xx contact with no report for this long is released (the
+  // controller reports continuously while touched; this only covers a lost
+  // lift report).
+  static constexpr unsigned long CST3XX_STALE_RELEASE_MS = 150;
   static constexpr uint8_t TOUCH_READ_COMMAND = 0x00;
   static constexpr uint8_t TOUCH_FRAME_SIZE = 16;
 

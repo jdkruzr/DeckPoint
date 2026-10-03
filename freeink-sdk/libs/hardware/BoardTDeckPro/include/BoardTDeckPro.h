@@ -72,7 +72,8 @@ void toggleKeyboardBacklight();
 
 // Deep sleep: the TCA8418 stays powered and pulls KEY_INT (GPIO15, an RTC GPIO)
 // low on any keypress, so firmware can OR this into its ext1 wake mask to wake
-// on any key. prepareForSleep() drains the FIFO so INT is released before sleep.
+// on any key. prepareForSleep() drains the FIFO so INT is released before sleep,
+// and puts the touch controller into deep sleep.
 uint64_t keyboardWakeMask();
 void prepareForSleep();
 

@@ -213,11 +213,12 @@
 #endif
 
 // --- 4) Derive default capabilities (override with -DFREEINK_CAP_*=0/1) -------
+// DECKPOINT: + T-Deck Pro (CST328 / CST3530).
 #ifndef FREEINK_CAP_TOUCH
 #define FREEINK_CAP_TOUCH                                                                               \
   (FREEINK_DEVICE_MURPHY || FREEINK_DEVICE_LILYGO || FREEINK_DEVICE_M5PAPER || FREEINK_DEVICE_STICKY || \
    FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_PAPERMONO || FREEINK_DEVICE_PAPERS3 || FREEINK_DEVICE_MURPHY_M4 || \
-   FREEINK_DEVICE_EEGO_A4 || FREEINK_DEVICE_METALIO_EINK4)
+   FREEINK_DEVICE_EEGO_A4 || FREEINK_DEVICE_METALIO_EINK4 || FREEINK_DEVICE_TDECKPRO)
 #endif
 #ifndef FREEINK_CAP_FRONTLIGHT
 // EEGO A4's frontlight is an I2C LED driver (viaI2cLed), not LEDC PWM — the
@@ -303,6 +304,13 @@
 // KeyMatrix driver and keyboard-only UI. A BLE keyboard could opt in later.
 #ifndef FREEINK_CAP_KEYBOARD
 #define FREEINK_CAP_KEYBOARD (FREEINK_DEVICE_TDECKPRO)
+#endif
+// DECKPOINT: touch-first UI gate. 0 = the touch controller is driven (raw
+// input, diagnostics) but BoardConfig::hasTouch() / HalGPIO::hasTouch() and the
+// app-facing touch events stay off, so a keyboard board keeps its key legends
+// and button-era layouts. The T-Deck Pro holds this at 0 until the hybrid-UX step.
+#ifndef DECKPOINT_TOUCH_UI
+#define DECKPOINT_TOUCH_UI (!FREEINK_DEVICE_TDECKPRO)
 #endif
 #ifndef FREEINK_CAP_COLOR
 #define FREEINK_CAP_COLOR (FREEINK_DEVICE_M5)
@@ -469,7 +477,8 @@ enum class DisplayController : uint8_t {
 };
 
 // Optional capacitive touch controller.
-enum class TouchController : uint8_t { None, Chsc6x, Gt911, Ft5x06, Ft6336u, Gslx680, Cst816s };
+// DECKPOINT: Cst3xx = Hynitron CST3530 or CST328 (T-Deck Pro), chip probed at init.
+enum class TouchController : uint8_t { None, Chsc6x, Gt911, Ft5x06, Ft6336u, Gslx680, Cst816s, Cst3xx };
 
 // Optional audio output path. Murphy M3 ships an ES8388-compatible stereo
 // codec (I2S slave, control over the shared touch I2C bus) — the contract was
@@ -1905,9 +1914,44 @@ static_assert(ONEPAGE.displayWidth / 8 * ONEPAGE.displayHeight == 48000,
 // controller's portrait RAM.
 // Hardware revision differences (v1.0 vs v1.1) are patched into ACTIVE at boot
 // by BoardTDeckPro::begin(): v1.1 adds EPD RST on GPIO16 and a DRV2605 haptic
-// driver; touch moved from CST328 to CST3530. The only real GPIO button is BOOT
+// driver; touch moved from CST328 to CST3530 and its reset from GPIO45 to GPIO38. The only real GPIO button is BOOT
 // (GPIO0), used as power/sleep; everything else comes from the keyboard via
 // InputManager::setButtonHook().
+// DECKPOINT: T-Deck Pro touch mounting — THE calibration knobs. Every touch
+// coordinate on this board goes through these three flags (applyTouchMount in
+// TouchMount.h, via TouchConfig); flip them here between calibration rounds.
+// The controller reports the 240x320 portrait frame. Initial guess: it matches
+// the UC8253 RAM frame, where controller (cx, cy) shows framebuffer
+// (x = cy, y = 239 - cx) (Uc8253Gdeq031Driver::writePlane). So
+// framebuffer x = rawY (swap), framebuffer y = 239 - rawX (flip post-swap Y).
+// With that, logical Portrait == raw controller coordinates.
+constexpr bool TDECK_TOUCH_SWAP_XY = true;
+constexpr bool TDECK_TOUCH_FLIP_X = false;
+constexpr bool TDECK_TOUCH_FLIP_Y = true;
+// CST3530 (v1.1) / CST328 (v1.0) at 0x1A on the shared keyboard/gauge bus
+// (SDA13 SCL14), active-low INT on GPIO12. Reset is GPIO45 on v1.0 and GPIO38 on
+// v1.1 (where 45 drives the front light); BoardTDeckPro::begin() patches it in
+// after the revision probe. Ranges are post-swap (framebuffer) axes and get
+// replaced by the controller's reported resolution at init when it is sane.
+constexpr TouchConfig TDECK_PRO_TOUCH = {TouchController::Cst3xx,
+                                         13,
+                                         14,
+                                         12,
+                                         PIN_UNASSIGNED,  // reset: per revision
+                                         0x1A,
+                                         0,
+                                         319,
+                                         0,
+                                         239,
+                                         false,  // synthesizeConfirm
+                                         0,
+                                         true,  // irqActiveLow
+                                         false,
+                                         PIN_UNASSIGNED,  // always powered
+                                         TDECK_TOUCH_SWAP_XY,
+                                         TDECK_TOUCH_FLIP_X,
+                                         TDECK_TOUCH_FLIP_Y};
+
 constexpr BoardProfile TDECK_PRO = {
     Board::TDeckPro,
     "tdeck_pro",
@@ -1924,7 +1968,7 @@ constexpr BoardProfile TDECK_PRO = {
     PIN_UNASSIGNED,
     2.0f,
     PIN_UNASSIGNED,  // usbDetect: none (charging state from the BQ25896)
-    NO_TOUCH,        // CST328/CST3530 touch: not wired up yet
+    TDECK_PRO_TOUCH,  // CST3530 / CST328, see above
     NO_FRONTLIGHT,   // v1.1 has an optional front light on GPIO45; not on all units
     NO_AUDIO,
     NO_LEDS,
@@ -2138,7 +2182,9 @@ inline bool isMetalioEInk4() { return ACTIVE.board == Board::MetalioEInk4; }
 inline bool isOnePage() { return ACTIVE.board == Board::OnePage; }
 inline bool isWsEpaper397() { return ACTIVE.board == Board::WsEpaper397; }
 inline bool isTDeckPro() { return ACTIVE.board == Board::TDeckPro; }  // DECKPOINT
-inline bool hasTouch() { return ACTIVE.touch.controller != TouchController::None; }
+// DECKPOINT: hasTouch() means "touch-first UI"; hasTouchController() is the hardware.
+inline bool hasTouchController() { return ACTIVE.touch.controller != TouchController::None; }
+inline bool hasTouch() { return DECKPOINT_TOUCH_UI && hasTouchController(); }
 inline bool hasHomeKey() { return ACTIVE.touch.hasHomeKey; }
 inline bool hasPwmFrontlight() { return ACTIVE.frontlight.gpio != PIN_UNASSIGNED || ACTIVE.frontlight.viaPm1Pwm; }
 inline bool hasI2cFrontlight() { return ACTIVE.i2cFrontlight.controller != I2cFrontlightController::None; }
