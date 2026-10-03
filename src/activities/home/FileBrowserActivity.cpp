@@ -6,6 +6,7 @@
 #include <I18n.h>
 #include <Memory.h>
 #include <Utf8.h>
+#include <strings.h>
 
 #include <algorithm>
 #include <functional>
@@ -69,7 +70,12 @@ void formatFileName(const std::string& filename, char* buffer, const size_t buff
   const bool isDirectory = filename.back() == '/';
   const size_t dot = isDirectory ? filename.size() - 1 : filename.rfind('.');
   const int length = static_cast<int>(dot == std::string::npos ? filename.size() : dot);
+#if DECKPOINT_COMPACT_UI
+  // DECKPOINT: compact rows have no icons; folders read like `ls -F`.
+  const char* format = isDirectory ? "%.*s/" : "%.*s";
+#else
   const char* format = isDirectory && !UITheme::getInstance().getTheme().showsFileIcons() ? "[%.*s]" : "%.*s";
+#endif
   snprintf(buffer, bufferSize, format, length, filename.c_str());
   // Compose only the display copy; filesystem lookup needs the raw entry bytes.
   utf8ComposeNfcInPlace(buffer);
@@ -155,10 +161,18 @@ void FileBrowserActivity::provideRow(void* ctx, const uint16_t index, fui::ListI
   formatFileName(entry, self->rowNameBuf, sizeof(self->rowNameBuf));
   item.label = self->rowNameBuf;
   formatFileExtension(entry, self->rowExtBuf, sizeof(self->rowExtBuf));
-  if (self->rowExtBuf[0] != '\0') {
+#if DECKPOINT_COMPACT_UI
+  // DECKPOINT: the book icon already says EPUB; only less common types keep their extension column.
+  const bool showExtension = self->rowExtBuf[0] != '\0' && strcasecmp(self->rowExtBuf, ".epub") != 0;
+#else
+  const bool showExtension = self->rowExtBuf[0] != '\0';
+#endif
+  if (showExtension) {
     item.value = self->rowExtBuf;
   }
+#if !DECKPOINT_COMPACT_UI  // DECKPOINT: icon-free rows (24px icons would set a 32px row height)
   item.icon = listIconFor(UITheme::getFileIcon(entry));
+#endif
   item.actionValue = static_cast<int16_t>(index);
 }
 
@@ -646,7 +660,11 @@ void FileBrowserActivity::buildScreen(UiScreen& screen) {
   props.valueInset = 8;  // air between the extension and the row edge
   // Names use up to two small-font lines; shared list layout sizes each row.
   fui::TextStyle label = screen.theme().smallText;
+#if DECKPOINT_COMPACT_UI
+  label.maxLines = 1;  // DECKPOINT: one ellipsized line per entry doubles the rows on screen
+#else
   label.maxLines = 2;
+#endif
   props.labelText = label;
 
   // The trailing value here is just the short extension: skip the balanced
