@@ -58,6 +58,12 @@ Read `PROGRESS.md` first (dev loop, conventions). Full roadmap with rationale:
   table; calibrate with gray-card photos at ~2 extra temperatures. (UC8253's own sensor needs a
   read-capable bus.) No CrossPoint/CrossInk/SDK code compensates custom LUTs today.
 
+## 6b. Flash diet (plan Phase 7)
+- Measured: code 2.1 MB, fonts 1.5 MB, hyphenation 374 KB, i18n 366 KB, web UI 120 KB.
+  Offload candidates: extra reader fonts (~1.1 MB), non-English hyphenation (~350 KB) and
+  translations (~340 KB). Cheapest win: unused 3.4 MB `spiffs` partition -> bigger app slots.
+  Try PSRAM direct .ttf loading (also speeds up the AA font contest).
+
 ## 7. Docs & credits (user requirement)
 - README section crediting **CrossPoint Reader** and **CrossInk** as inspirations (not just code
   sources), plus FreeInk SDK, Meshtastic, LilyGo; `CREDITS.md` mapping pieces to origins.
