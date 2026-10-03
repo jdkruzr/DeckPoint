@@ -1,6 +1,7 @@
 #include "BoardTDeckPro.h"
 
 #include <BoardConfig.h>
+#include <Cst3xxTouch.h>
 #include <InputManager.h>
 #include <SPI.h>
 #include <Tca8418.h>
@@ -28,6 +29,8 @@ constexpr int8_t PIN_GPS_EN = 39;
 constexpr int8_t PIN_MODEM_EN = 41;
 constexpr int8_t PIN_MOTOR = 2;          // v1.0 vibration motor / v1.1 DRV2605 enable
 constexpr int8_t PIN_GYRO_1V8_EN = 38;   // v1.0 only (v1.1 reuses 38 as touch RST)
+constexpr int8_t PIN_TOUCH_RST_V10 = 45;  // v1.1 reuses 45 for the front-light PWM
+constexpr int8_t PIN_TOUCH_RST_V11 = 38;
 constexpr int8_t PIN_EPD_RST_V11 = 16;
 
 constexpr uint8_t ADDR_TCA8418 = 0x34;
@@ -361,10 +364,14 @@ void begin() {
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, I2C_HZ);
 
   s_revision = probe(ADDR_DRV2605) ? Revision::V1_1 : Revision::V1_0;
+  // Touch reset moved between revisions; InputManager resets the controller
+  // through ACTIVE.touch.reset, so the wrong pin never gets pulsed.
   if (s_revision == Revision::V1_1) {
     BoardConfig::ACTIVE.display.rst = PIN_EPD_RST_V11;
+    BoardConfig::ACTIVE.touch.reset = PIN_TOUCH_RST_V11;
   } else {
     outputLow(PIN_GYRO_1V8_EN);  // BHI260AP unused; keep its 1.8 V rail down
+    BoardConfig::ACTIVE.touch.reset = PIN_TOUCH_RST_V10;
   }
 
   pinMode(PIN_KB_INT, INPUT_PULLUP);
@@ -379,9 +386,12 @@ bool loraAsleep() { return s_loraAsleep; }
 
 void logStatus() {
   if (!Serial) return;
-  Serial.printf("[%lu] [TDECK] revision %s, keyboard %s, LoRa %s, kb backlight %s\n", millis(), revisionName(),
-                s_kb.present() ? "ok" : "MISSING", s_loraAsleep ? "asleep" : "BUSY stuck (left in standby)",
-                s_backlight ? "on" : "off");
+  const auto& touch = freeink::cst3xx::info();
+  Serial.printf("[%lu] [TDECK] revision %s, keyboard %s, LoRa %s, kb backlight %s, touch %s (rst %d, %ux%u)\n",
+                millis(), revisionName(), s_kb.present() ? "ok" : "MISSING",
+                s_loraAsleep ? "asleep" : "BUSY stuck (left in standby)", s_backlight ? "on" : "off",
+                freeink::cst3xx::chipName(touch.chip), BoardConfig::ACTIVE.touch.reset, touch.resolutionX,
+                touch.resolutionY);
 }
 
 Revision revision() { return s_revision; }
@@ -454,6 +464,7 @@ uint64_t keyboardWakeMask() { return s_kb.present() ? (1ULL << PIN_KB_INT) : 0; 
 void prepareForSleep() {
   setKeyboardBacklight(false);
   if (s_kb.present()) s_kb.flush();
+  freeink::cst3xx::sleep();  // next boot's reset pulse wakes it
 }
 
 }  // namespace BoardTDeckPro

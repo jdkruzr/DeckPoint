@@ -7,6 +7,9 @@
 #if FREEINK_CAP_TOUCH
 #include <Wire.h>
 #include <driver/gpio.h>
+
+#include "Cst3xxTouch.h"  // DECKPOINT
+#include "TouchMount.h"   // DECKPOINT
 #if FREEINK_DEVICE_MURPHY_M4
 #include <driver/i2c_master.h>
 #include <esp_rom_sys.h>
@@ -1251,6 +1254,10 @@ void InputManager::beginTouch() {
     beginGslx680();
     return;
   }
+  if (t.controller == BoardConfig::TouchController::Cst3xx) {  // DECKPOINT
+    beginCst3xx();
+    return;
+  }
   // CHSC6x: I2C bus only. The IRQ is left unconfigured — it's a brief pulse on
   // this controller, so detection polls I2C and gates on the frame's touch bit
   // instead (see decodeChsc6xFrame / updateTouchFromIrq).
@@ -1290,6 +1297,8 @@ uint8_t InputManager::serviceTouch() {
     pollFt6336u(now);
   } else if (t.controller == BoardConfig::TouchController::Gslx680) {
     pollGslx680(now);
+  } else if (t.controller == BoardConfig::TouchController::Cst3xx) {  // DECKPOINT
+    pollCst3xx(now);
   } else {
     updateTouchFromIrq(now, 0);  // detection polls I2C; the IRQ is unused now
     // Synthesized confirm tracks an actually-detected press, not the IRQ line.
@@ -1690,6 +1699,72 @@ void InputManager::pollFt5x06(const unsigned long now) {
     if (absInt(dx) > TOUCH_TAP_RELEASE_SLOP_PX || absInt(dy) > TOUCH_TAP_RELEASE_SLOP_PX) {
       touchMovedBeyondTapReleaseSlop = true;
     }
+  }
+}
+
+// --- DECKPOINT: CST3530 / CST328 (T-Deck Pro) -------------------------------
+// IRQ-gated reads only: the CST3530 drops into low-power between reports and
+// NACKs blind polling. Wire is already running on the shared bus (the board
+// brings it up for its keyboard and gauge); the begin() below is a no-op then.
+
+void InputManager::beginCst3xx() {
+  auto& t = BoardConfig::ACTIVE.touch;
+  if (t.sda < 0 || t.scl < 0 || t.i2cAddress == 0) return;
+  Wire.begin(t.sda, t.scl, 400000);
+  if (freeink::cst3xx::begin(t.i2cAddress, t.reset, t.irq) == freeink::cst3xx::Chip::None) return;
+  // Adopt the controller's own resolution (controller frame) as the post-swap
+  // range when it is plausible; the profile's 240x320 stays otherwise.
+  const auto& info = freeink::cst3xx::info();
+  if (info.resolutionX >= 16 && info.resolutionX <= 4096 && info.resolutionY >= 16 && info.resolutionY <= 4096) {
+    const uint16_t postX = t.swapXY ? info.resolutionY : info.resolutionX;
+    const uint16_t postY = t.swapXY ? info.resolutionX : info.resolutionY;
+    t.rawMinX = 0;
+    t.rawMaxX = static_cast<uint16_t>(postX - 1);
+    t.rawMinY = 0;
+    t.rawMaxY = static_cast<uint16_t>(postY - 1);
+  }
+  touchDataEnabled = true;
+}
+
+void InputManager::pollCst3xx(const unsigned long now) {
+  const auto& t = BoardConfig::ACTIVE.touch;
+  const auto release = [&]() {
+    if (!touchPressed) return;
+    touchPressed = false;
+    touchPoint.valid = false;
+    touchReleasedEvent = true;
+    lastTouchHeldDurationMs = now - touchDownPoint.timestamp;
+  };
+  freeink::cst3xx::Frame frame{};
+  if (!freeink::cst3xx::reportPending() || !freeink::cst3xx::read(frame)) {
+    if (touchPressed && now - touchRawSample.timestamp > CST3XX_STALE_RELEASE_MS) release();
+    return;
+  }
+
+  touchRawSample.count = frame.count;
+  touchRawSample.timestamp = now;
+  if (frame.count == 0) {
+    release();
+    return;
+  }
+  // Single-contact contract (supportsMultiTouch() is GT911-only): track the first point.
+  touchRawSample.x = frame.points[0].x;
+  touchRawSample.y = frame.points[0].y;
+  const freeink::TouchMount mount = {t.swapXY, t.flipX, t.flipY, t.rawMinX, t.rawMaxX, t.rawMinY, t.rawMaxY};
+  const freeink::TouchXY p = freeink::applyTouchMount(frame.points[0].x, frame.points[0].y, mount);
+  touchPoint = {true, p.x, p.y, now};
+
+  if (!touchPressed) {
+    touchPressed = true;
+    touchPressedEvent = true;
+    touchDownPoint = touchUpPoint = touchPoint;
+    touchMovedBeyondTapSlop = touchMovedBeyondTapReleaseSlop = false;
+  } else {
+    touchUpPoint = touchPoint;
+    const int dx = absInt(int(touchPoint.x) - int(touchDownPoint.x));
+    const int dy = absInt(int(touchPoint.y) - int(touchDownPoint.y));
+    if (dx > TOUCH_TAP_SLOP_PX || dy > TOUCH_TAP_SLOP_PX) touchMovedBeyondTapSlop = true;
+    if (dx > TOUCH_TAP_RELEASE_SLOP_PX || dy > TOUCH_TAP_RELEASE_SLOP_PX) touchMovedBeyondTapReleaseSlop = true;
   }
 }
 

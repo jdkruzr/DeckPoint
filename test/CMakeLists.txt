@@ -85,6 +85,7 @@ add_subdirectory(commands)
 add_subdirectory(hint_mode)
 add_subdirectory(search_match)
 add_subdirectory(protected_paths)
+add_subdirectory(touch_cst3xx)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME TrustedTimeTimezone COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_trusted_time.py)
