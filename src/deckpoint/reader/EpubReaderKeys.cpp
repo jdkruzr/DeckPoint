@@ -43,6 +43,10 @@ bool EpubReaderActivity::wantsRawKeys() const {
 void EpubReaderActivity::onKey(const freeink::KeyEvent& event) {
   // A key earlier in this batch opened a screen or overlay; the rest belong to it.
   if (keysSuspended || !wantsRawKeys()) return;
+  if (hintsOpen) {
+    hintKey(event);
+    return;
+  }
   if (cmdLine.isOpen()) {
     commandLineKey(event);
     return;
@@ -170,6 +174,9 @@ void EpubReaderActivity::runReaderCommand(const ReaderCommand& cmd) {
       openCommandLine(cmd.type == ReaderCmd::LookupWord ? "dict " : "", hadPopup);
       return;
     case ReaderCmd::Dictionary:
+      // Like the `:` line: a dropped prefix popup means a clean render first.
+      openHints(hadPopup);
+      return;
     case ReaderCmd::Search:
     case ReaderCmd::SearchNext:
     case ReaderCmd::SearchPrev:
@@ -338,13 +345,16 @@ bool EpubReaderActivity::ensureMarksLoaded() {
 }
 
 void EpubReaderActivity::showKeyPopup(const char* text, const bool timed) {
-  {
-    // Painted straight over the page already in the framebuffer (one FAST
-    // refresh, no page re-render), serialized against the render task.
-    RenderLock lock;
-    if (!section || !renderer.hasFrameBuffer()) return;
-    GUI.drawPopup(renderer, text);
-  }
+  // Serialized against the render task.
+  RenderLock lock;
+  showKeyPopupLocked(text, timed);
+}
+
+void EpubReaderActivity::showKeyPopupLocked(const char* text, const bool timed) {
+  // Painted straight over the page already in the framebuffer (one FAST
+  // refresh, no page re-render).
+  if (!section || !renderer.hasFrameBuffer()) return;
+  GUI.drawPopup(renderer, text);
   keyPopupShown = true;
   keyPopupTime = timed ? std::max(1UL, millis()) : 0;
   keyPopupRenderStamp = lastRenderCompleteMs;

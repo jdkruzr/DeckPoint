@@ -13,29 +13,13 @@
 #include "CrossPointSettings.h"
 #include "DictionaryDefinitionActivity.h"
 #include "components/UITheme.h"
+#include "deckpoint/reader/PageWords.h"  // DECKPOINT
 
 namespace {
 
 constexpr unsigned long POPUP_DURATION_MS = 1500;
 constexpr unsigned long WORD_REPEAT_START_MS = 500;
 constexpr unsigned long WORD_REPEAT_INTERVAL_MS = 500;
-
-// A token is selectable when it has an ASCII alphanumeric or a non-ASCII
-// codepoint outside U+2000-U+206F (dashes, bullets and other General
-// Punctuation that appear as standalone tokens are not words).
-bool isSelectableToken(const char* text) {
-  for (const uint8_t* p = reinterpret_cast<const uint8_t*>(text); *p != 0; p++) {
-    if (*p < 0x80) {
-      if (std::isalnum(*p)) return true;
-    } else if (*p == 0xE2 && (p[1] == 0x80 || p[1] == 0x81)) {
-      if (p[2] == 0) break;  // truncated sequence: skipping would step past the NUL
-      p += 2;                // skip the 3-byte General Punctuation codepoint
-    } else {
-      return true;
-    }
-  }
-  return false;
-}
 
 void indexBuildYield(void*) { vTaskDelay(1); }
 
@@ -60,54 +44,8 @@ void DictionaryWordSelectActivity::onEnter() {
 }
 
 void DictionaryWordSelectActivity::extractWords() {
-  words.clear();
-  words.reserve(128);
-  rowCount = 0;
-
-  // Single walk: collect the selectable words while accumulating their text
-  // and styles (~2KB transient string, freed on return). Widths are measured
-  // afterwards: merging the page's codepoints into the SD font's persistent
-  // advance table first keeps getTextAdvanceX on the in-RAM path instead of
-  // loading glyphs from SD one overflow slot at a time.
-  std::string pageText;
-  pageText.reserve(2048);
-  uint8_t styleMask = 0;
-
-  for (const auto& element : page->elements) {
-    if (element->getTag() != TAG_PageLine) continue;
-    const auto* line = static_cast<const PageLine*>(element.get());
-    const auto* block = line->getBlock();
-    if (!block || !block->valid()) continue;
-
-    bool rowHasWords = false;
-    const int ascender = renderer.getFontAscenderSize(fontId);
-    const int rubyShift = block->getRubyShift(ascender);
-    for (uint16_t i = 0; i < block->wordCount(); i++) {
-      const char* text = block->wordText(i);
-      if (!isSelectableToken(text)) continue;
-
-      WordBox box;
-      box.x = static_cast<int16_t>(line->xPos + block->wordXpos(i) + marginLeft);
-      box.y = static_cast<int16_t>(line->yPos + marginTop + rubyShift);
-      box.style = block->wordStyle(i);
-      box.width = 0;  // measured below, once the advance table is ready
-      box.row = rowCount;
-      box.text = text;
-      words.push_back(box);
-      rowHasWords = true;
-
-      pageText.append(text);
-      pageText.push_back(' ');
-      styleMask |= static_cast<uint8_t>(1u << (static_cast<uint8_t>(box.style) & 0x03));
-    }
-    if (rowHasWords) rowCount++;
-  }
-
-  if (styleMask == 0) styleMask = 0x01;  // REGULAR
-  renderer.ensureSdCardFontReady(fontId, pageText.c_str(), styleMask);
-  for (auto& word : words) {
-    word.width = static_cast<int16_t>(renderer.getTextAdvanceX(fontId, word.text, word.style));
-  }
+  // DECKPOINT: shared with the reader's `d` hint mode (deckpoint/reader/PageWords).
+  rowCount = deckpoint::reader::extractPageWords(renderer, *page, fontId, marginLeft, marginTop, words);
 }
 
 // Index of the word whose box (with finger-sized slop) contains the touch

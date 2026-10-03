@@ -29,9 +29,9 @@ enum class ReaderCmd : uint8_t {
   Menu,            // Enter
   Back,            // Esc / Backspace with nothing pending
   Help,            // ?
+  Dictionary,  // d   hint labels on the page's words
+  LookupWord,  // D   `:dict ` prompt
   // Reserved for later steps; parsed now so the bindings are stable.
-  Dictionary,   // d
-  LookupWord,   // D
   Search,       // /
   SearchNext,   // n
   SearchPrev,   // N

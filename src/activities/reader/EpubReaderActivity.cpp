@@ -178,6 +178,7 @@ EpubReaderActivity::~EpubReaderActivity() {
   // taking another here self-deadlocks (renderingMutex is non-recursive).
   settleOverlayRefresh();
   discardOverlayPage();  // free the overlay's page snapshot if one is held
+  if (hints && hints->pageStored) renderer.discardStoredBwBuffer();  // DECKPOINT: `d` hints' page copy
 
   if (footnoteDepth > 0 && epub) saveLinkStack();
 
@@ -498,6 +499,7 @@ void EpubReaderActivity::loop() {
   }
   keyPopupTick();  // DECKPOINT: expire keyboard toasts
   if (commandLineTick()) return;  // DECKPOINT: the `:` line owns input while open
+  if (hintsTick()) return;        // DECKPOINT: `d` hint labels own input while shown
 
   // The toolbar reader menu owns all input while shown, ahead of the automatic page turn
   // below: the More panel's rate popup switches automatic turning on and leaves the panel
@@ -1281,6 +1283,7 @@ void EpubReaderActivity::renderBook() {
   // exit from the overlay while its deferred chrome refresh is still pending.
   settleOverlayRefresh();
   commandLineBeforeRender();  // DECKPOINT: the page under the `:` line is about to change
+  hintsBeforeRender();        // DECKPOINT: ...and the page under the `d` hint labels
 
   const auto showPendingSyncSaveError = [this]() {
     if (!pendingSyncSaveError) return;
@@ -1623,6 +1626,7 @@ void EpubReaderActivity::renderBook() {
     pushOverlayRefresh();
   }
   commandLineAfterRender();  // DECKPOINT: keep an open `:` line on top
+  hintsAfterRender();        // DECKPOINT: put up / redraw the `d` hint labels
 }
 
 void EpubReaderActivity::onEndOfBookRendered() {

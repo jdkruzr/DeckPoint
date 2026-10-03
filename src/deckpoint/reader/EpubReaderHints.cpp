@@ -1,0 +1,275 @@
+// DECKPOINT: the reader's `d` hint-mode dictionary. Every word on the page
+// gets a short label (HintMode, host-tested) drawn as a small inverted tag;
+// typing a label looks that word up through the `:dict` path.
+//
+// Refresh model (same as the `:` line): the clean page is copied out of the
+// framebuffer once (storeBwBuffer, 9.6 KB on the T-Deck Pro) and the labels
+// are pushed with a FAST refresh. Narrowing restores the copy and draws the
+// remaining tags; cancelling restores it and pushes once. Without a copy
+// (allocation failed, X4-class panels) the page is re-rendered instead.
+
+#include <BoardConfig.h>
+#include <FontCacheManager.h>
+#include <GfxRenderer.h>
+#include <HalGPIO.h>
+#include <I18n.h>
+#include <Logging.h>
+#include <Memory.h>
+
+#include <algorithm>
+#include <cstdio>
+#include <cstring>
+
+#include "CrossPointSettings.h"
+#include "activities/RenderLock.h"
+#include "activities/reader/EpubReaderActivity.h"
+#include "fontIds.h"
+
+using deckpoint::CommandResult;
+using deckpoint::reader::HintLabels;
+using deckpoint::reader::HintMatcher;
+using deckpoint::reader::HintSession;
+using deckpoint::reader::WordBox;
+
+namespace {
+
+constexpr int LABEL_FONT_ID = SMALL_FONT_ID;
+constexpr int LABEL_PAD = 1;
+// Longest word copied out for the lookup (bytes, incl. NUL); the dictionary
+// matches headwords far shorter than this.
+constexpr size_t MAX_LOOKUP_WORD = 64;
+
+// Same test as EpubReaderActivity.cpp / ReaderCommands.cpp: these panels
+// re-render to restore the grayscale-AA planes, so a stored page is never used.
+bool xteinkClassPanel() { return gpio.isXteinkDevice() || BoardConfig::isX4Pro() || BoardConfig::isX4Classic(); }
+
+}  // namespace
+
+void EpubReaderActivity::openHints(const bool pageDirty) {
+  readerKeys.reset();
+  pendingManualTurn = 0;
+  if (SETTINGS.dictionaryName[0] == '\0') {
+    showKeyPopup(tr(STR_DICT_NO_DICT_SET), true);
+    return;
+  }
+  if (!section) return;
+  keyPopupShown = false;
+  hintsOpen = true;
+  RenderLock lock;
+  if (pageDirty || showBookmarkMessage || showDictionaryMessage) {
+    // A popup is painted on the page: render a clean one first,
+    // hintsAfterRender() puts the labels on it.
+    showBookmarkMessage = false;
+    showDictionaryMessage = false;
+    hintOpenPending = true;
+    requestUpdate();
+    return;
+  }
+  settleOverlayRefresh();
+  beginHints();
+}
+
+void EpubReaderActivity::beginHints() {
+  hintOpenPending = false;
+  if (!section || !renderer.hasFrameBuffer()) return;
+  // Page + word boxes (~2 KB for a full page) live until the hints close.
+  auto session = makeUniqueNoThrow<HintSession>();
+  if (!session) {
+    LOG_ERR("HNT", "OOM: HintSession");
+    showKeyPopupLocked(tr(STR_DICT_LOW_MEMORY), true);
+    return;
+  }
+  session->page = section->loadPage(section->currentPage);
+  if (!session->page) {
+    LOG_ERR("HNT", "Failed to load page %d", section->currentPage);
+    return;
+  }
+  // Same origin renderBook() draws the page at.
+  int marginTop, marginRight, marginBottom, marginLeft;
+  renderer.getOrientedViewableTRBL(&marginTop, &marginRight, &marginBottom, &marginLeft);
+  marginTop += SETTINGS.screenMargin;
+  marginLeft += SETTINGS.screenMargin;
+  deckpoint::reader::extractPageWords(renderer, *session->page, SETTINGS.getReaderFontId(), marginLeft, marginTop,
+                                      session->words);
+  if (session->words.empty()) {
+    showKeyPopupLocked(tr(STR_KEYS_NO_WORDS), true);
+    return;
+  }
+  session->matcher.begin(static_cast<uint16_t>(std::min<size_t>(session->words.size(), HintLabels::MAX_TARGETS)));
+  session->pageStored = !xteinkClassPanel() && renderer.storeBwBuffer();
+  hints = std::move(session);
+  drawHintLabels();
+  pushOverlayRefresh();
+}
+
+void EpubReaderActivity::drawHintLabels() const {
+  if (!hints) return;
+  const HintMatcher& matcher = hints->matcher;
+  const size_t typedLen = strlen(matcher.typed());
+  const int screenW = renderer.getScreenWidth();
+  const int screenH = renderer.getScreenHeight();
+  const int tagH = renderer.getLineHeight(LABEL_FONT_ID) + 2 * LABEL_PAD;
+  for (uint16_t i = 0; i < matcher.labels().count(); i++) {
+    if (!matcher.matches(i)) continue;
+    char label[HintLabels::MAX_LABEL_LEN + 1];
+    matcher.labels().label(i, label);
+    // Once a prefix is typed only the letter still to type is shown.
+    const char* shown = label + typedLen;
+    const WordBox& word = hints->words[i];
+    const int tagW = renderer.getTextWidth(LABEL_FONT_ID, shown) + 2 * LABEL_PAD;
+    const int x = std::max(0, std::min(static_cast<int>(word.x), screenW - tagW));
+    const int y = std::max(0, std::min(static_cast<int>(word.y), screenH - tagH));
+    renderer.fillRect(x, y, tagW, tagH, true);
+    renderer.drawText(LABEL_FONT_ID, x + LABEL_PAD, y + LABEL_PAD, shown, false);
+  }
+}
+
+bool EpubReaderActivity::closeHintsLocked(const bool restorePage) {
+  hintsOpen = false;
+  hintOpenPending = false;
+  if (!hints) return false;
+  bool rerender = false;
+  if (restorePage && hints->pageStored && !hints->stale) {
+    settleOverlayRefresh();
+    // No baseline resync: the glass shows the labels, and erasing them needs
+    // the differential to keep diffing against the last pushed frame.
+    renderer.restoreBwBuffer(/*resyncPanelBaseline=*/false);
+    pushOverlayRefresh();
+  } else {
+    if (hints->pageStored) renderer.discardStoredBwBuffer();
+    rerender = restorePage && !hints->stale;
+  }
+  hints.reset();
+  return rerender;
+}
+
+void EpubReaderActivity::closeHints(const bool restorePage) {
+  bool rerender;
+  {
+    RenderLock lock;
+    rerender = closeHintsLocked(restorePage);
+  }
+  if (rerender) requestUpdate();
+}
+
+void EpubReaderActivity::hintKey(const freeink::KeyEvent& event) {
+  char word[MAX_LOOKUP_WORD];
+  word[0] = '\0';
+  bool rerender = false;
+  bool passThrough = false;
+  {
+    RenderLock lock;
+    if (!hints || hints->stale) {
+      const bool cancel =
+          event.special == freeink::SpecialKey::Escape || event.special == freeink::SpecialKey::Backspace;
+      if (hintOpenPending && !cancel) return;  // labels not up yet: wait for them
+      // Esc dropped a pending open, or a page render already erased the
+      // labels and the key belongs to the reader again.
+      passThrough = !hintOpenPending;
+      closeHintsLocked(false);
+    } else {
+      switch (hints->matcher.feed(event)) {
+        case HintMatcher::Result::Narrowed:
+          if (hints->pageStored) {
+            settleOverlayRefresh();
+            renderer.restoreBwBuffer(/*resyncPanelBaseline=*/false);
+            // The restore freed the copy; take a fresh one (at most once per
+            // session, labels being two letters at most).
+            hints->pageStored = renderer.storeBwBuffer();
+            drawHintLabels();
+            pushOverlayRefresh();
+          } else {
+            hints->redrawAfterRender = true;
+            rerender = true;
+          }
+          break;
+        case HintMatcher::Result::Cancelled:
+          rerender = closeHintsLocked(true);
+          break;
+        case HintMatcher::Result::Selected: {
+          const WordBox& box = hints->words[hints->matcher.selected()];
+          snprintf(word, sizeof(word), "%s", box.text);
+          settleOverlayRefresh();
+          if (hints->pageStored) renderer.restoreBwBuffer(/*resyncPanelBaseline=*/false);
+          hints->pageStored = false;
+          // The chosen word inverted on the clean page; the "Looking up"
+          // popup that follows pushes both in one refresh.
+          const int fontId = SETTINGS.getReaderFontId();
+          renderer.getFontCacheManager()->prewarmCache(
+              fontId, box.text, static_cast<uint8_t>(1u << (static_cast<uint8_t>(box.style) & 0x03)));
+          renderer.fillRect(box.x - 2, box.y - 2, box.width + 4, renderer.getLineHeight(fontId) + 4, true);
+          renderer.drawText(fontId, box.x, box.y, box.text, false, box.style);
+          hints.reset();
+          hintsOpen = false;
+          break;
+        }
+        case HintMatcher::Result::Ignored:
+        default:
+          break;
+      }
+    }
+  }
+  if (rerender) requestUpdate();
+  if (passThrough) {
+    runReaderCommand(readerKeys.feed(event));
+    return;
+  }
+  if (word[0] == '\0') return;
+
+  char msg[96];
+  msg[0] = '\0';
+  switch (lookUpWord(word, msg, sizeof(msg), true)) {
+    case CommandResult::Left:
+      keysSuspended = true;
+      break;
+    case CommandResult::Message:
+      // The toast's expiry re-renders the page, clearing the inverted word.
+      showKeyPopup(msg, true);
+      break;
+    default:
+      requestUpdate();
+      break;
+  }
+}
+
+bool EpubReaderActivity::hintsTick() {
+  if (!hintsOpen) return false;
+  if (!wantsRawKeys()) {
+    // Something else took over the screen: drop the labels without painting.
+    closeHints(false);
+    return false;
+  }
+  {
+    // A render that dropped the labels (or a pending open that found no
+    // words) ends the hints; never block the loop on a render for this.
+    RenderLock lock(RenderLock::Mode::Try);
+    if (lock.ownsLock() && !hintOpenPending && (!hints || hints->stale)) {
+      closeHintsLocked(false);
+      return false;
+    }
+  }
+  // Hold the auto-turn interval and swallow buttons / taps while picking.
+  lastPageTurnTime = millis();
+  return true;
+}
+
+void EpubReaderActivity::hintsBeforeRender() {
+  if (!hints) return;
+  if (hints->pageStored) {
+    renderer.discardStoredBwBuffer();
+    hints->pageStored = false;
+  }
+  if (!hints->redrawAfterRender) hints->stale = true;
+}
+
+void EpubReaderActivity::hintsAfterRender() {
+  if (hintOpenPending) {
+    beginHints();
+    return;
+  }
+  if (!hints || hints->stale || !hints->redrawAfterRender || !renderer.hasFrameBuffer()) return;
+  hints->redrawAfterRender = false;
+  hints->pageStored = !xteinkClassPanel() && renderer.storeBwBuffer();
+  drawHintLabels();
+  pushOverlayRefresh();
+}

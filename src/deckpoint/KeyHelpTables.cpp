@@ -72,7 +72,8 @@ constexpr KeyHelpEntry READER[] = {
     {"Esc", StrId::STR_KH_READER_ESC},
     {":", StrId::STR_KH_COMMAND_LINE},
     {"D", StrId::STR_KH_LOOKUP_TYPED},
-    {"d", StrId::STR_KH_DICT_SOON},
+    {"d", StrId::STR_KH_DICT_HINTS},
+    {"d: a-z / Bksp / Esc", StrId::STR_KH_HINT_KEYS},
     {"/ n N", StrId::STR_KH_SEARCH_SOON},
 };
 

@@ -19,6 +19,7 @@
 #include "components/OptionPopup.h"
 #include "deckpoint/CommandLine.h"            // DECKPOINT
 #include "deckpoint/KeyHelp.h"                // DECKPOINT
+#include "deckpoint/reader/HintSession.h"     // DECKPOINT
 #include "deckpoint/reader/Marks.h"           // DECKPOINT
 #include "deckpoint/reader/ReaderCommands.h"  // DECKPOINT
 #include "deckpoint/reader/ReaderKeys.h"      // DECKPOINT
@@ -207,6 +208,7 @@ class EpubReaderActivity final : public ReaderActivity {
   bool jumpToPosition(const deckpoint::reader::MarkPosition& position);
   bool ensureMarksLoaded();
   void showKeyPopup(const char* text, bool timed);
+  void showKeyPopupLocked(const char* text, bool timed);  // caller holds the RenderLock
   void keyPopupTick();
   // Contents list; fromKeys: Esc returns to the page (not the reader menu) and
   // a pick records the jump-back position.
@@ -245,6 +247,29 @@ class EpubReaderActivity final : public ReaderActivity {
   void commandLineAfterRender();
   // 1-based page of the current chapter (jump-back recorded).
   void goToChapterPage(int page);
+
+  // DECKPOINT: `d` hint-mode dictionary (deckpoint/reader/EpubReaderHints.cpp).
+  // `hints` and hintOpenPending are shared with the render task (RenderLock);
+  // hintsOpen is the main loop's own view: while set the hints own every key.
+  std::unique_ptr<deckpoint::reader::HintSession> hints;
+  bool hintOpenPending = false;  // labels go up after the clean page render
+  bool hintsOpen = false;
+  void openHints(bool pageDirty);
+  // Caller holds the RenderLock for the *Locked / begin / draw / render hooks.
+  void beginHints();
+  void drawHintLabels() const;
+  // Returns true when the page must be re-rendered (no stored copy to restore).
+  bool closeHintsLocked(bool restorePage);
+  void closeHints(bool restorePage);
+  void hintKey(const freeink::KeyEvent& event);
+  // From loop(): true while the hints own input.
+  bool hintsTick();
+  void hintsBeforeRender();
+  void hintsAfterRender();
+  // Dictionary lookup shared by `:dict` and the hints (ReaderCommands.cpp):
+  // opens the definition (Left) or writes why not into msg (Message).
+  // Progress shows in the command band, or as a popup for the hints.
+  deckpoint::CommandResult lookUpWord(const char* word, char* msg, size_t msgSize, bool fromHints);
 
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);

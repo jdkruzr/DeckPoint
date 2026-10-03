@@ -7,7 +7,8 @@
 #include <vector>
 
 #include "activities/Activity.h"
-#include "deckpoint/KeyHelp.h"  // DECKPOINT
+#include "deckpoint/KeyHelp.h"           // DECKPOINT
+#include "deckpoint/reader/PageWords.h"  // DECKPOINT
 #include "util/Dictionary.h"
 
 // Word selection over the current reader page: Left/Right step through words
@@ -29,16 +30,9 @@ class DictionaryWordSelectActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
-  // Screen box of one selectable word. `text` points into the owned Page's
-  // TextBlock arena (NUL-terminated), valid for this activity's lifetime.
-  struct WordBox {
-    int16_t x;
-    int16_t y;
-    int16_t width;
-    uint16_t row;
-    const char* text;
-    EpdFontFamily::Style style;
-  };
+  // DECKPOINT: word boxes come from deckpoint/reader/PageWords; `text` points
+  // into the owned Page's TextBlock arena, valid for this activity's lifetime.
+  using WordBox = deckpoint::reader::WordBox;
 
   enum class Popup : uint8_t { None, Busy, NotFound, Error };
 

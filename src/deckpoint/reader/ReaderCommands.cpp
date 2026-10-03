@@ -108,55 +108,12 @@ struct ReaderCommandHandlers {
   }
 
   static CommandResult dict(void* ctx, const char* args, char* msg, const size_t msgSize) {
-    auto* r = reader(ctx);
     if (SETTINGS.dictionaryName[0] == '\0') return message(msg, msgSize, tr(STR_DICT_NO_DICT_SET));
     if (args[0] == '\0') {
       snprintf(msg, msgSize, "%s: dict <word>", tr(STR_CMD_USAGE));
       return CommandResult::Message;
     }
-    r->showCommandMessage(tr(STR_DICT_LOOKING_UP));
-    // ~0.4 KB of lookup state, only for the lookup; freed before the definition screen.
-    auto dictionary = makeUniqueNoThrow<Dictionary>();
-    if (!dictionary) {
-      LOG_ERR("CMD", "OOM: Dictionary");
-      return message(msg, msgSize, tr(STR_DICT_LOW_MEMORY));
-    }
-    if (!dictionary->open(SETTINGS.dictionaryName)) return message(msg, msgSize, tr(STR_DICT_ERROR));
-    if (dictionary->needsIndex()) {
-      r->showCommandMessage(tr(STR_DICT_INDEXING));
-      Dictionary::IndexResult indexResult = Dictionary::IndexResult::Ok;
-      if (!dictionary->buildIndex(&indexBuildYield, nullptr, &indexResult)) {
-        return message(msg, msgSize,
-                       indexResult == Dictionary::IndexResult::LowMemory ? tr(STR_DICT_LOW_MEMORY)
-                                                                          : tr(STR_DICT_READ_FAILED));
-      }
-    }
-    std::string definition;
-    std::string headword;
-    Dictionary::LookupResult result = Dictionary::LookupResult::NotFound;
-    if (!dictionary->lookup(args, definition, headword, &result)) {
-      switch (result) {
-        case Dictionary::LookupResult::Decompress:
-          return message(msg, msgSize, tr(STR_DICT_DECOMPRESS_ERROR));
-        case Dictionary::LookupResult::LowMemory:
-          return message(msg, msgSize, tr(STR_DICT_LOW_MEMORY));
-        case Dictionary::LookupResult::ReadError:
-          return message(msg, msgSize, tr(STR_DICT_READ_FAILED));
-        default:
-          snprintf(msg, msgSize, "%s: %s", tr(STR_DICT_NOT_FOUND), args);
-          return CommandResult::Message;
-      }
-    }
-    const bool html = dictionary->definitionsAreHtml();
-    dictionary.reset();
-    auto screen = makeUniqueNoThrow<DictionaryDefinitionActivity>(r->renderer, r->mappedInput, std::move(headword),
-                                                                  std::move(definition), html);
-    if (!screen) {
-      LOG_ERR("CMD", "OOM: DictionaryDefinitionActivity");
-      return message(msg, msgSize, tr(STR_DICT_LOW_MEMORY));
-    }
-    r->startActivityForResult(std::move(screen), [r](const ActivityResult&) { r->requestUpdate(); });
-    return CommandResult::Left;
+    return reader(ctx)->lookUpWord(args, msg, msgSize, false);
   }
 
   static CommandResult night(void* ctx, const char*, char*, size_t) {
@@ -606,4 +563,58 @@ void EpubReaderActivity::openBookmarksList(const bool fromKeys) {
     }
     applyProgressChangeResult(result, !fromKeys);
   });
+}
+
+CommandResult EpubReaderActivity::lookUpWord(const char* word, char* msg, const size_t msgSize, const bool fromHints) {
+  const auto progress = [this, fromHints](const char* text) {
+    if (fromHints) {
+      showKeyPopup(text, false);
+    } else {
+      showCommandMessage(text);
+    }
+  };
+  if (SETTINGS.dictionaryName[0] == '\0') return message(msg, msgSize, tr(STR_DICT_NO_DICT_SET));
+  progress(tr(STR_DICT_LOOKING_UP));
+  // ~0.4 KB of lookup state, only for the lookup; freed before the definition screen.
+  auto dictionary = makeUniqueNoThrow<Dictionary>();
+  if (!dictionary) {
+    LOG_ERR("CMD", "OOM: Dictionary");
+    return message(msg, msgSize, tr(STR_DICT_LOW_MEMORY));
+  }
+  if (!dictionary->open(SETTINGS.dictionaryName)) return message(msg, msgSize, tr(STR_DICT_ERROR));
+  if (dictionary->needsIndex()) {
+    progress(tr(STR_DICT_INDEXING));
+    Dictionary::IndexResult indexResult = Dictionary::IndexResult::Ok;
+    if (!dictionary->buildIndex(&indexBuildYield, nullptr, &indexResult)) {
+      return message(msg, msgSize,
+                     indexResult == Dictionary::IndexResult::LowMemory ? tr(STR_DICT_LOW_MEMORY)
+                                                                        : tr(STR_DICT_READ_FAILED));
+    }
+  }
+  std::string definition;
+  std::string headword;
+  Dictionary::LookupResult result = Dictionary::LookupResult::NotFound;
+  if (!dictionary->lookup(word, definition, headword, &result)) {
+    switch (result) {
+      case Dictionary::LookupResult::Decompress:
+        return message(msg, msgSize, tr(STR_DICT_DECOMPRESS_ERROR));
+      case Dictionary::LookupResult::LowMemory:
+        return message(msg, msgSize, tr(STR_DICT_LOW_MEMORY));
+      case Dictionary::LookupResult::ReadError:
+        return message(msg, msgSize, tr(STR_DICT_READ_FAILED));
+      default:
+        snprintf(msg, msgSize, "%s: %s", tr(STR_DICT_NOT_FOUND), word);
+        return CommandResult::Message;
+    }
+  }
+  const bool html = dictionary->definitionsAreHtml();
+  dictionary.reset();
+  auto screen = makeUniqueNoThrow<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
+                                                                std::move(definition), html);
+  if (!screen) {
+    LOG_ERR("CMD", "OOM: DictionaryDefinitionActivity");
+    return message(msg, msgSize, tr(STR_DICT_LOW_MEMORY));
+  }
+  startActivityForResult(std::move(screen), [this](const ActivityResult&) { requestUpdate(); });
+  return CommandResult::Left;
 }
