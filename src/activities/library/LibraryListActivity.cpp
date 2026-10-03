@@ -23,7 +23,6 @@
 #include "components/UIScale.h"
 #include "components/UITheme.h"
 #include "components/icons/headerIcons.h"
-#include "deckpoint/KeyLegend.h"  // DECKPOINT
 #include "deckpoint/icons/search16.h"  // DECKPOINT
 #include "components/icons/listIcons.h"
 #include "components/icons/search32.h"
@@ -1042,13 +1041,8 @@ const char* LibraryListActivity::headerTitle() const {
 void LibraryListActivity::drawHoldHelp() const {
   if (mappedInput.hasTouch() || groupsCollapsed) return;
   if (halKeyboard.present()) {
-    // DECKPOINT: "Hold: ..." describes buttons a keyboard doesn't have; show
-    // the keys instead, left of the position readout on the same line.
-    if (!deckpoint::keyLegendEnabled()) return;
-    const char* legend = tabsFocused() ? "h/l: tab   k: search   Enter: list" : "j/k: move   Enter: open";
-    const auto& km = UITheme::getInstance().getMetrics();
-    const int ky = renderer.getScreenHeight() - km.buttonHintsHeight - renderer.getLineHeight(SMALL_FONT_ID);
-    renderer.drawText(SMALL_FONT_ID, SIDE_PADDING, ky, legend, true);
+    // DECKPOINT: "Hold: ..." describes buttons a keyboard doesn't have; the
+    // bottom key legend (drawFooter) names the keys instead.
     return;
   }
   const char* help = nullptr;
@@ -1083,7 +1077,9 @@ void LibraryListActivity::drawFooter() {
   const char* backLabel = backGoesHome ? tr(STR_HOME) : tr(STR_BACK);
   const char* confirmLabel = groupsCollapsed ? tr(STR_SELECT) : tr(STR_OPEN);
   const bool canSearch = tabsFocused() && !degraded;
-  const auto labels = mappedInput.mapLabels(backLabel, tabsFocused() ? tr(STR_TOGGLE) : confirmLabel,
+  // DECKPOINT: on a keyboard Enter on the tab strip enters the list (h/l switch tabs).
+  const char* tabConfirm = halKeyboard.present() ? tr(STR_SELECT) : tr(STR_TOGGLE);
+  const auto labels = mappedInput.mapLabels(backLabel, tabsFocused() ? tabConfirm : confirmLabel,
                                             canSearch ? tr(STR_SEARCH) : tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
