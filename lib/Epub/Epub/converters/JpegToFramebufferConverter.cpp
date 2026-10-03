@@ -6,6 +6,7 @@
 #include <JPEGDEC.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <ToneCurve.h>
 
 #include <cstdlib>
 #include <memory>
@@ -48,6 +49,16 @@ struct JpegContext {
   bool caching{false};
 
   uint32_t lastYieldMs{0};  // throttle state for yieldDuringDecode()
+
+  // DECKPOINT: auto-levels LUT applied before quantization; nullptr = identity.
+  const uint8_t* toneLut{nullptr};
+};
+
+// DECKPOINT: auto-levels prepass state (1/8-scale DC decode into a histogram).
+struct JpegHistogramContext {
+  ToneCurve::Histogram* hist{nullptr};
+  int scaledHeight{0};
+  uint32_t lastYieldMs{0};
 };
 
 // File I/O callbacks use pFile->fHandle to access the HalFile*,
@@ -120,6 +131,22 @@ constexpr int FP_SHIFT = 16;
 constexpr int32_t FP_ONE = 1 << FP_SHIFT;
 constexpr int32_t FP_MASK = FP_ONE - 1;
 
+// DECKPOINT: histogram-only draw callback for the auto-levels prepass.
+int jpegHistogramCallback(JPEGDRAW* pDraw) {
+  auto* hctx = reinterpret_cast<JpegHistogramContext*>(pDraw->pUser);
+  if (!hctx || !hctx->hist) return 0;
+  ImageToFramebufferDecoder::yieldDuringDecode(hctx->lastYieldMs);
+
+  const uint8_t* pixels = reinterpret_cast<const uint8_t*>(pDraw->pPixels);
+  int rows = pDraw->iHeight;
+  if (pDraw->y + rows > hctx->scaledHeight) rows = hctx->scaledHeight - pDraw->y;
+  for (int r = 0; r < rows; r++) {
+    const uint8_t* row = pixels + r * pDraw->iWidth;
+    for (int c = 0; c < pDraw->iWidthUsed; c++) hctx->hist->add(row[c]);
+  }
+  return 1;
+}
+
 int jpegDrawCallback(JPEGDRAW* pDraw) {
   JpegContext* ctx = reinterpret_cast<JpegContext*>(pDraw->pUser);
   if (!ctx || !ctx->config || !ctx->renderer) return 0;
@@ -136,6 +163,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
   if (stride <= 0 || blockH <= 0 || validW <= 0) return 1;
 
   const bool useDithering = ctx->config->useDithering;
+  const uint8_t* toneLut = ctx->toneLut;  // DECKPOINT: auto-levels
   bool caching = ctx->caching;
   const int32_t fineScaleFPX = ctx->fineScaleFPX;
   const int32_t invScaleFPX = ctx->invScaleFPX;
@@ -200,6 +228,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
       for (int dstX = dstXStart; dstX < dstXEnd; dstX++) {
         const int outX = cfgX + dstX;
         uint8_t gray = row[dstX - blockX];
+        if (toneLut) gray = toneLut[gray];  // DECKPOINT: auto-levels
         uint8_t dithered;
         if (useDithering) {
           dithered = applyBayerDither4Level(gray, outX, outY);
@@ -259,6 +288,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
         int bot = ((int)row1[lx0] * fxInv + (int)row1[lx1] * fx) >> FP_SHIFT;
         uint8_t gray = (uint8_t)((top * fyInv + bot * fy) >> FP_SHIFT);
 
+        if (toneLut) gray = toneLut[gray];  // DECKPOINT: auto-levels
         uint8_t dithered;
         if (useDithering) {
           dithered = applyBayerDither4Level(gray, outX, outY);
@@ -282,6 +312,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
         int bot = ((int)row1[lx0] * fxInv + (int)row1[lx0 + 1] * fx) >> FP_SHIFT;
         uint8_t gray = (uint8_t)((top * fyInv + bot * fy) >> FP_SHIFT);
 
+        if (toneLut) gray = toneLut[gray];  // DECKPOINT: auto-levels
         uint8_t dithered;
         if (useDithering) {
           dithered = applyBayerDither4Level(gray, outX, outY);
@@ -308,6 +339,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
         int bot = ((int)row1[lx0] * fxInv + (int)row1[lx1] * fx) >> FP_SHIFT;
         uint8_t gray = (uint8_t)((top * fyInv + bot * fy) >> FP_SHIFT);
 
+        if (toneLut) gray = toneLut[gray];  // DECKPOINT: auto-levels
         uint8_t dithered;
         if (useDithering) {
           dithered = applyBayerDither4Level(gray, outX, outY);
@@ -341,6 +373,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
       if (lx >= validW) lx = validW - 1;
       uint8_t gray = row[lx];
 
+      if (toneLut) gray = toneLut[gray];  // DECKPOINT: auto-levels
       uint8_t dithered;
       if (useDithering) {
         dithered = applyBayerDither4Level(gray, outX, outY);
@@ -474,6 +507,49 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   LOG_DBG("JPG", "JPEG %dx%d -> %dx%d (scale %.2f, jpegScale 1/%d, fineScale %.2f)%s", srcWidth, srcHeight, destWidth,
           destHeight, targetScale, jpegScaleDenom, (float)destWidth / ctx.scaledSrcWidth,
           isProgressive ? " [progressive]" : "");
+
+  // DECKPOINT: auto-levels prepass. A 1/8-scale (DC-only, no IDCT) decode into a
+  // histogram, reusing this JPEGDEC instance, then re-open for the real decode.
+  // The 516-byte scratch is heap so it stays off the caller's stack; on OOM or a
+  // failed prepass the image renders untouched.
+  std::unique_ptr<ToneCurve::Scratch> tone;
+  if (ToneCurve::ENABLED) {
+    tone = makeUniqueNoThrow<ToneCurve::Scratch>();
+    if (!tone) LOG_ERR("JPG", "OOM: tone scratch, skipping auto-levels");
+  }
+  if (tone) {
+    const unsigned long prepassStart = millis();
+    tone->hist.clear();
+    JpegHistogramContext hctx;
+    hctx.hist = &tone->hist;
+    hctx.scaledHeight = (srcHeight + 7) / 8;
+    hctx.lastYieldMs = prepassStart;
+
+    jpeg->close();
+    bool prepassOk =
+        jpeg->open(imagePath.c_str(), jpegOpen, jpegClose, jpegRead, jpegSeek, jpegHistogramCallback) == 1;
+    if (prepassOk) {
+      jpeg->setPixelType(EIGHT_BIT_GRAYSCALE);
+      jpeg->setUserPointer(&hctx);
+      prepassOk = jpeg->decode(0, 0, JPEG_SCALE_EIGHTH) == 1;
+    }
+    jpeg->close();
+    rc = jpeg->open(imagePath.c_str(), jpegOpen, jpegClose, jpegRead, jpegSeek, jpegDrawCallback);
+    if (rc != 1) {
+      LOG_ERR("JPG", "Failed to re-open JPEG after prepass (err=%d): %s", jpeg->getLastError(), imagePath.c_str());
+      return false;
+    }
+
+    if (prepassOk) {
+      const ToneCurve::Result levels = ToneCurve::buildLut(tone->hist, tone->lut);
+      if (!levels.identity) ctx.toneLut = tone->lut;
+      LOG_DBG("JPG", "Auto-levels prepass %lu ms (%u samples): black=%u white=%u gamma=%u.%02u%s",
+              millis() - prepassStart, static_cast<unsigned>(tone->hist.total), levels.blackPoint, levels.whitePoint,
+              levels.gammaX100 / 100, levels.gammaX100 % 100, levels.identity ? " (identity)" : "");
+    } else {
+      LOG_ERR("JPG", "Auto-levels prepass failed, rendering without it");
+    }
+  }
 
   // Set pixel type to 8-bit grayscale (must be after open())
   jpeg->setPixelType(EIGHT_BIT_GRAYSCALE);

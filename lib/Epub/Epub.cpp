@@ -742,8 +742,9 @@ const std::string& Epub::getLanguage() const {
 }
 
 std::string Epub::getCoverBmpPath(bool cropped, bool originalThresholds) const {
+  // DECKPOINT: name suffixes version the cached pixels (auto-levels tone curve).
   const auto coverFileName =
-      std::string("cover") + (originalThresholds ? "_original" : "_legacy_v2") + (cropped ? "_crop" : "");
+      std::string("cover") + (originalThresholds ? "_original_v2" : "_legacy_v3") + (cropped ? "_crop" : "");
   return cachePath + "/" + coverFileName + ".bmp";
 }
 
@@ -831,8 +832,11 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
   return false;
 }
 
-std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb_[HEIGHT].bmp"; }
-std::string Epub::getThumbBmpPath(int height) const { return cachePath + "/thumb_" + std::to_string(height) + ".bmp"; }
+// DECKPOINT: "v2" versions the cached pixels (auto-levels tone curve).
+std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb_v2_[HEIGHT].bmp"; }
+std::string Epub::getThumbBmpPath(int height) const {
+  return cachePath + "/thumb_v2_" + std::to_string(height) + ".bmp";
+}
 
 bool Epub::generateThumbBmp(int height) const {
   // Already generated, return true

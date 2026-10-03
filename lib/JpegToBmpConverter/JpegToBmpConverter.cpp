@@ -5,6 +5,7 @@
 #include <JPEGDEC.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <ToneCurve.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -254,7 +255,21 @@ struct BmpConvertCtx {
   uint8_t rowsSinceYield;
   uint8_t blocksSinceYield;
   bool error;
+
+  // DECKPOINT: auto-levels LUT applied before dithering; nullptr = identity.
+  const uint8_t* toneLut;
 };
+
+// DECKPOINT: auto-levels prepass state (1/8-scale DC decode into a histogram).
+struct BmpHistogramCtx {
+  ToneCurve::Histogram* hist;
+  int scaledHeight;
+  uint8_t blocksSinceYield;
+};
+
+static inline uint8_t toneMap(const BmpConvertCtx* ctx, uint8_t gray) {
+  return ctx->toneLut ? ctx->toneLut[gray] : gray;
+}
 
 static void yieldDuringDecode(BmpConvertCtx* ctx) {
   if (++ctx->rowsSinceYield < 8) return;
@@ -274,18 +289,19 @@ static void writeOutputRow(BmpConvertCtx* ctx, const uint8_t* srcRow, int outY) 
 
   if (USE_8BIT_OUTPUT && !ctx->oneBit) {
     for (int x = 0; x < ctx->outWidth; x++) {
-      ctx->bmpRow[x] = adjustPixel(srcRow[x]);
+      ctx->bmpRow[x] = adjustPixel(toneMap(ctx, srcRow[x]));
     }
   } else if (ctx->oneBit) {
     for (int x = 0; x < ctx->outWidth; x++) {
-      const uint8_t bit = ctx->atkinson1BitDitherer ? ctx->atkinson1BitDitherer->processPixel(srcRow[x], x)
-                                                    : quantize1bit(srcRow[x], x, outY);
+      const uint8_t gray = toneMap(ctx, srcRow[x]);
+      const uint8_t bit = ctx->atkinson1BitDitherer ? ctx->atkinson1BitDitherer->processPixel(gray, x)
+                                                    : quantize1bit(gray, x, outY);
       ctx->bmpRow[x / 8] |= (bit << (7 - (x % 8)));
     }
     if (ctx->atkinson1BitDitherer) ctx->atkinson1BitDitherer->nextRow();
   } else {
     for (int x = 0; x < ctx->outWidth; x++) {
-      const uint8_t gray = adjustPixel(srcRow[x]);
+      const uint8_t gray = adjustPixel(toneMap(ctx, srcRow[x]));
       uint8_t twoBit;
       if (ctx->atkinsonDitherer) {
         twoBit = ctx->atkinsonDitherer->processPixel(gray, x);
@@ -394,12 +410,12 @@ static void flushScaledRow(BmpConvertCtx* ctx) {
 
   if (USE_8BIT_OUTPUT && !ctx->oneBit) {
     for (int x = 0; x < ctx->outWidth; x++) {
-      const uint8_t gray = (ctx->rowCount[x] > 0) ? (ctx->rowAccum[x] / ctx->rowCount[x]) : 0;
+      const uint8_t gray = toneMap(ctx, (ctx->rowCount[x] > 0) ? (ctx->rowAccum[x] / ctx->rowCount[x]) : 0);
       ctx->bmpRow[x] = adjustPixel(gray);
     }
   } else if (ctx->oneBit) {
     for (int x = 0; x < ctx->outWidth; x++) {
-      const uint8_t gray = (ctx->rowCount[x] > 0) ? (ctx->rowAccum[x] / ctx->rowCount[x]) : 0;
+      const uint8_t gray = toneMap(ctx, (ctx->rowCount[x] > 0) ? (ctx->rowAccum[x] / ctx->rowCount[x]) : 0);
       const uint8_t bit = ctx->atkinson1BitDitherer ? ctx->atkinson1BitDitherer->processPixel(gray, x)
                                                     : quantize1bit(gray, x, ctx->currentOutY);
       ctx->bmpRow[x / 8] |= (bit << (7 - (x % 8)));
@@ -407,7 +423,8 @@ static void flushScaledRow(BmpConvertCtx* ctx) {
     if (ctx->atkinson1BitDitherer) ctx->atkinson1BitDitherer->nextRow();
   } else {
     for (int x = 0; x < ctx->outWidth; x++) {
-      const uint8_t gray = adjustPixel((ctx->rowCount[x] > 0) ? (ctx->rowAccum[x] / ctx->rowCount[x]) : 0);
+      const uint8_t gray =
+          adjustPixel(toneMap(ctx, (ctx->rowCount[x] > 0) ? (ctx->rowAccum[x] / ctx->rowCount[x]) : 0));
       uint8_t twoBit;
       if (ctx->atkinsonDitherer) {
         twoBit = ctx->atkinsonDitherer->processPixel(gray, x);
@@ -433,6 +450,25 @@ static void flushScaledRow(BmpConvertCtx* ctx) {
 // in left-to-right, top-to-bottom order (baseline JPEG).
 // Accumulates columns into mcuBuf; once the last column arrives (completing the MCU
 // row), applies scaling + dithering and writes packed BMP rows to bmpOut.
+// DECKPOINT: histogram-only draw callback for the auto-levels prepass.
+int bmpHistogramCallback(JPEGDRAW* pDraw) {
+  auto* hctx = reinterpret_cast<BmpHistogramCtx*>(pDraw->pUser);
+  if (!hctx || !hctx->hist) return 0;
+  if (++hctx->blocksSinceYield >= 16) {
+    hctx->blocksSinceYield = 0;
+    yieldToIdle();
+  }
+
+  const uint8_t* pixels = reinterpret_cast<const uint8_t*>(pDraw->pPixels);
+  int rows = pDraw->iHeight;
+  if (pDraw->y + rows > hctx->scaledHeight) rows = hctx->scaledHeight - pDraw->y;
+  for (int r = 0; r < rows; r++) {
+    const uint8_t* row = pixels + r * pDraw->iWidth;
+    for (int c = 0; c < pDraw->iWidthUsed; c++) hctx->hist->add(row[c]);
+  }
+  return 1;
+}
+
 int bmpDrawCallback(JPEGDRAW* pDraw) {
   auto* ctx = reinterpret_cast<BmpConvertCtx*>(pDraw->pUser);
   if (!ctx || ctx->error) return 0;
@@ -692,6 +728,45 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
         LOG_ERR("JPG", "OOM: FloydSteinbergDitherer");
         return false;
       }
+    }
+  }
+
+  // DECKPOINT: auto-levels prepass. A 1/8-scale (DC-only, no IDCT) decode into a
+  // histogram, reusing this JPEGDEC instance; bmpJpegOpen rewinds the caller's
+  // file, so re-opening is cheap. On OOM or a failed prepass the cover converts
+  // untouched. The 516-byte scratch is heap to keep it off the caller's stack.
+  std::unique_ptr<ToneCurve::Scratch> tone;
+  if (ToneCurve::ENABLED) {
+    tone = makeUniqueNoThrow<ToneCurve::Scratch>();
+    if (!tone) LOG_ERR("JPG", "OOM: tone scratch, skipping auto-levels");
+  }
+  if (tone) {
+    const unsigned long prepassStart = millis();
+    tone->hist.clear();
+    BmpHistogramCtx hctx = {&tone->hist, (srcHeight + 7) / 8, 0};
+
+    jpeg->close();
+    bool prepassOk = jpeg->open("", bmpJpegOpen, bmpJpegClose, bmpJpegRead, bmpJpegSeek, bmpHistogramCallback) == 1;
+    if (prepassOk) {
+      jpeg->setPixelType(EIGHT_BIT_GRAYSCALE);
+      jpeg->setUserPointer(&hctx);
+      prepassOk = jpeg->decode(0, 0, JPEG_SCALE_EIGHTH) == 1;
+    }
+    jpeg->close();
+    rc = jpeg->open("", bmpJpegOpen, bmpJpegClose, bmpJpegRead, bmpJpegSeek, bmpDrawCallback);
+    if (rc != 1) {
+      LOG_ERR("JPG", "JPEG re-open after prepass failed (err=%d)", jpeg->getLastError());
+      return false;
+    }
+
+    if (prepassOk) {
+      const ToneCurve::Result levels = ToneCurve::buildLut(tone->hist, tone->lut);
+      if (!levels.identity) ctx.toneLut = tone->lut;
+      LOG_DBG("JPG", "Auto-levels prepass %lu ms (%u samples): black=%u white=%u gamma=%u.%02u%s",
+              millis() - prepassStart, static_cast<unsigned>(tone->hist.total), levels.blackPoint, levels.whitePoint,
+              levels.gammaX100 / 100, levels.gammaX100 % 100, levels.identity ? " (identity)" : "");
+    } else {
+      LOG_ERR("JPG", "Auto-levels prepass failed, converting without it");
     }
   }
 

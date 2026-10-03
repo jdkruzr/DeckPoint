@@ -33,14 +33,22 @@ bool ImageBlock::imageExists() const { return Storage.exists(imagePath.c_str());
 
 namespace {
 
-std::string getCachePath(const std::string& imagePath) {
-  // Replace extension with .pxc (pixel cache)
+// DECKPOINT: the pixel-cache suffix doubles as its format/content version; it
+// changes whenever cached pixels for the same source would differ (v2: auto-levels
+// tone curve before dithering), so stale caches are simply never found.
+constexpr const char* PXC_SUFFIX = ".px2";
+constexpr const char* LEGACY_PXC_SUFFIX = ".pxc";
+
+std::string withCacheSuffix(const std::string& imagePath, const char* suffix) {
+  // Replace the image extension with the pixel-cache suffix
   size_t dotPos = imagePath.rfind('.');
   if (dotPos != std::string::npos) {
-    return imagePath.substr(0, dotPos) + ".pxc";
+    return imagePath.substr(0, dotPos) + suffix;
   }
-  return imagePath + ".pxc";
+  return imagePath + suffix;
 }
+
+std::string getCachePath(const std::string& imagePath) { return withCacheSuffix(imagePath, PXC_SUFFIX); }
 
 bool readValidCacheHeader(HalFile& cacheFile, const int expectedWidth, const int expectedHeight, uint16_t& cachedWidth,
                           uint16_t& cachedHeight) {
@@ -383,6 +391,10 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   }
 
   LOG_DBG("IMG", "Decoding and caching: %s", imagePath.c_str());
+
+  // DECKPOINT: drop the superseded pre-v2 cache for this image (one-time SD cleanup).
+  const std::string legacyCachePath = withCacheSuffix(imagePath, LEGACY_PXC_SUFFIX);
+  if (Storage.exists(legacyCachePath.c_str())) Storage.remove(legacyCachePath.c_str());
 
   RenderConfig config;
   config.x = x;

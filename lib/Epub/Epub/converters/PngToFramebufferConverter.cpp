@@ -6,6 +6,7 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <PNGdec.h>
+#include <ToneCurve.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -45,6 +46,11 @@ struct PngContext {
   uint8_t* grayLineBuffer{nullptr};
   uint8_t* alphaLineBuffer{nullptr};
   uint32_t lastYieldMs{0};  // throttle state for yieldDuringDecode()
+
+  // DECKPOINT: auto-levels. While `histogram` is set the draw callback only
+  // samples into it (prepass); toneLut (nullptr = identity) applies afterwards.
+  ToneCurve::Histogram* histogram{nullptr};
+  const uint8_t* toneLut{nullptr};
 };
 
 // File I/O callbacks use pFile->fHandle to access the HalFile*,
@@ -85,6 +91,12 @@ int32_t pngSeekWithHandle(PNGFILE* pFile, int32_t pos) {
 // the ESP32-C3 where total RAM is ~320 KB.
 constexpr size_t PNG_DECODER_APPROX_SIZE = 44 * 1024;                          // ~42 KB + overhead
 constexpr size_t MIN_FREE_HEAP_FOR_PNG = PNG_DECODER_APPROX_SIZE + 16 * 1024;  // decoder + 16 KB headroom
+
+// DECKPOINT: PNG cannot be decoded at reduced scale, so the auto-levels prepass
+// is a full second inflate. Bound it to sources where that stays cheap.
+constexpr int64_t AUTO_LEVELS_MAX_SOURCE_PIXELS = 1024 * 1024;
+// Prepass samples every Nth row and column.
+constexpr int AUTO_LEVELS_SAMPLE_STEP = 4;
 
 // PNGdec keeps TWO scanlines in its internal ucPixels buffer (current + previous)
 // and each scanline includes a leading filter byte.
@@ -223,6 +235,20 @@ int pngDrawCallback(PNGDRAW* pDraw) {
   if (srcY < ctx->cropTop || srcY >= ctx->cropTop + ctx->visibleHeight) return 1;
   const int visibleSrcY = srcY - ctx->cropTop;
 
+  // DECKPOINT: auto-levels prepass - sample the visible area, render nothing.
+  if (ctx->histogram) {
+    if (visibleSrcY % AUTO_LEVELS_SAMPLE_STEP != 0) return 1;
+    const uint32_t transparent = ctx->decoder ? ctx->decoder->getTransparentColor() : 0;
+    convertLineToGray(pDraw->pPixels, ctx->grayLineBuffer, srcWidth, pDraw->iPixelType, pDraw->iBpp, pDraw->pPalette,
+                      pDraw->iHasAlpha, transparent, ctx->alphaLineBuffer);
+    const int xEnd = ctx->cropLeft + ctx->visibleWidth;
+    for (int x = ctx->cropLeft; x < xEnd; x += AUTO_LEVELS_SAMPLE_STEP) {
+      if (ctx->alphaLineBuffer && ctx->alphaLineBuffer[x] < 128) continue;
+      ctx->histogram->add(ctx->grayLineBuffer[x]);
+    }
+    return 1;
+  }
+
   // Map source rows with the exact output-height ratio. During downscaling,
   // multiple source rows can select the same output row; during upscaling, one
   // source row must be repeated across every output row in its range. Emitting
@@ -286,6 +312,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
         const uint8_t alpha = ctx->alphaLineBuffer ? ctx->alphaLineBuffer[srcX] : 255;
         if (alpha >= 8 && alpha > alphaThreshold4x4(outX, outY)) {
           uint8_t gray = ctx->grayLineBuffer[srcX];
+          if (ctx->toneLut) gray = ctx->toneLut[gray];  // DECKPOINT: auto-levels
 
           uint8_t ditheredGray;
           if (useDithering) {
@@ -445,6 +472,40 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   }
   ctx.grayLineBuffer = lineBuffers.get();
   ctx.alphaLineBuffer = retainAlpha ? ctx.grayLineBuffer + grayBufSize : nullptr;
+
+  // DECKPOINT: auto-levels prepass (see AUTO_LEVELS_MAX_SOURCE_PIXELS), reusing
+  // this PNG instance and line buffers, then re-open for the real decode. The
+  // 516-byte scratch is heap so it stays off the caller's stack.
+  std::unique_ptr<ToneCurve::Scratch> tone;
+  if (ToneCurve::ENABLED && static_cast<int64_t>(ctx.srcWidth) * ctx.srcHeight <= AUTO_LEVELS_MAX_SOURCE_PIXELS) {
+    tone = makeUniqueNoThrow<ToneCurve::Scratch>();
+    if (!tone) LOG_ERR("PNG", "OOM: tone scratch, skipping auto-levels");
+  }
+  if (tone) {
+    const unsigned long prepassStart = millis();
+    tone->hist.clear();
+    ctx.histogram = &tone->hist;
+    ctx.lastYieldMs = prepassStart;
+    const bool prepassOk = png->decode(&ctx, 0) == PNG_SUCCESS;
+    ctx.histogram = nullptr;
+    png->close();
+    rc = png->open(imagePath.c_str(), pngOpenWithHandle, pngCloseWithHandle, pngReadWithHandle, pngSeekWithHandle,
+                   pngDrawCallback);
+    if (rc != PNG_SUCCESS) {
+      LOG_ERR("PNG", "Failed to re-open PNG after prepass: %d", rc);
+      return false;
+    }
+
+    if (prepassOk) {
+      const ToneCurve::Result levels = ToneCurve::buildLut(tone->hist, tone->lut);
+      if (!levels.identity) ctx.toneLut = tone->lut;
+      LOG_DBG("PNG", "Auto-levels prepass %lu ms (%u samples): black=%u white=%u gamma=%u.%02u%s",
+              millis() - prepassStart, static_cast<unsigned>(tone->hist.total), levels.blackPoint, levels.whitePoint,
+              levels.gammaX100 / 100, levels.gammaX100 % 100, levels.identity ? " (identity)" : "");
+    } else {
+      LOG_ERR("PNG", "Auto-levels prepass failed, rendering without it");
+    }
+  }
 
   // Stream the pixel cache to disk. PNGdec delivers source scanlines top to
   // bottom and we emit at most one (downscaled) output row per callback, so the
