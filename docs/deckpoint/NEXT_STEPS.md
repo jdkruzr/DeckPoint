@@ -25,8 +25,9 @@ Read `PROGRESS.md` first (dev loop, conventions). Full roadmap with rationale:
   reserve the band / hide it in image views).
 - (done) Compact builds cap a block's combined CSS side insets at 1/6 of the column.
 - File Browser: long names wrap to 2 lines (consider single-line truncation); File Transfer list
-  subtitles; any other screens not yet visited (reader sub-menus: Text Settings, Bookmarks,
-  Look Up, Go to %).
+  subtitles. Reader menus toured (425817e0); still to check: Look Up with a StarDict dictionary
+  on the SD (without one it just bounces back), Text Settings preview says "14 pt" while the
+  compact font is 17 px.
 - Web UI (Home -> File Transfer -> Join Network / Create Hotspot; `src/network/CrossPointWebServer.cpp`):
   try it end to end (file manager uploads, settings, fonts, OPDS, Wi-Fi, plugins) and give the
   on-device File Transfer screens the compact pass. Likely the nicest way to load books.
@@ -36,6 +37,8 @@ Read `PROGRESS.md` first (dev loop, conventions). Full roadmap with rationale:
 ## 3. Grayscale follow-ups
 - Gray test card: light band looked closer to mid-gray than light; consider separate light/dark
   tuning and a third frame value; verify on more images (covers, the Shadow Order cover).
+- Red Rising "PART I / SLAVE" ornament image renders as a coarse barcode-like band; check
+  image scaling/dither for small decorative images.
 - Text vs image tuning currently shared (2/1 works for both — keep unless photos say otherwise).
 - Sleep screen / cover images now get gray too — check them on glass.
 - Re-run the font contest with AA (Fira Sans, Atkinson Hyperlegible, IBM Plex Sans, Inter kept as
