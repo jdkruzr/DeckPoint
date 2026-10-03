@@ -90,6 +90,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 54
+
+Version 54 keeps the version 53 serialized layout unchanged. It was bumped
+because compact builds size SD vector fonts as point size + 3 px and render
+anti-aliased vector glyphs with light hinting, which changes measured word
+widths and therefore line breaks.
+
 ### Version 53
 
 Version 53 keeps the version 52 serialized layout unchanged. It was bumped

@@ -49,6 +49,9 @@ Read `PROGRESS.md` first (dev loop, conventions). Full roadmap with rationale:
   can land between 1 and 2 of today's frames.
 - Covers / sleep-screen images in gray: check on glass (cover sleep screen uses which base?).
 - Reader pages with images: base is fast, so images there use the text profile; check.
+- AA toggle "off" mode (user, 2026-10-03): Text Settings > Style > Text Anti-Aliasing exists, but
+  "off" thresholds 2-bit glyphs (bloats them). Make "off" use FreeType mono hinting instead (as
+  the crisp compact UI fonts do): runtime for TTF, pre-generated --mono sets for built-ins.
 - Re-run the font contest with AA (Fira Sans, Atkinson Hyperlegible, IBM Plex Sans, Inter kept as
   contenders; `tools/fontlab`; pin weights for variable fonts). Specimen BMPs live in
   `/Font Tests/` on the SD (1-bit; regenerate for AA) - or try direct .ttf loading (Phase 7).

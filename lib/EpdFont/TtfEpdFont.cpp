@@ -112,7 +112,13 @@ bool TtfEpdFont::load(const uint16_t pointSize, const bool twoBit, const size_t 
   //   ppem = pointSize * 150 / 72, kept in 26.6 so the fractional part survives
   // (glyphs raster and advance at the exact ppem; the per-face sizePx is the
   // rounded form for the integer-pixel Font API).
+#if DECKPOINT_COMPACT_UI
+  // DECKPOINT: compact builds size their built-in fonts as pointSize + 3 px for ~129 PPI
+  // glass (src/deckpoint/CompactReaderFonts.h); vector fonts follow the same ladder.
+  size26_6_ = (static_cast<uint32_t>(pointSize) + 3u) * 64u;
+#else
   size26_6_ = (static_cast<uint32_t>(pointSize) * 150u * 64u + 36u) / 72u;
+#endif
   const uint16_t sizePx = static_cast<uint16_t>((size26_6_ + 32u) >> 6);
   resolveFaces();
   for (int i = 0; i < 4; ++i) {
@@ -163,6 +169,12 @@ void TtfEpdFont::initFace(Face& f) {
     freeink::font::FtFont::RenderOptions ro;
     ro.hinting = freeink::font::FtFont::HintingMode::Auto;
     ro.stemDarkening = true;
+#if DECKPOINT_COMPACT_UI
+    // DECKPOINT: anti-aliased (2-bit) glyphs reach the glass as real gray here, so they
+    // don't need horizontally snapped stems. Light hinting keeps the font's own advances;
+    // Auto's snapped advances open gaps after narrow letters ("shepherdi ng").
+    if (f.twoBit) ro.hinting = freeink::font::FtFont::HintingMode::Light;
+#endif
     if (!f.ft.setRenderOptions(ro)) {
       LOG_ERR("TTF", "Auto hinting unavailable (FREEINK_FONT_ENABLE_AUTOHINT not compiled)");
     }
