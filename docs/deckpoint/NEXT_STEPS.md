@@ -3,31 +3,20 @@
 Read `PROGRESS.md` first (dev loop, conventions). Full roadmap with rationale:
 `/home/jtd/.claude/plans/abstract-weaving-pike.md`. Last updated 2026-10-02.
 
-## 1. In progress — reader layout bug: TOC entries shifted off the left edge
-- Repro: Red Rising 3-Book Bundle (`~/Downloads/Red Rising 3-Book Bundle*.epub`) → reader menu →
-  Select Chapter → "Contents" under *Red Rising* → page 2/8. Screenshot shows "rologue" and
-  "Helldiver" at x≈0; the markup is "Prologue" / "1: Helldiver" — every `div.toc_chap` line is
-  ~45 px too far left (expected x≈34). `div.toc_part0` ("Part I: Slave") renders fine.
-- Markup: `OEBPS/xhtml/01_Brow_9780345539793_epub_toc_r1.xhtml`; CSS
-  `OEBPS/css/9780593725320_style1.css`: `div.toc_chap {margin-left:1.6em; text-align:left;
-  text-indent:0; font-size:0.9em; line-height:1.4em}`; `toc_part0` has no text-indent and 1em.
-  Content is `<div class="toc_chap"><a class="hlink">…</a></div>` (inline anchor directly in a div).
-  CSS is innocent; it is a layout-engine bug.
-- Already ruled out: `ParsedText::resolveFirstLineIndent` (explicit 0 can't go negative); the LTR
-  word placement in `ParsedText::extractLine` starts at indent/alignment offset and only moves right.
-  Next suspects: how block `marginLeft` (em at 0.9em font) and the page margin are added at render
-  (`lib/Epub/Epub/blocks/TextBlock.cpp`, `Page.cpp`), the explicit `text-indent:0` vs undefined path,
-  `extraStartOffset`, and the div→anchor inline style merge (`BlockStyle.h` ~L89).
-- Plan: reproduce with the host tests (`test/` CMake suite, e.g. `test/chapter_html_slim_parser`)
-  using a minimal snippet of that markup + CSS, find the negative offset, fix, add a regression test.
-  (Was about to hand this to an `ed3d-basic-agents:opus-general-purpose` agent.)
-- Upstream-worthy if it reproduces on stock CrossPoint.
+## 1. CSS stylesheet scoping (follow-up to the TOC bug, fixed in bef53e2d)
+- `Epub::parseCssFiles` (`lib/Epub/Epub.cpp:240-340`) merges every manifest `.css` into one rule
+  set; pages get rules from sheets they never `<link>`. Red Rising TOC: chapter lines now start at
+  the margin (hanging-indent clamp) but sit left of "Part I: Slave". Proper fix: tag rules with
+  their source sheet, apply only linked sheets (touches `SelectorEntry` + CSS cache format).
+  Upstream-worthy, as is the clamp in `ParsedText::resolveFirstLineIndent`.
+- KOSync: throwaway server `podman run -d --rm --name kosync-test -p 17200:17200
+  docker.io/koreader/kosync` → `http://192.168.8.95:17200`. KOSync syncs progress only, no
+  annotations.
 
 ## 2. Remaining UI pass (item "2" — mostly done)
 - Key legend overlaps full-screen images in the BMP viewer (draw it only where there's room, or
   reserve the band / hide it in image views).
-- Cap em-based CSS side margins on narrow screens (book CSS like `div.part {margin:0 2em}` leaves
-  a ~180 px rivered column) — user hasn't confirmed; ask before doing.
+- (done) Compact builds cap a block's combined CSS side insets at 1/6 of the column.
 - File Browser: long names wrap to 2 lines (consider single-line truncation); File Transfer list
   subtitles; any other screens not yet visited (reader sub-menus: Text Settings, Bookmarks,
   Look Up, Go to %).
