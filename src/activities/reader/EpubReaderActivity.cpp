@@ -1749,7 +1749,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     // Image pages use one base refresh before the grayscale pass. FAST leaves
     // the panel receptive to the gray waveform; pending cleanup still honors
     // the scheduled/manual HALF refresh.
+#if FREEINK_DEVICE_TDECKPRO
+    // DECKPOINT: overlay gray on the GDEQ031 is a short nudge from black, so image pages get
+    // the deep-clean base (no history ghosts, blacker black) and with it the image gray profile.
+    renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+#else
     renderer.displayBuffer(cleanImageBasePending ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+#endif
     pagesUntilFullRefresh = 1;
   } else if (combinedGrayscaleBase) {
     // Stash the base without activating; displayGrayBuffer() below commits
