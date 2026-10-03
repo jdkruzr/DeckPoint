@@ -713,7 +713,13 @@ int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const GfxRenderer
   if (!isFirstLine || !isNaturalAlign) {
     return 0;
   }
-  if (blockStyle.textIndentDefined && blockStyle.textIndent < 0) return blockStyle.textIndent;
+  // DECKPOINT: a hanging indent may pull the first line back to the content box's start edge,
+  // never past it. Book-wide CSS merging can pair one stylesheet's negative text-indent with
+  // another's smaller margin, which otherwise pushes the line off the left of the page.
+  if (blockStyle.textIndentDefined && blockStyle.textIndent < 0) {
+    const int startInset = blockStyle.isRtl ? blockStyle.rightInset() : blockStyle.leftInset();
+    return std::max<int>(blockStyle.textIndent, -std::max(startInset, 0));
+  }
   if (paragraphIndentSpaces == 0) return 0;
   return scaleSpace(renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR), wordSpacingPercent) * paragraphIndentSpaces;
 }

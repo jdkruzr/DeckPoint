@@ -90,6 +90,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 51
+
+Version 51 keeps the version 50 serialized layout unchanged. It was bumped
+because a negative `text-indent` no longer pulls a block's first line past the
+start edge of its content box (margin + padding); the indent is clamped to that
+inset. Cached word positions from version 50 no longer match.
+
 ### Version 50
 
 The header adds `paragraphIndentSpaces` after `extraParagraphSpacing`. The value

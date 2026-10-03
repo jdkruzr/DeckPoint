@@ -46,6 +46,25 @@ struct BlockStyle {
   [[nodiscard]] int16_t topInset() const { return marginTop + paddingTop; }
   [[nodiscard]] int16_t bottomInset() const { return marginBottom + paddingBottom; }
 
+  // DECKPOINT: copy whose positive horizontal insets are scaled down proportionally so they
+  // total at most maxTotal px. Nested containers each add their own margins; on a narrow
+  // screen that can leave only a sliver of column.
+  [[nodiscard]] BlockStyle withHorizontalInsetCap(const int16_t maxTotal) const {
+    const int parts[4] = {marginLeft, paddingLeft, marginRight, paddingRight};
+    int positiveTotal = 0;
+    for (const int part : parts) positiveTotal += part > 0 ? part : 0;
+    if (maxTotal < 0 || positiveTotal <= maxTotal) return *this;
+    BlockStyle result = *this;
+    const auto scale = [&](const int16_t v) {
+      return v > 0 ? static_cast<int16_t>(v * maxTotal / positiveTotal) : v;
+    };
+    result.marginLeft = scale(marginLeft);
+    result.paddingLeft = scale(paddingLeft);
+    result.marginRight = scale(marginRight);
+    result.paddingRight = scale(paddingRight);
+    return result;
+  }
+
   // Return a copy with bottom margins/padding zeroed out.
   [[nodiscard]] BlockStyle withoutBottom() const {
     BlockStyle result = *this;

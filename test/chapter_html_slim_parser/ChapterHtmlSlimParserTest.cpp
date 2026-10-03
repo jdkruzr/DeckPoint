@@ -2,6 +2,8 @@
 #include <GfxRenderer.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <set>
@@ -223,6 +225,7 @@ TEST(ParagraphIndentation, OverridesNonnegativeCssAndPreservesHangingIndent) {
       style.alignment = CssTextAlign::Left;
       style.textIndentDefined = true;
       style.textIndent = cssIndent;
+      style.marginLeft = 6;  // room for the hanging indent
       ParsedText text(false, false, style, spaces);
       text.addWord("word", EpdFontFamily::REGULAR);
       bool sawLine = false;
@@ -468,4 +471,98 @@ TEST(KoreanLayout, HangulGluedAcrossInlineStyleIsUnbreakable) {
   // 가나 한국 fits in 36 px, but 어 is glued to 한국, so the whole word moves down.
   const std::vector<std::vector<std::string>> expected{{"가나"}, {"한국", "어"}};
   EXPECT_EQ(lines, expected);
+}
+
+TEST(ParagraphIndentation, HangingIndentStopsAtContentStartEdge) {
+  GfxRenderer renderer;
+  for (const int16_t margin : {0, 6, 30}) {
+    BlockStyle style;
+    style.alignment = CssTextAlign::Left;
+    style.textIndentDefined = true;
+    style.textIndent = -20;
+    style.marginLeft = margin;
+    ParsedText text(false, false, style, 2);
+    text.addWord("word", EpdFontFamily::REGULAR);
+    bool sawLine = false;
+    text.layoutAndExtractLines(renderer, 0, 200, [&](std::unique_ptr<TextBlock> line, auto) {
+      sawLine = true;
+      EXPECT_EQ(line->wordXpos(0), -std::min<int>(margin, 20));
+      EXPECT_GE(margin + line->wordXpos(0), 0);
+    });
+    EXPECT_TRUE(sawLine);
+  }
+}
+
+// Book-wide stylesheet merging: a later sheet's negative text-indent for the same selector,
+// combined with yet another sheet's smaller margin, must not push the line off the page.
+TEST(ParagraphIndentation, MergedStylesheetsKeepHangingIndentOnPage) {
+  namespace fs = std::filesystem;
+  const fs::path dir = fs::temp_directory_path() / "crosspoint-merged-css-indent";
+  fs::create_directories(dir);
+  const auto html = (dir / "toc.xhtml").string();
+  {
+    HalFile out;
+    ASSERT_TRUE(out.open(html.c_str(), "wb"));
+    const char doc[] =
+        "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body><div class=\"toc\">"
+        "<div class=\"toc_chap\">\n<a class=\"hlink\" href=\"c01.xhtml\">1: Helldiver</a>\n</div>"
+        "<div class=\"toc_part0\">\n<a class=\"hlink\" href=\"p01.xhtml\">Part I: Slave</a>\n</div>"
+        "</div></body></html>";
+    out.write(doc, sizeof(doc) - 1);
+  }
+  const char* sheets[] = {
+      "div.toc_chap {margin-left:1.6em; text-align:left; text-indent:0; font-size:0.9em}"
+      "div.toc_part0 {text-align:left; margin-left:1.4em}",
+      "div.toc_chap {text-align:left; text-indent:-1.7em; font-size:0.9em}",
+      "div.toc_chap, div.toc_sub {margin-left:3%}",
+  };
+  CssParser cssParser{dir.string()};
+  for (size_t i = 0; i < std::size(sheets); ++i) {
+    const auto path = (dir / ("s" + std::to_string(i) + ".css")).string();
+    {
+      HalFile out;
+      ASSERT_TRUE(out.open(path.c_str(), "wb"));
+      out.write(sheets[i], strlen(sheets[i]));
+    }
+    HalFile in;
+    ASSERT_TRUE(in.open(path.c_str(), "rb"));
+    cssParser.loadFromStream(in);
+  }
+
+  GfxRenderer renderer;
+  std::vector<std::pair<std::string, int>> starts;
+  ChapterHtmlSlimParser parser{nullptr, html, renderer, 0, 1.0f, false, 0, 220, 300, false, false,
+                               [&](std::unique_ptr<Page> page, auto, auto, auto) {
+                                 for (const auto& el : page->elements) {
+                                   if (el->getTag() != TAG_PageLine) continue;
+                                   const auto& block = *static_cast<const PageLine&>(*el).getBlock();
+                                   if (block.wordCount() == 0) continue;
+                                   starts.emplace_back(block.wordText(0), el->xPos + block.wordXpos(0));
+                                 }
+                               },
+                               true, "", "", 0, {}, nullptr, &cssParser};
+  ASSERT_TRUE(parser.parseAndBuildPages());
+  ASSERT_EQ(starts.size(), 2u);
+  EXPECT_EQ(starts[0].first, "1:");
+  EXPECT_EQ(starts[0].second, 0);  // 3% margin (6) + -1.7em indent (-20), clamped at the content edge
+  EXPECT_EQ(starts[1].first, "Part");
+  EXPECT_EQ(starts[1].second, 16 + 8);  // 1.4em margin + default 2-space paragraph indent
+}
+
+TEST(BlockStyleInsetCap, ScalesPositiveInsetsProportionally) {
+  BlockStyle style;
+  style.marginLeft = 60;
+  style.paddingLeft = 20;
+  style.marginRight = 40;
+  style.paddingRight = -5;
+
+  const BlockStyle capped = style.withHorizontalInsetCap(60);
+  EXPECT_EQ(capped.marginLeft, 30);
+  EXPECT_EQ(capped.paddingLeft, 10);
+  EXPECT_EQ(capped.marginRight, 20);
+  EXPECT_EQ(capped.paddingRight, -5);
+
+  const BlockStyle untouched = style.withHorizontalInsetCap(200);
+  EXPECT_EQ(untouched.marginLeft, 60);
+  EXPECT_EQ(untouched.marginRight, 40);
 }

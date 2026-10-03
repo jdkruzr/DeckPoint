@@ -378,7 +378,13 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
 }
 
 // start a new text block if needed
-void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
+void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& requestedStyle) {
+#if DECKPOINT_COMPACT_UI
+  // DECKPOINT: on the small screen, book CSS margins may take at most a sixth of the column.
+  const BlockStyle blockStyle = requestedStyle.withHorizontalInsetCap(static_cast<int16_t>(viewportWidth / 6));
+#else
+  const BlockStyle& blockStyle = requestedStyle;
+#endif
   nextWordContinues = false;  // New block = new paragraph, no continuation
   if (currentTextBlock) {
     // already have a text block running and it is empty - just reuse it
