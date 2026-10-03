@@ -99,8 +99,16 @@ void BmpViewerActivity::onEnter() {
   const auto pageHeight = renderer.getScreenHeight();
   // DECKPOINT: BMPs fit above the key legend band (0 when legends are off).
   const int imageAreaHeight = pageHeight - deckpoint::keyLegendBandHeight(renderer);
+#if FREEINK_DEVICE_TDECKPRO
+  // DECKPOINT: no Loading popup; its refreshes leave history that shows through the gray pass,
+  // and the deep base refresh below wipes the screen anyway.
+  constexpr bool showProgress = false;
+  Rect popupRect{};
+#else
+  constexpr bool showProgress = true;
   Rect popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-  GUI.fillPopupProgress(renderer, popupRect, 20);  // Initial 20% progress
+#endif
+  if (showProgress) GUI.fillPopupProgress(renderer, popupRect, 20);  // Initial 20% progress
   if (FsHelpers::hasPngExtension(filePath)) {
     renderer.clearScreen();
     const bool hasPrevious = siblingImages.size() > 1 && currentImageIndex > 0;
@@ -157,7 +165,7 @@ void BmpViewerActivity::onEnter() {
       const auto labels = mappedInput.mapLabels(tr(STR_BACK), canSetSleepCover() ? tr(STR_SET_SLEEP_COVER) : "",
                                                 (hasPrevious ? "<" : ""), (hasNext ? ">" : ""));
 
-      GUI.fillPopupProgress(renderer, popupRect, 50);
+      if (showProgress) GUI.fillPopupProgress(renderer, popupRect, 50);
 
       renderer.clearScreen();
       if (!renderer.drawBitmap(bitmap, x, y, pageWidth, imageAreaHeight, 0, 0)) {
@@ -172,7 +180,13 @@ void BmpViewerActivity::onEnter() {
       if (bitmap.hasGreyscale()) {
         const bool absolute = renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported();
         if (absolute && !renderer.displayGrayscaleBase(HalDisplay::GrayscaleMode::Absolute)) return;
+#if FREEINK_DEVICE_TDECKPRO
+        // DECKPOINT: overlay gray is a short nudge from black, so any history in the base
+        // shows as ghosts; images get the deep-clean base (~3 s).
+        if (!absolute) renderer.displayGrayscaleBase(HalDisplay::FULL_REFRESH);
+#else
         if (!absolute) renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+#endif
         bool planesReady = true;
         for (const auto mode : {GfxRenderer::GRAYSCALE_LSB, GfxRenderer::GRAYSCALE_MSB}) {
           if (bitmap.rewindToData() != BmpReaderError::Ok) {

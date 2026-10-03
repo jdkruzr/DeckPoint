@@ -780,23 +780,34 @@ void loop() {
       else if (cmd == "BOARD") {  // DECKPOINT: reprint the board report
         BoardTDeckPro::logStatus();
       }
+      else if (cmd == "CLEAN") {  // DECKPOINT: deep-clean the glass (white, standard waveform)
+        RenderLock lock;
+        renderer.clearScreen();
+        renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+      }
       else if (cmd == "RESTART") {  // DECKPOINT: reproduce the post-Wi-Fi silent reboot
         silentRestartToSettings();
       }
-      // DECKPOINT: "CMD:GRAY:<light>,<dark>" sets the gray waveform frame counts
-      // (calibration; takes effect on the next grayscale refresh).
-      else if (cmd.startsWith("GRAY:")) {
-        const String arg = cmd.substring(5);
+      // DECKPOINT: "CMD:GRAY:<light>,<dark>[,<repeat>]" (text profile) and
+      // "CMD:GRAYIMG:<light>,<dark>" (image profile) set the gray waveform frame
+      // counts (calibration; take effect on the next grayscale refresh).
+      else if (cmd.startsWith("GRAY:") || cmd.startsWith("GRAYIMG:")) {
+        const bool image = cmd.startsWith("GRAYIMG:");
+        const auto profile = image ? freeink::Gdeq031GrayProfile::Image : freeink::Gdeq031GrayProfile::Text;
+        const String arg = cmd.substring(image ? 8 : 5);
         const int c1 = arg.indexOf(',');
         const int c2 = c1 > 0 ? arg.indexOf(',', c1 + 1) : -1;
         if (c1 > 0) {
           freeink::gdeq031SetGrayFrames(static_cast<uint8_t>(arg.substring(0, c1).toInt()),
-                                        static_cast<uint8_t>(arg.substring(c1 + 1, c2 > 0 ? c2 : arg.length()).toInt()));
+                                        static_cast<uint8_t>(arg.substring(c1 + 1, c2 > 0 ? c2 : arg.length()).toInt()),
+                                        profile);
         }
         if (c2 > 0) freeink::gdeq031SetGrayRepeat(static_cast<uint8_t>(arg.substring(c2 + 1).toInt()));
-        uint8_t l = 0, d = 0;
+        uint8_t l = 0, d = 0, il = 0, id = 0;
         freeink::gdeq031GetGrayFrames(l, d);
-        logSerial.printf("[GRAY] light=%u dark=%u frames, repeat=%u\n", l, d, freeink::gdeq031GrayRepeat());
+        freeink::gdeq031GetGrayFrames(il, id, freeink::Gdeq031GrayProfile::Image);
+        logSerial.printf("[GRAY] text=%u/%u image=%u/%u frames, repeat=%u\n", l, d, il, id,
+                         freeink::gdeq031GrayRepeat());
       }
       // DECKPOINT: "CMD:KEY:<code>[:p|:r]" injects a keyboard matrix event so
       // host tooling (scripts/deckpoint_serial.py) can drive the UI. A bare

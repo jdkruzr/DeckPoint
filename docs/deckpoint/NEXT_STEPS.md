@@ -39,14 +39,19 @@ Read `PROGRESS.md` first (dev loop, conventions). Full roadmap with rationale:
 - Remove `-DDECKPOINT_KEY_DEBUG` from release builds eventually.
 
 ## 3. Grayscale follow-ups
-- Gray test card: light band looked closer to mid-gray than light; consider separate light/dark
-  tuning and a third frame value; verify on more images (covers, the Shadow Order cover).
-- Red Rising "PART I / SLAVE" ornament image renders as a coarse barcode-like band; check
-  image scaling/dither for small decorative images.
-- Text vs image tuning currently shared (2/1 works for both — keep unless photos say otherwise).
-- Sleep screen / cover images now get gray too — check them on glass.
+- Done 2026-10-03: two calibrations picked by the base refresh (text 3/1 after a fast base,
+  images 4/2 after a deep base); image viewer uses a deep base and no Loading popup (ghosts);
+  RefreshMode::Full is now the standard OTP "deep clean" (~3.1 s); CMD:CLEAN, CMD:GRAYIMG.
+  Test cards must be paletted at exactly 0/85/170/255, or CrossPoint's photo pipeline
+  (adjustPixel boost + Atkinson) dithers the bands. Ornament "barcode" is the real image.
+- Gray card v3: add an error-diffused 4-level gradient (current card's gradient is a staircase).
+- Finer gray steps if needed: shorten the frame time (UC8253 PLL/frame-rate register) so dark
+  can land between 1 and 2 of today's frames.
+- Covers / sleep-screen images in gray: check on glass (cover sleep screen uses which base?).
+- Reader pages with images: base is fast, so images there use the text profile; check.
 - Re-run the font contest with AA (Fira Sans, Atkinson Hyperlegible, IBM Plex Sans, Inter kept as
-  contenders; `tools/fontlab`; pin weights for variable fonts).
+  contenders; `tools/fontlab`; pin weights for variable fonts). Specimen BMPs live in
+  `/Font Tests/` on the SD (1-bit; regenerate for AA) - or try direct .ttf loading (Phase 7).
 
 ## 4. Keyboard-native reader (plan Phase 4 — user wants to feel 2 & 3 first)
 - Vim keys (j/k/space/b, counts, gg/G, ]]/[[, `/` search with n/N, marks), command palette home

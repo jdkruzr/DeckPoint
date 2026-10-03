@@ -58,12 +58,12 @@ constexpr uint8_t LUT_LEN_VCOM = 56;  // 8 groups x 7 bytes
 constexpr uint8_t LVL_0V = 0x00;
 constexpr uint8_t LVL_VSL = 0x80;
 
-// Calibrated on a v1.1 unit (see plan): with repeats the drive multiplies, so
-// 8/4 frames punched holes in thin glyph strokes; 3/1 better; 4/0 (dark gray
-// stays black, faint edges whitened) gave the cleanest text; 2/1 gives a clean
-// solid mid-gray on images AND reads well as text — the shipping default.
-uint8_t s_lightFrames = 2;
-uint8_t s_darkFrames = 1;
+// Calibrated on a v1.1 unit with gray-card and text photos: text 3/1 (2/1 a touch light,
+// 4/2 visibly light on fast-base pages); images 4/2 gives evenly spaced levels on a deep
+// base (3/1 crushes dark into black there; 8/4 punches holes in thin strokes).
+uint8_t s_lightFrames[2] = {3, 4};
+uint8_t s_darkFrames[2] = {1, 2};
+uint8_t s_activeProfile = 0;  // set by display(): deep base -> Image
 uint8_t s_repeat = 1;
 
 // One group: {group repeat, phase1 level|frames, phase2 (1 frame settle),
@@ -82,14 +82,16 @@ void writeGroup(uint8_t* lut, uint8_t level, uint8_t frames) {
 }
 }  // namespace
 
-void gdeq031SetGrayFrames(uint8_t lightFrames, uint8_t darkFrames) {
-  s_lightFrames = lightFrames > 63 ? 63 : lightFrames;
-  s_darkFrames = darkFrames > 63 ? 63 : darkFrames;
+void gdeq031SetGrayFrames(uint8_t lightFrames, uint8_t darkFrames, Gdeq031GrayProfile profile) {
+  const auto i = static_cast<uint8_t>(profile);
+  s_lightFrames[i] = lightFrames > 63 ? 63 : lightFrames;
+  s_darkFrames[i] = darkFrames > 63 ? 63 : darkFrames;
 }
 
-void gdeq031GetGrayFrames(uint8_t& lightFrames, uint8_t& darkFrames) {
-  lightFrames = s_lightFrames;
-  darkFrames = s_darkFrames;
+void gdeq031GetGrayFrames(uint8_t& lightFrames, uint8_t& darkFrames, Gdeq031GrayProfile profile) {
+  const auto i = static_cast<uint8_t>(profile);
+  lightFrames = s_lightFrames[i];
+  darkFrames = s_darkFrames[i];
 }
 
 void gdeq031SetGrayRepeat(uint8_t repeat) { s_repeat = repeat; }
@@ -203,10 +205,20 @@ void Uc8253Gdeq031Driver::display(EpdBus& bus, const uint8_t* fb, const uint8_t*
     writePlane(bus, CMD_DTM2, fb);
   }
 
-  bus.cmd(CMD_CASCADE_SETTING);
-  bus.data(TSFIX);
-  bus.cmd(CMD_FORCE_TEMPERATURE);
-  bus.data(full ? TEMP_FULL : TEMP_PARTIAL);
+  // Full = deep clean: the panel's standard OTP waveform at its own measured temperature
+  // (slow, flashing, removes ghosting). Half/fast force a temperature that selects the
+  // faster OTP waveforms instead.
+  const bool deep = mode == RefreshMode::Full;
+  s_activeProfile = deep ? 1 : 0;  // a following gray pass calibrates to this base
+  if (deep) {
+    bus.cmd(CMD_CASCADE_SETTING);
+    bus.data(0x00);
+  } else {
+    bus.cmd(CMD_CASCADE_SETTING);
+    bus.data(TSFIX);
+    bus.cmd(CMD_FORCE_TEMPERATURE);
+    bus.data(full ? TEMP_FULL : TEMP_PARTIAL);
+  }
   bus.cmd(CMD_VCOM_DATA_INTERVAL);
   bus.data(full ? CDI_FULL : CDI_PARTIAL);
 
@@ -216,7 +228,7 @@ void Uc8253Gdeq031Driver::display(EpdBus& bus, const uint8_t* fb, const uint8_t*
     setFullWindow(bus);
   }
   bus.cmd(CMD_DISPLAY_REFRESH);
-  bus.waitBusy(full ? " GDEQ_FULL" : " GDEQ_FAST");
+  bus.waitBusy(deep ? " GDEQ_DEEP" : full ? " GDEQ_FULL" : " GDEQ_FAST");
   if (!full) bus.cmd(CMD_PARTIAL_OUT);
 
   // Seed the "old" plane with what is now on glass for the next fast diff.
@@ -242,15 +254,17 @@ void Uc8253Gdeq031Driver::copyGrayscaleMsb(EpdBus& bus, const uint8_t* msb) {
 }
 
 void Uc8253Gdeq031Driver::loadGrayLuts(EpdBus& bus) {
-  const uint8_t settle = s_lightFrames > s_darkFrames ? s_lightFrames : s_darkFrames;
+  const uint8_t lightFrames = s_lightFrames[s_activeProfile];
+  const uint8_t darkFrames = s_darkFrames[s_activeProfile];
+  const uint8_t settle = lightFrames > darkFrames ? lightFrames : darkFrames;
   uint8_t vcom[LUT_LEN_VCOM] = {};
   uint8_t idle[LUT_LEN] = {};
   uint8_t dark[LUT_LEN] = {};
   uint8_t light[LUT_LEN] = {};
   writeGroup(vcom, LVL_0V, settle);
   writeGroup(idle, LVL_0V, settle);
-  writeGroup(dark, LVL_VSL, s_darkFrames);
-  writeGroup(light, LVL_VSL, s_lightFrames);
+  writeGroup(dark, LVL_VSL, darkFrames);
+  writeGroup(light, LVL_VSL, lightFrames);
   bus.cmdData(CMD_LUT_VCOM, vcom, sizeof(vcom));
   bus.cmdData(CMD_LUT_WW, dark, sizeof(dark));
   bus.cmdData(CMD_LUT_KW, light, sizeof(light));

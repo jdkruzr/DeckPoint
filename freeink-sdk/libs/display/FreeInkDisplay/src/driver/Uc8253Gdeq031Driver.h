@@ -7,7 +7,8 @@
 //   * Runs the panel's OTP waveforms (no host LUT upload). Full and fast
 //     refreshes are selected the way GxEPD2's GxEPD2_310_GDEQ031T10 does it:
 //     cascade setting TSFIX + a forced temperature that picks a faster OTP
-//     waveform (0x5A full ~1.0 s, 0x79 partial ~0.7 s).
+//     waveform (0x5A full ~1.0 s, 0x79 partial ~0.7 s). RefreshMode::Full is the
+//     deep clean: the standard OTP waveform at the panel's measured temperature.
 //   * v1.0 boards have no RESET line, so the controller is (re)initialised with
 //     the PANEL SETTING soft reset, never a hardware pulse. That also means deep
 //     sleep (0x07) is only entered when a RESET pin exists — without one the
