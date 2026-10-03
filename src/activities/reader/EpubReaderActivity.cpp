@@ -496,6 +496,7 @@ void EpubReaderActivity::loop() {
     showDictionaryMessage = false;
     requestUpdate();
   }
+  keyPopupTick();  // DECKPOINT: expire keyboard toasts
 
   // The toolbar reader menu owns all input while shown, ahead of the automatic page turn
   // below: the More panel's rate popup switches automatic turning on and leaves the panel
@@ -780,6 +781,51 @@ void EpubReaderActivity::jumpToPercent(int percent) {
   requestUpdate();
 }
 
+// DECKPOINT: SELECT_CHAPTER flow, shared with the keyboard `t` key.
+void EpubReaderActivity::openChapterSelect(const bool fromKeys) {
+  const int spineIdx = currentSpineIndex;
+  // Release the section while the chapter list is up (mirrors the
+  // TEXT_SETTINGS path): picking a chapter resets it anyway, and its
+  // tens-of-KB footprint is the difference between the chapter list
+  // holding its CJK glyph arena (RAM-only repaints) and re-reading
+  // glyphs from SD on every row step. Cancel restores via the same
+  // cached-position rebuild TEXT_SETTINGS uses.
+  {
+    RenderLock lock;
+    if (section) {
+      rememberCurrentContentOffset();
+      cachedSpineIndex = currentSpineIndex;
+      cachedChapterTotalPageCount = section->pageCount;
+      nextPageNumber = section->currentPage;
+    }
+    section.reset();
+  }
+  startActivityForResult(
+      std::make_unique<EpubReaderChapterSelectionActivity>(renderer, mappedInput, epub, spineIdx),
+      [this, fromKeys](const ActivityResult& result) {
+        if (result.isCancelled) {
+          if (fromKeys) {
+            requestUpdate();
+          } else {
+            openReaderMenu();
+          }
+          return;
+        }
+        if (fromKeys) {
+          jumpBackPosition = chapterSelectOrigin;
+          hasJumpBack = true;
+        }
+        const auto& chapterResult = std::get<ChapterResult>(result.data);
+        RenderLock lock;
+        clearDeferredReposition();
+        currentSpineIndex = chapterResult.spineIndex;
+        pendingAnchor = chapterResult.anchor;
+        nextPageNumber = 0;
+        section.reset();
+        requestUpdate();
+      });
+}
+
 void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
   auto progressChangeResultHandler = [this](const ActivityResult& result) {
     loadCachedBookmarks();
@@ -838,39 +884,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
 
   switch (action) {
     case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
-      const int spineIdx = currentSpineIndex;
-      // Release the section while the chapter list is up (mirrors the
-      // TEXT_SETTINGS path): picking a chapter resets it anyway, and its
-      // tens-of-KB footprint is the difference between the chapter list
-      // holding its CJK glyph arena (RAM-only repaints) and re-reading
-      // glyphs from SD on every row step. Cancel restores via the same
-      // cached-position rebuild TEXT_SETTINGS uses.
-      {
-        RenderLock lock;
-        if (section) {
-          rememberCurrentContentOffset();
-          cachedSpineIndex = currentSpineIndex;
-          cachedChapterTotalPageCount = section->pageCount;
-          nextPageNumber = section->currentPage;
-        }
-        section.reset();
-      }
-      startActivityForResult(
-          std::make_unique<EpubReaderChapterSelectionActivity>(renderer, mappedInput, epub, spineIdx),
-          [this](const ActivityResult& result) {
-            if (result.isCancelled) {
-              openReaderMenu();
-              return;
-            }
-            const auto& chapterResult = std::get<ChapterResult>(result.data);
-            RenderLock lock;
-            clearDeferredReposition();
-            currentSpineIndex = chapterResult.spineIndex;
-            pendingAnchor = chapterResult.anchor;
-            nextPageNumber = 0;
-            section.reset();
-            requestUpdate();
-          });
+      openChapterSelect(false);  // DECKPOINT: shared with the `t` key
       break;
     }
     case EpubReaderMenuActivity::MenuAction::FOOTNOTES: {

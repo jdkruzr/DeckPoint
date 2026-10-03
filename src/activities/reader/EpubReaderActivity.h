@@ -17,7 +17,9 @@
 #include "ReaderActivity.h"
 #include "ReaderToolbarUi.h"
 #include "components/OptionPopup.h"
-#include "deckpoint/KeyHelp.h"  // DECKPOINT
+#include "deckpoint/KeyHelp.h"            // DECKPOINT
+#include "deckpoint/reader/Marks.h"       // DECKPOINT
+#include "deckpoint/reader/ReaderKeys.h"  // DECKPOINT
 
 class EpubReaderActivity final : public ReaderActivity {
   std::shared_ptr<Epub> epub;
@@ -179,6 +181,35 @@ class EpubReaderActivity final : public ReaderActivity {
   void navigateToHref(const std::string& href, bool savePosition = false);
   void restoreSavedPosition();
 
+  // DECKPOINT: keyboard reader keys (deckpoint/reader/EpubReaderKeys.cpp).
+  // Marks are allocated on first m / ' use; the jump-back slot ('') is
+  // in-memory only.
+  deckpoint::reader::ReaderKeys readerKeys;
+  std::unique_ptr<deckpoint::reader::MarkTable> marks;
+  deckpoint::reader::MarkPosition jumpBackPosition;
+  bool hasJumpBack = false;
+  deckpoint::reader::MarkPosition chapterSelectOrigin;  // jump-back candidate while `t` is open
+  // A popup (pending keys or a toast) is painted over the page; it is erased by
+  // the next page render. keyPopupTime == 0 means untimed (pending keys).
+  bool keyPopupShown = false;
+  unsigned long keyPopupTime = 0;
+  unsigned long keyPopupRenderStamp = 0;
+  // Set once a key leaves the reader (menu, contents, help, home) so the rest
+  // of the same key batch is dropped; cleared by the next loop().
+  bool keysSuspended = false;
+  void runReaderCommand(const deckpoint::reader::ReaderCommand& cmd);
+  void keyPageTurns(bool forward, int count);
+  void keyChapterJump(int delta);
+  void keyJumpToSpine(int spineIndex, bool lastPage);
+  deckpoint::reader::MarkPosition capturePosition();
+  bool jumpToPosition(const deckpoint::reader::MarkPosition& position);
+  bool ensureMarksLoaded();
+  void showKeyPopup(const char* text, bool timed);
+  void keyPopupTick();
+  // Contents list; fromKeys: Esc returns to the page (not the reader menu) and
+  // a pick records the jump-back position.
+  void openChapterSelect(bool fromKeys);
+
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;
@@ -217,6 +248,9 @@ class EpubReaderActivity final : public ReaderActivity {
   ~EpubReaderActivity() override;
 
   const deckpoint::KeyHelp* keyHelp() const override { return &deckpoint::READER_KEY_HELP; }  // DECKPOINT
+  // DECKPOINT: raw keyboard keys while reading (see wantsRawKeys gating).
+  bool wantsRawKeys() const override;
+  void onKey(const freeink::KeyEvent& event) override;
   void loop() override;
   void render(RenderLock&& lock) override;
 

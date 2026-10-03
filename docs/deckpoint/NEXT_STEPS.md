@@ -18,6 +18,12 @@ Read `PROGRESS.md` first (dev loop, conventions). Full roadmap with rationale:
   already produces. OPDS Progression 1.0 (draft) covers progress only. Round-2 proposal: store
   KOReader-shaped annotations (ids, timestamps, tombstones), sync via AnnotationSync's WebDAV
   format (read its source first), export Markdown / My Clippings.txt / Readwise JSON.
+  WebDAV client needs no library: SecureHttpClient::sendRequest(method, body) (any verb, TLS via
+  wolfSSL) + expat for PROPFIND XML; ~300-400 LOC, ~5-10 KB flash; TLS handshake ~35 KB transient
+  (MIN_FREE_FOR_TLS). CrossPoint's WebDAVHandler.cpp is a server (File Transfer: mount the SD as a
+  network drive), and PluginCatalogActivity already browses XML listings (207 Multi-Status) and
+  downloads with Basic auth - a partial WebDAV client. Round-2 design is in the plan file.
+- Docs: tell users they can mount the device as a WebDAV drive while File Transfer is open.
 - Wi-Fi is per-task (network activities silent-reboot on exit to defragment heap), so there is
   no "associated" state to indicate. Keeping Wi-Fi up (background sync) would be a design change.
 - 180-degree ghost frame after the post-Wi-Fi reboot: softInit now waits BUSY after the PSR soft

@@ -14,6 +14,11 @@ constexpr KeyHelpEntry HOME[] = {
     {"h / l", StrId::STR_KH_HOME_HL},
     {"Enter", StrId::STR_KH_OPEN},
     {"Esc", StrId::STR_KH_RESUME},
+    // Keyboard primer: Home's help doubles as the general introduction.
+    {"mic key", StrId::STR_KH_PRIMER_MIC},
+    {"Sym", StrId::STR_KH_PRIMER_SYM},
+    {"Shift Sym Alt", StrId::STR_KH_PRIMER_MODS},
+    {"?", StrId::STR_KH_PRIMER_HELP},
 };
 
 constexpr KeyHelpEntry LIBRARY[] = {
@@ -49,11 +54,24 @@ constexpr KeyHelpEntry TEXT_SETTINGS[] = {
     {"Esc", StrId::STR_KH_BACK},
 };
 
+// Raw-key reader (ReaderKeys): Sym gives the digits and ' ( ) / : ?
 constexpr KeyHelpEntry READER[] = {
-    {"Space / j / l", StrId::STR_KH_NEXT_PAGE},
-    {"k / h", StrId::STR_KH_PREV_PAGE},
+    {"j / l / Space / PgDn", StrId::STR_KH_NEXT_PAGE},
+    {"k / h / b / PgUp", StrId::STR_KH_PREV_PAGE},
+    {"1-999 + key", StrId::STR_KH_COUNT_PREFIX},
+    {"gg / G", StrId::STR_KH_BOOK_START_END},
+    {"]] [[ / ) (", StrId::STR_KH_NEXT_PREV_CHAPTER},
+    {"N% / NG", StrId::STR_KH_GO_TO_PERCENT},
+    {"t", StrId::STR_KH_CONTENTS},
+    {"m a-z", StrId::STR_KH_SET_MARK},
+    {"' a-z", StrId::STR_KH_JUMP_TO_MARK},
+    {"''", StrId::STR_KH_JUMP_BACK},
+    {"B", StrId::STR_KH_TOGGLE_BOOKMARK},
     {"Enter", StrId::STR_KH_READER_MENU},
-    {"Esc", StrId::STR_KH_GO_HOME},
+    {"Esc", StrId::STR_KH_READER_ESC},
+    {"d / D", StrId::STR_KH_DICT_SOON},
+    {"/ n N", StrId::STR_KH_SEARCH_SOON},
+    {":", StrId::STR_KH_COMMAND_SOON},
 };
 
 constexpr KeyHelpEntry READER_MENU[] = {
