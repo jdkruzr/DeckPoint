@@ -1749,6 +1749,8 @@ void GfxRenderer::displayBufferAsync(HalDisplay::RefreshMode refreshMode) const 
 
 void GfxRenderer::waitRefreshComplete() const { display.waitRefreshComplete(); }
 
+bool GfxRenderer::refreshBusy() const { return display.refreshBusy(); }
+
 bool GfxRenderer::supportsAsyncRefresh() const { return !fadingFix && display.supportsAsyncRefresh(); }
 
 HalDisplay::GrayscaleCapabilities GfxRenderer::grayscaleCapabilities(HalDisplay::GrayscaleMode mode) const {

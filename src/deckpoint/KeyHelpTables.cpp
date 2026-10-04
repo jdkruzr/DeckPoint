@@ -144,6 +144,23 @@ constexpr KeyHelpEntry SELECTION[] = {
     {"d / v / n / x", StrId::STR_KH_SEL_MENU_KEYS},
 };
 
+// The reader's note sheet (EpubReaderNote.cpp). A bare '?' types, so help is Alt+v.
+constexpr KeyHelpEntry NOTE_EDITOR[] = {
+    {"Enter", StrId::STR_KH_NOTE_SAVE},
+    {"Shift+Enter", StrId::STR_KH_NOTE_NEWLINE},
+    {DECKPOINT_KEY_MIC, StrId::STR_KH_NOTE_CANCEL},
+    {"Backspace", StrId::STR_KH_DELETE_BACK},
+    {"Shift+Backspace", StrId::STR_KH_DELETE_FORWARD},
+    {"Alt+Backspace", StrId::STR_KH_CLEAR_ALL},
+    {"Alt+h / Alt+l", StrId::STR_KH_MOVE_CURSOR},
+    {"Alt+k / Alt+j", StrId::STR_KH_NOTE_UP_DOWN},
+};
+
+constexpr TouchHelpEntry TOUCH_NOTE[] = {
+    {StrId::STR_KH_T_TAP_NOTE_BUTTONS, StrId::STR_KH_T_NOTE_BUTTONS_WHAT, TouchWhen::Always},
+    {StrId::STR_KH_T_TAP_NOTE_TEXT, StrId::STR_KH_T_NOTE_CURSOR, TouchWhen::Always},
+};
+
 constexpr TouchHelpEntry TOUCH_SELECT[] = {
     {StrId::STR_KH_T_TAP_WORD, StrId::STR_KH_T_SET_END, TouchWhen::Always},
     {StrId::STR_KH_T_TAP_BAR, StrId::STR_KH_T_BAR_WHAT, TouchWhen::Always},
@@ -184,9 +201,11 @@ constexpr KeyHelp KEYBOARD_ENTRY_KEY_HELP = makeKeyHelp(KEYBOARD_ENTRY);
 constexpr KeyHelp IMAGE_VIEWER_KEY_HELP = makeKeyHelp(IMAGE_VIEWER);
 constexpr KeyHelp GO_TO_PERCENT_KEY_HELP = makeKeyHelp(GO_TO_PERCENT);
 constexpr KeyHelp SELECTION_KEY_HELP = makeKeyHelp(SELECTION);
+constexpr KeyHelp NOTE_EDITOR_KEY_HELP = makeKeyHelp(NOTE_EDITOR);
 
 constexpr TouchHelp TOUCH_BOOK_HELP = makeTouchHelp(StrId::STR_KH_SECTION_TOUCH_BOOK, TOUCH_BOOK);
 constexpr TouchHelp TOUCH_LISTS_HELP = makeTouchHelp(StrId::STR_KH_SECTION_TOUCH_LISTS, TOUCH_LISTS);
 constexpr TouchHelp TOUCH_SELECT_HELP = makeTouchHelp(StrId::STR_KH_SECTION_TOUCH_SELECT, TOUCH_SELECT);
+constexpr TouchHelp TOUCH_NOTE_HELP = makeTouchHelp(StrId::STR_KH_SECTION_TOUCH_NOTE, TOUCH_NOTE);
 
 }  // namespace deckpoint

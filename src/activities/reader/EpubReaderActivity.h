@@ -340,6 +340,26 @@ class EpubReaderActivity final : public ReaderActivity {
   // Set while a page that shows highlights is on the glass (taps check it).
   bool pageHasHighlightMarks = false;
 
+  // DECKPOINT: note sheet over the page (deckpoint/reader/EpubReaderNote.cpp),
+  // SelectMode::Note of the selection session. Caller holds the RenderLock;
+  // a true return means the page must render (caller requestUpdate()s).
+  struct NoteSheetGeometry;
+  NoteSheetGeometry noteSheetGeometry() const;
+  // Opens the sheet on highlight `highlight` (list index), prefilled with its
+  // note. `pageChanged`: the page re-renders first (a highlight just saved).
+  bool openNoteEditorLocked(int highlight, bool pageChanged);
+  // Re-wraps the note for the sheet and keeps the cursor line in view.
+  void relayoutNoteLocked();
+  void drawNoteSheet() const;
+  // *help: Alt+v asked for the note help (caller opens it after the lock).
+  bool noteKeyLocked(const freeink::KeyEvent& event, bool* help);
+  bool noteTouchLocked(int x, int y);
+  bool saveNoteLocked();
+  bool cancelNoteLocked();
+  // From hintsTick(): pushes typed changes once the panel is free (typing
+  // during a refresh is coalesced into the next one).
+  void noteSheetTick();
+
   // DECKPOINT: `/` search with n / N (deckpoint/reader/EpubReaderSearch.cpp).
   // The session runs in slices from loop() and owns input while it exists;
   // searchMark (shared with the render task, RenderLock) is the inverted hit.

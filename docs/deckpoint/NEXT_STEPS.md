@@ -16,12 +16,17 @@ Read `PROGRESS.md` first (dev loop, conventions). Current plan with rationale:
   shape), placement via the step-1 resolver, underline + note marker drawing, serial seeding
   (`CMD:ANNOTATE:<pos0>||<pos1>[||note]`, `CMD:ANNOTATE_TEST[:note]`). All six real KOReader
   highlights land on the same words on the T-Deck (incl. across paragraph and page breaks).
-- **Step 3 built, not yet checked on the glass**: `v` labels pick start / end (Enter = one word),
-  range shown inverted, Enter saves / `n` saves + "note editor: coming soon" / Bksp back / mic
-  cancels; long-press popup Look up / Highlight / Note; tap (or `v` start) on a highlight opens
-  Edit note / Delete / Look up (delete = tombstone). `?` help per stage (owner "Highlight").
-  Code: reader/SelectionSession (pure, test/selection), reader/EpubReaderSelection.cpp.
-- **Next: step 4** (note editor bottom sheet; wire `n` / Note / Edit note to it).
+- **Step 3 done** (3f869d1c, checked on the glass by keyboard and touch): `v` labels pick start /
+  end (Enter = one word), range inverted, Enter saves / `n` note / mic cancels; long-press popup
+  Look up / Highlight / Note; tap (or `v` start) on a highlight opens Edit note / Delete / Look up
+  (delete = tombstone). Code: reader/SelectionSession (test/selection), reader/EpubReaderSelection.cpp.
+- **Step 4 done** (checked on the glass 2026-10-05: typing latency fine, edit/clear, discard
+  confirm, touch Cancel/Save/tap-to-place, sheet placement top and bottom): note bottom sheet.
+  Enter saves (empty removes the note), Shift+Enter / Alt+Enter new line, mic cancels (twice when
+  changed), Alt+h/l/k/j cursor, Alt+Bksp clear, Alt+v help. One FAST refresh per idle panel (keys
+  coalesce). Code: deckpoint/NoteEditor (test/note_editor), reader/EpubReaderNote.cpp. Known:
+  Caps Lock makes Enter a newline; a page render or sleep while editing loses the text.
+- **Next: step 5** (`:notes` + export).
 - Before 2b ships: undated-highlight stamping (plan file, "Undated highlights").
 - Test rig: Boox Go 6 II over adb (KOReader F-Droid `org.koreader.launcher.fdroid`, AnnotationSync
   v2.0.0 → Nextcloud `/eBooks`, KOSync → this host). `adb shell input text` drops shifted chars;

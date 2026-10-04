@@ -315,6 +315,60 @@ TEST(AnnotationList, TombstoneRefusedWhenReadOnly) {
   EXPECT_FALSE(list[0].deleted);
 }
 
+TEST(AnnotationList, SetNoteStampsUpdateAndWrites) {
+  AnnotationList list;
+  ASSERT_EQ(list.add(makeHighlight(P1_0, P1_28, "words")), AddResult::Added);
+  EXPECT_EQ(list.setNote(0, "line one\nline two", "2026-10-05 09:00:00"), AddResult::Replaced);
+  EXPECT_EQ(list[0].get(Field::Note), "line one\nline two");
+  EXPECT_EQ(list[0].get(Field::DatetimeUpdated), "2026-10-05 09:00:00");
+  EXPECT_EQ(list[0].get(Field::Text), "words");
+  EXPECT_EQ(list[0].get(Field::Datetime), "2026-10-04 10:00:00");
+  const std::string out = write(list);
+  EXPECT_NE(out.find("\"note\":\"line one\\nline two\""), std::string::npos);
+  size_t total = 0;
+  for (size_t f = 0; f < FIELD_COUNT; f++) total += list[0].get(static_cast<Field>(f)).size() + 1;
+  EXPECT_EQ(list.blobBytes(), total);
+}
+
+TEST(AnnotationList, EmptyNoteRemovesItKeepsHighlight) {
+  AnnotationList list;
+  ASSERT_EQ(list.add(makeHighlight(P1_0, P1_28, "words", "old")), AddResult::Added);
+  EXPECT_EQ(list.setNote(0, "", "2026-10-05 09:00:00"), AddResult::Replaced);
+  EXPECT_FALSE(list[0].has(Field::Note));
+  EXPECT_TRUE(list[0].isHighlight());
+  EXPECT_FALSE(list[0].deleted);
+  EXPECT_EQ(write(list).find("\"note\""), std::string::npos);
+}
+
+TEST(AnnotationList, SetNoteCapsAndRefusals) {
+  AnnotationList list;
+  ASSERT_EQ(list.add(makeHighlight(P1_0, P1_28)), AddResult::Added);
+  EXPECT_EQ(list.setNote(0, std::string(MAX_NOTE_BYTES + 1, 'n'), "2026-10-05 09:00:00"), AddResult::TooLong);
+  EXPECT_FALSE(list[0].has(Field::Note));
+  EXPECT_EQ(list.setNote(0, std::string(MAX_NOTE_BYTES, 'n'), "2026-10-05 09:00:00"), AddResult::Replaced);
+  EXPECT_EQ(list.setNote(1, "x", "2026-10-05 09:00:00"), AddResult::NotPlaceable);
+  ASSERT_TRUE(list.tombstone(0, "2026-10-05 09:00:00"));
+  EXPECT_EQ(list.setNote(0, "x", "2026-10-05 09:00:00"), AddResult::NotPlaceable);
+  list.markReadOnly();
+  EXPECT_EQ(list.setNote(0, "x", "2026-10-05 09:00:00"), AddResult::ReadOnly);
+}
+
+TEST(AnnotationList, SetNoteShortensAnImportedLongNote) {
+  // Loaded notes may exceed our cap; editing may keep them that long or shorten them.
+  AnnotationList list;
+  ASSERT_EQ(list.adopt(makeHighlight(P1_0, P1_28, "t", std::string(MAX_NOTE_BYTES + 100, 'n'))), AddResult::Added);
+  EXPECT_EQ(list.setNote(0, std::string(MAX_NOTE_BYTES + 50, 'm'), "2026-10-05 09:00:00"), AddResult::Replaced);
+  EXPECT_EQ(list.setNote(0, std::string(MAX_NOTE_BYTES + 60, 'm'), "2026-10-05 09:00:00"), AddResult::TooLong);
+}
+
+TEST(AnnotationList, SetNoteRespectsRamBudget) {
+  AnnotationList list(300);
+  ASSERT_EQ(list.add(makeHighlight(P1_0, P1_28, "t")), AddResult::Added);
+  EXPECT_EQ(list.setNote(0, std::string(300, 'n'), "2026-10-05 09:00:00"), AddResult::OverBudget);
+  EXPECT_FALSE(list[0].has(Field::Note));
+  EXPECT_LE(list.blobBytes(), 300u);
+}
+
 TEST(AnnotationList, RamBudget) {
   AnnotationList list(400);
   EXPECT_EQ(list.add(makeHighlight(P1_0, P1_28, std::string(100, 'a'))), AddResult::Added);

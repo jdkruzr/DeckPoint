@@ -213,6 +213,17 @@ bool AnnotationStore::deleteAndSave(const size_t index) {
   return save();
 }
 
+AddResult AnnotationStore::setNoteAndSave(const size_t index, const std::string_view note) {
+  char stamp[20];
+  now(stamp);
+  const AddResult result = list.setNote(index, note, stamp);
+  if (result != AddResult::Replaced) {
+    LOG_ERR("ANN", "Note not set on %u: %s", static_cast<unsigned>(index), addResultName(result));
+    return result;
+  }
+  return save() ? result : AddResult::ReadOnly;
+}
+
 void AnnotationStore::placeChapter(const std::shared_ptr<Epub>& epub, const int spineIndex) {
   if (!epub) return;
   const auto t0 = millis();

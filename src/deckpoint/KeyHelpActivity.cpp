@@ -35,6 +35,7 @@ constexpr ScreenTitle SCREEN_TITLES[] = {
     {"TextSettings", StrId::STR_TEXT_SETTINGS},
     {"EpubReader", StrId::STR_KH_TITLE_READER},
     {"Highlight", StrId::STR_KH_TITLE_HIGHLIGHT},
+    {"Note", StrId::STR_KH_TITLE_NOTE},
     {"EpubReaderMenu", StrId::STR_READER_MENU},
     {"EpubReaderBookmarks", StrId::STR_BOOKMARKS},
     {"DictionaryWordSelect", StrId::STR_KH_TITLE_WORD_SELECT},
@@ -160,14 +161,18 @@ void KeyHelpActivity::buildRows() {
 
   addRow(nullptr, tr(STR_KH_SECTION_GLOBAL), true);
   // Text fields type a literal '?', so help there is Alt+?.
-  addRow(strcmp(ownerName, "KeyboardEntry") == 0 ? "Alt+?" : "?", tr(STR_KH_THIS_HELP));
+  addRow(strcmp(ownerName, "KeyboardEntry") == 0          ? "Alt+?"
+         : strcmp(ownerName, NOTE_EDITOR_HELP_OWNER) == 0 ? "Alt+v"
+                                                          : "?",
+         tr(STR_KH_THIS_HELP));
   addRow(DECKPOINT_KEY_MIC, tr(STR_KH_CLOSE_BACK));
   addRow(tr(STR_KH_KEY_POWER), tr(STR_KH_SLEEP_WAKE));
 
   if (mappedInput.hasTouchInput()) {
-    const TouchHelp& section = strcmp(ownerName, "EpubReader") == 0           ? TOUCH_BOOK_HELP
-                               : strcmp(ownerName, SELECTION_HELP_OWNER) == 0 ? TOUCH_SELECT_HELP
-                                                                              : TOUCH_LISTS_HELP;
+    const TouchHelp& section = strcmp(ownerName, "EpubReader") == 0             ? TOUCH_BOOK_HELP
+                               : strcmp(ownerName, SELECTION_HELP_OWNER) == 0   ? TOUCH_SELECT_HELP
+                               : strcmp(ownerName, NOTE_EDITOR_HELP_OWNER) == 0 ? TOUCH_NOTE_HELP
+                                                                                : TOUCH_LISTS_HELP;
     addRow(nullptr, I18N.get(section.title), true);
     for (uint8_t i = 0; i < section.count; i++) {
       const TouchHelpEntry& entry = section.entries[i];

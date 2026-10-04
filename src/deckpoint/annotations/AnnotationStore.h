@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "AnnotationGeometry.h"
@@ -53,6 +54,9 @@ class AnnotationStore {
   int highlightAt(int spineIndex, uint32_t offset) const;
   // Tombstones entry `index` (deleted, datetime_updated = now) and saves.
   bool deleteAndSave(size_t index);
+  // Sets entry `index`'s note (empty: removes it), datetime_updated = now, and
+  // saves. Replaced on success; otherwise why not (see AnnotationList::setNote).
+  AddResult setNoteAndSave(size_t index, std::string_view note);
   bool save();
 
   // "YYYY-MM-DD HH:MM:SS" local time from the system clock, or

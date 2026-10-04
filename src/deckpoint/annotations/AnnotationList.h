@@ -52,6 +52,11 @@ class AnnotationList {
   // Marks entry i deleted (AnnotationSync tombstone) with datetime_updated =
   // `now`. False when read-only, out of range or on OOM (entry unchanged).
   bool tombstone(size_t i, std::string_view now);
+  // Sets (empty: removes) entry i's note, stamping datetime_updated = `now`.
+  // TooLong past MAX_NOTE_BYTES, unless the note is not longer than the one it
+  // replaces (an imported longer note can still be shortened); ReadOnly when
+  // the list is, NotPlaceable for a bad index or a deleted entry.
+  AddResult setNote(size_t i, std::string_view note, std::string_view now);
 
   // Index of the entry with this AnnotationSync key, or -1.
   int find(std::string_view key) const;

@@ -33,6 +33,7 @@ std::string cleanLabel(const char* label);
 
 namespace {
 const char* s_legendExtra = nullptr;
+const char* s_legendHelp = nullptr;
 LegendSnapshot s_lastLegend{};
 constexpr char MIC = '\x01';  // placeholder for the Esc key's microphone glyph
 constexpr int BOTTOM_MARGIN = 3;
@@ -104,6 +105,8 @@ std::string cleanLabel(const char* label) {
 
 void setLegendExtra(const char* extra) { s_legendExtra = extra; }
 
+void setLegendHelp(const char* help) { s_legendHelp = help; }
+
 void copyLastLegend(LegendSnapshot& out) { out = s_lastLegend; }
 
 bool keyLegendEnabled() { return halKeyboard.present() && SETTINGS.keyLegend != 0; }
@@ -138,7 +141,7 @@ void drawHintLegend(const GfxRenderer& renderer, const char* back, const char* c
     if (!nextL.empty()) parts[count++] = {std::string("j: ") + nextL, 5};
   }
   if (count == 0) return;
-  parts[count++] = {tr(STR_KH_LEGEND_HELP), 0};
+  parts[count++] = {s_legendHelp ? s_legendHelp : tr(STR_KH_LEGEND_HELP), 0};
 
   const int maxW = renderer.getScreenWidth() - 8;
   std::string line;

@@ -74,6 +74,7 @@ constexpr TouchHelp makeTouchHelp(const StrId title, const TouchHelpEntry (&entr
 extern const TouchHelp TOUCH_BOOK_HELP;
 extern const TouchHelp TOUCH_LISTS_HELP;
 extern const TouchHelp TOUCH_SELECT_HELP;  // the reader's highlight selection
+extern const TouchHelp TOUCH_NOTE_HELP;    // the reader's note sheet
 
 // Hand-written tables (KeyHelpTables.cpp, flash-resident).
 extern const KeyHelp HOME_KEY_HELP;
@@ -90,8 +91,11 @@ extern const KeyHelp KEYBOARD_ENTRY_KEY_HELP;
 extern const KeyHelp IMAGE_VIEWER_KEY_HELP;
 extern const KeyHelp GO_TO_PERCENT_KEY_HELP;
 extern const KeyHelp SELECTION_KEY_HELP;
+extern const KeyHelp NOTE_EDITOR_KEY_HELP;
 
 // Owner name the reader's highlight selection opens `?` help under.
 constexpr const char* SELECTION_HELP_OWNER = "Highlight";
+// Owner name of the note sheet's help (Alt+v; a bare '?' types there).
+constexpr const char* NOTE_EDITOR_HELP_OWNER = "Note";
 
 }  // namespace deckpoint

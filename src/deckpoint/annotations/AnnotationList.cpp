@@ -45,6 +45,25 @@ bool AnnotationList::tombstone(const size_t i, const std::string_view now) {
   return true;
 }
 
+AddResult AnnotationList::setNote(const size_t i, const std::string_view note, const std::string_view now) {
+  if (readOnlyFlag) return AddResult::ReadOnly;
+  if (i >= items.size() || items[i].deleted) return AddResult::NotPlaceable;
+  Annotation& a = items[i];
+  if (note.size() > MAX_NOTE_BYTES && note.size() > a.get(Field::Note).size()) return AddResult::TooLong;
+  std::string_view values[FIELD_COUNT];
+  for (size_t f = 0; f < FIELD_COUNT; f++) values[f] = a.get(static_cast<Field>(f));
+  values[static_cast<size_t>(Field::Note)] = note;
+  values[static_cast<size_t>(Field::DatetimeUpdated)] = now;
+  size_t fresh = 0;
+  for (const auto& v : values) fresh += v.size() + 1;
+  const size_t before = a.heapBytes();
+  if (blobTotal - before + fresh > blobBudget) return AddResult::OverBudget;
+  // One rebuild for both fields; the views into the old block stay valid until it is replaced.
+  if (!a.assign(values)) return AddResult::OverBudget;  // OOM
+  blobTotal = blobTotal - before + a.heapBytes();
+  return AddResult::Replaced;
+}
+
 int AnnotationList::find(const std::string_view key) const {
   const size_t sep = key.find("||");
   for (size_t i = 0; i < items.size(); i++) {

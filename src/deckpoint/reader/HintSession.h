@@ -13,6 +13,7 @@
 #include "HintMode.h"
 #include "PageWords.h"
 #include "SelectionSession.h"
+#include "deckpoint/NoteEditor.h"
 
 namespace deckpoint::reader {
 
@@ -28,6 +29,7 @@ enum class SelectMode : uint8_t {
   Range,          // the selected range is shown inverted
   WordMenu,       // popup over a word: Look up / Highlight / Note
   HighlightMenu,  // popup over an existing highlight: Edit note / Delete / Look up
+  Note,           // the note sheet edits `highlight`'s note
 };
 
 struct HintSession {
@@ -52,7 +54,15 @@ struct HintSession {
   bool touchOrigin = false;  // opened by a long-press: taps pick and confirm
   bool withNote = false;     // "Note" chosen: the note editor follows the save
   int menuWord = -1;         // word the popup is about
-  int highlight = -1;        // AnnotationList index for HighlightMenu
+  int highlight = -1;        // AnnotationList index for HighlightMenu / Note
+
+  // Note mode only (EpubReaderNote.cpp).
+  NoteEditor note;         // text buffer allocated while the sheet is open
+  int16_t passageTop = 0;  // the highlighted lines the sheet keeps clear of
+  int16_t passageBottom = 0;
+  bool noteDirty = false;              // edited since the sheet was last pushed
+  bool discardArmed = false;           // Cancel with changes: the next Cancel discards them
+  const char* sheetMessage = nullptr;  // tr() string shown in the sheet's header until the next key
 };
 
 }  // namespace deckpoint::reader

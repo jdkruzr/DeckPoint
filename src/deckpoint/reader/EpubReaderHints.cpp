@@ -303,6 +303,7 @@ bool EpubReaderActivity::hintsTick() {
       return false;
     }
   }
+  noteSheetTick();
   // Hold the auto-turn interval and swallow buttons / taps while picking.
   lastPageTurnTime = millis();
   return true;

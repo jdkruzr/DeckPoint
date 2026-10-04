@@ -3,14 +3,15 @@
 //
 // Keyboard (`v`): hint labels pick the start word, then labels again pick the
 // end word (Enter there: just the start word). The range is then shown
-// inverted: Enter saves, `n` saves and opens the note editor (step 4; for now
-// a "coming soon" message), Backspace goes back a step, mic cancels. A start
-// word inside an existing highlight opens that highlight's popup instead.
+// inverted: Enter saves, `n` saves and opens the note sheet
+// (EpubReaderNote.cpp), Backspace goes back a step, mic cancels. A start word
+// inside an existing highlight opens that highlight's popup instead.
 //
 // Touch: a long-press opens Look up / Highlight / Note over the word (Edit
 // note / Delete / Look up over a highlighted word; a plain tap on one does
 // too). Highlight / Note make the word the anchor: tap the end word (the same
-// word again: just that one), then Save on the bar.
+// word again: just that one), then Save on the bar (Note: then the sheet).
+// Edit note opens the sheet on the highlight's note.
 //
 // Every stage draws over the clean page stored out of the framebuffer, like
 // the `d` labels (EpubReaderHints.cpp): one FAST refresh per change, and
@@ -294,9 +295,18 @@ void EpubReaderActivity::drawSelectionLegend() const {
       previous = tr(STR_DIR_UP);
       next = tr(STR_DIR_DOWN);
       break;
+    case SelectMode::Note:
+      // Dropped first at 240 px; the sheet's header shows it too.
+      confirm = tr(STR_SEL_SAVE);
+      extra = tr(STR_NOTE_HINT_NEWLINE);
+      break;
   }
+  // A bare '?' types in the note sheet: its help is Alt+v.
+  const bool note = s.mode == SelectMode::Note;
   deckpoint::setLegendExtra(extra);
+  if (note) deckpoint::setLegendHelp(tr(STR_NOTE_LEGEND_HELP));
   deckpoint::drawHintLegend(renderer, tr(STR_CANCEL), confirm, previous, next);
+  if (note) deckpoint::setLegendHelp(nullptr);
   deckpoint::setLegendExtra(nullptr);
 }
 
@@ -333,6 +343,10 @@ void EpubReaderActivity::drawSelectionOverlay() {
     case SelectMode::HighlightMenu:
       invertWordsLocked(s.menuWord, s.menuWord);
       drawSelectionMenu();
+      break;
+    case SelectMode::Note:
+      drawNoteSheet();
+      s.noteDirty = false;
       break;
   }
   drawSelectionLegend();
@@ -415,7 +429,9 @@ bool EpubReaderActivity::saveSelectionLocked() {
   values[static_cast<size_t>(Field::Color)] = deckpoint::annotations::OWN_COLOR;
   values[static_cast<size_t>(Field::Datetime)] = now;
   Annotation annotation;
-  if (!annotation.assign(values)) {
+  const bool assigned = annotation.assign(values);
+  const std::string key = assigned ? deckpoint::annotations::annotationKey(annotation) : std::string();
+  if (!assigned) {
     LOG_ERR("ANN", "OOM: new highlight");
     return endSelectionLocked(false, tr(STR_SEL_SAVE_FAILED));
   }
@@ -425,7 +441,8 @@ bool EpubReaderActivity::saveSelectionLocked() {
   LOG_INF("ANN", "Highlight %s: %s||%s \"%s\"", stored ? "saved" : "rejected", pos0.c_str(), pos1.c_str(),
           text.c_str());
   if (!stored) return endSelectionLocked(false, tr(STR_SEL_SAVE_FAILED));
-  return endSelectionLocked(true, withNote ? tr(STR_SEL_SAVED_NOTE_SOON) : nullptr);
+  if (withNote) return openNoteEditorLocked(annotationStore->annotations().find(key), true);
+  return endSelectionLocked(true, nullptr);
 }
 
 void EpubReaderActivity::runSelectionActionLocked(const SelectionAction action, bool* rerender, char* lookUp,
@@ -451,7 +468,7 @@ void EpubReaderActivity::runSelectionActionLocked(const SelectionAction action, 
       return;
     }
     case SelectionAction::Highlight:
-    case SelectionAction::Note:
+    case SelectionAction::Note:  // pick the range first; the sheet follows the save
       if (!annotationStore || annotationStore->readOnly()) {
         *rerender = endSelectionLocked(false, tr(STR_SEL_UNAVAILABLE));
         return;
@@ -468,8 +485,11 @@ void EpubReaderActivity::runSelectionActionLocked(const SelectionAction action, 
       *rerender = repaintHintsLocked();
       return;
     case SelectionAction::EditNote:
-      // The note editor is step 4; the popup header already shows the note.
-      *rerender = endSelectionLocked(false, tr(STR_SEL_NOTE_SOON));
+      if (!annotationStore || annotationStore->readOnly()) {
+        *rerender = endSelectionLocked(false, tr(STR_SEL_UNAVAILABLE));
+        return;
+      }
+      *rerender = openNoteEditorLocked(s.highlight, false);
       return;
     case SelectionAction::Delete: {
       const bool deleted =
@@ -491,6 +511,7 @@ void EpubReaderActivity::selectionKey(const freeink::KeyEvent& event) {
   bool rerender = false;
   bool passThrough = false;
   bool help = false;
+  bool noteHelp = false;
   {
     RenderLock lock;
     if (!hints || hints->stale) {
@@ -499,6 +520,17 @@ void EpubReaderActivity::selectionKey(const freeink::KeyEvent& event) {
       if (hintOpenPending && !isCancelKey(event)) return;
       passThrough = !hintOpenPending;
       closeHintsLocked(false);
+    } else if (hints->mode == SelectMode::Note) {
+      // The sheet takes every key ('?' types); Alt+v is its help.
+      rerender = noteKeyLocked(event, &noteHelp);
+      if (noteHelp && hints) {
+        settleOverlayRefresh();
+        if (hints->pageStored) {
+          renderer.discardStoredBwBuffer();
+          hints->pageStored = false;
+        }
+        hints->redrawAfterRender = true;
+      }
     } else if (deckpoint::isHelpKey(event)) {
       // The help screen covers the page; the stage is drawn again over the
       // page render that follows it.
@@ -611,6 +643,8 @@ void EpubReaderActivity::selectionKey(const freeink::KeyEvent& event) {
               break;
           }
           break;
+        case SelectMode::Note:  // handled above
+          break;
       }
     }
   }
@@ -618,6 +652,11 @@ void EpubReaderActivity::selectionKey(const freeink::KeyEvent& event) {
   if (help) {
     keysSuspended = true;
     deckpoint::openKeyHelp(renderer, mappedInput, deckpoint::SELECTION_HELP_OWNER, &deckpoint::SELECTION_KEY_HELP);
+    return;
+  }
+  if (noteHelp) {
+    keysSuspended = true;
+    deckpoint::openKeyHelp(renderer, mappedInput, deckpoint::NOTE_EDITOR_HELP_OWNER, &deckpoint::NOTE_EDITOR_KEY_HELP);
     return;
   }
   if (passThrough) {
@@ -674,6 +713,9 @@ void EpubReaderActivity::selectionTouch(const int x, const int y) {
         }
         break;
       }
+      case SelectMode::Note:
+        rerender = noteTouchLocked(x, y);
+        break;
       case SelectMode::WordMenu:
       case SelectMode::HighlightMenu: {
         if (swipe) {

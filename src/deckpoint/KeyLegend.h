@@ -19,6 +19,10 @@ void drawIconLogical(const GfxRenderer& renderer, const freeink::Icon& icon, int
 // by drawHintLegend(); callers set it around their footer and clear it after.
 void setLegendExtra(const char* extra);
 
+// Replaces the legend's "?: Help" part the same way (text editors type a
+// literal '?', so theirs reads "Alt+v: Help"); nullptr restores it.
+void setLegendHelp(const char* help);
+
 // True when legends should be drawn (keyboard present + Settings > Key Legend).
 bool keyLegendEnabled();
 
