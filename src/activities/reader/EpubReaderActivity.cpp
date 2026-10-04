@@ -416,6 +416,7 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  if (keyModeTouchTick()) return;  // DECKPOINT: a touch cancels a keyboard mode
   // DECKPOINT: a running `/` search owns input and does its own layout builds
   // (one at a time), so the prewarm / build ticks below wait for it.
   if (searchTick()) return;
@@ -630,6 +631,11 @@ void EpubReaderActivity::loop() {
         break;
     }
   }
+
+  // DECKPOINT: long-press a word -> dictionary, ahead of the tap handlers below
+  // (it claims the contact, so its lift neither turns the page, skips a
+  // chapter nor opens the menu).
+  if (!atEndOfBook && !endOfBookMenuOpen && touchLookUpTick()) return;
 
   // Link taps take priority over the reader-menu and page-turn zones.
   if (!atEndOfBook && !currentPageLinks.empty() && SETTINGS.touchReaderControls &&

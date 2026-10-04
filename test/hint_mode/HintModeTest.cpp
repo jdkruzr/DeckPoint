@@ -219,3 +219,31 @@ TEST(WordToken, SelectableTokens) {
   EXPECT_FALSE(isSelectableToken("\xE2\x80\xA2"));  // bullet
   EXPECT_FALSE(isSelectableToken("\xE2\x80"));      // truncated sequence
 }
+
+// Tag placement: above the word (T-Deck numbers: Noto Serif compact reader
+// font, ascender 17, line top at y; Ubuntu 11 px label font, ascender 11).
+TEST(HintTag, SitsAboveTheWordsFirstLetter) {
+  using deckpoint::reader::hintLabelCapHeight;
+  using deckpoint::reader::hintTagRect;
+  const int tagH = hintLabelCapHeight(11) + 2;
+  EXPECT_EQ(hintLabelCapHeight(11), 9);
+  EXPECT_LT(tagH, 13 + 2);  // smaller than the old full-line-box tag
+  const auto tag = hintTagRect(40, 100, 17, 12, tagH, 240, 320);
+  EXPECT_EQ(tag.x, 40);
+  // Bottom edge at line top + ascender / 3 (5 px): above Noto's cap top
+  // (~5.6 px) and well above its x-height (~8.4 px).
+  EXPECT_EQ(tag.y + tag.height, 105);
+  EXPECT_LE(tag.y + tag.height, 100 + 17 / 3);
+  EXPECT_LT(tag.y, 100);  // the rest rises into the line gap
+}
+
+TEST(HintTag, ClampedOnScreen) {
+  using deckpoint::reader::hintTagRect;
+  const auto top = hintTagRect(-3, 2, 17, 12, 11, 240, 320);
+  EXPECT_EQ(top.x, 0);
+  EXPECT_EQ(top.y, 0);
+  const auto right = hintTagRect(235, 100, 17, 12, 11, 240, 320);
+  EXPECT_EQ(right.x, 240 - 12);
+  const auto bottom = hintTagRect(10, 330, 17, 12, 11, 240, 320);
+  EXPECT_EQ(bottom.y, 320 - 11);
+}

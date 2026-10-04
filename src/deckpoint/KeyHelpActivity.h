@@ -30,7 +30,7 @@ class KeyHelpActivity final : public Activity {
     const char* what;
     bool heading;
   };
-  static constexpr int MAX_ROWS = 48;
+  static constexpr int MAX_ROWS = 64;  // reader: ~53 (keys, commands, global, touch); 12 B each
   // Key text for a table's runtime-composed extra section (KeyHelpExtra).
   static constexpr int MAX_EXTRA_ROWS = 24;
   static constexpr int EXTRA_KEYS_LEN = 24;

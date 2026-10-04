@@ -1,4 +1,5 @@
 #include "ReaderKeys.h"
+#include "deckpoint/HelpKey.h"
 
 namespace deckpoint::reader {
 
@@ -74,7 +75,7 @@ ReaderCommand ReaderKeys::feed(const freeink::KeyEvent& event) {
     cmd.type = pending() ? ReaderCmd::Pending : ReaderCmd::None;
     return cmd;
   }
-  if (c == '?') return finish(ReaderCmd::Help);
+  if (deckpoint::isHelpKey(event)) return finish(ReaderCmd::Help);
 
   if (prefix != 0) {
     switch (prefix) {

@@ -1,5 +1,6 @@
 #include "CrossPointSettings.h"
 
+#include <BoardConfig.h>  // DECKPOINT
 #include <I18n.h>
 #include <Logging.h>
 #include <ObfuscationUtils.h>
@@ -13,6 +14,7 @@
 #include "I18nKeys.h"
 #include "ReaderFontSizes.h"
 #include "SettingsList.h"
+#include "deckpoint/TouchDefaults.h"  // DECKPOINT
 #include "fontIds.h"
 #include "util/ParagraphIndentMigration.h"
 
@@ -21,6 +23,14 @@ namespace {
 // Stack buffer for "<key>_obf" key construction — avoids a std::string
 // allocation per obfuscated setting on every save and load.
 constexpr size_t OBF_KEY_BUF = 64;
+
+// DECKPOINT: deckpoint/TouchDefaults.h mirrors these enum values.
+static_assert(deckpoint::touch::GESTURE_TAP_AND_SWIPE == CrossPointSettings::TAP_AND_SWIPE);
+static_assert(deckpoint::touch::GESTURE_SWIPE_ONLY == CrossPointSettings::SWIPE_ONLY);
+static_assert(deckpoint::touch::MENU_TAP == CrossPointSettings::READER_MENU_TAP);
+static_assert(deckpoint::touch::READER_TOUCH_ON == CrossPointSettings::TOUCH_READER_ON);
+
+constexpr const char* DECKPOINT_REVISION_KEY = "deckpointSettings";  // DECKPOINT
 
 // Null-terminated copy into a fixed-size settings field.
 void copyToField(char* dest, const char* src, const size_t maxLen) {
@@ -111,6 +121,9 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   if (keyboardLayouts != 0) {
     doc["keyboardLayouts"] = keyboardLayouts;
   }
+
+  // DECKPOINT: the DeckPoint defaults revision this file has seen (T-Deck only).
+  if (BoardConfig::isTDeckPro()) doc[DECKPOINT_REVISION_KEY] = deckpoint::touch::SETTINGS_REVISION;
 }
 
 bool CrossPointSettings::fromJson(JsonVariantConst doc) {
@@ -264,6 +277,13 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   // Absent means unconfigured, which is the default.
   if (doc["keyboardLayouts"].is<uint16_t>()) {
     keyboardLayouts = doc["keyboardLayouts"].as<uint16_t>();
+  }
+
+  // DECKPOINT: one-time reader touch defaults for files that predate them.
+  if (deckpoint::touch::migrateReaderTouchSettings(doc[DECKPOINT_REVISION_KEY] | (uint8_t)0,
+                                                   BoardConfig::isTDeckPro(), readerTouchSettings())) {
+    LOG_INF("CPS", "DeckPoint settings revision %u applied", deckpoint::touch::SETTINGS_REVISION);
+    needsResave = true;
   }
 
   if (needsResave) {

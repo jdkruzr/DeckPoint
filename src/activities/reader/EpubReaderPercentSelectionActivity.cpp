@@ -1,4 +1,5 @@
 #include "EpubReaderPercentSelectionActivity.h"
+#include "deckpoint/HelpKey.h"  // DECKPOINT
 
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
@@ -175,7 +176,7 @@ void EpubReaderPercentSelectionActivity::onKey(const freeink::KeyEvent& event) {
       break;
   }
   const char c = static_cast<char>(event.ch);
-  if (c == '?') {
+  if (deckpoint::isHelpKey(event)) {
     deckpoint::openKeyHelp(renderer, mappedInput, name.c_str(), keyHelp());
     return;
   }

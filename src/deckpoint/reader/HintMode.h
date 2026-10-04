@@ -72,4 +72,37 @@ class HintMatcher {
   int selectedIndex = -1;
 };
 
+// Where a hint tag sits: above its word, not on it. Labels are drawn in
+// capitals (no descenders), so the tag only needs the label font's cap height
+// plus padding (~10 px with the T-Deck's 11 px UI font, vs 15 px for a full
+// line box). Its bottom edge sits a third of the reader font's ascender below
+// the line top, which is just above where capitals start (Noto Serif: cap
+// height ~2/3 of the ascender), so the word's first letter stays readable:
+// lowercase bodies are untouched and a capital or ascender loses at most its
+// top pixel. The rest of the tag rises into the line gap and the previous
+// line's descender band. Clamped on screen.
+struct HintTagRect {
+  int x;
+  int y;
+  int width;
+  int height;
+};
+
+// Cap height estimated from a font's ascender (ascender includes internal
+// leading: Ubuntu caps ~0.74 of it, Noto ~0.67); rounded up so a capital never
+// pokes out of its tag.
+constexpr int hintLabelCapHeight(const int labelAscender) { return (labelAscender * 3 + 3) / 4; }
+
+constexpr HintTagRect hintTagRect(const int wordX, const int wordY, const int readerAscender, const int tagW,
+                                  const int tagH, const int screenW, const int screenH) {
+  const int bottom = wordY + readerAscender / 3;
+  int y = bottom - tagH;
+  if (y > screenH - tagH) y = screenH - tagH;
+  if (y < 0) y = 0;
+  int x = wordX;
+  if (x > screenW - tagW) x = screenW - tagW;
+  if (x < 0) x = 0;
+  return {x, y, tagW, tagH};
+}
+
 }  // namespace deckpoint::reader

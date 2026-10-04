@@ -924,10 +924,11 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     }
     const int legendLh = renderer.getLineHeight(SMALL_FONT_ID);
     const int legendY = renderer.getScreenHeight() - 2 * legendLh - metrics.verticalSpacing;
-    deckpoint::drawCenteredEscLegend(renderer, SMALL_FONT_ID, legendY, "Enter: OK    ", ": cancel");
+    deckpoint::drawCenteredEscLegend(renderer, SMALL_FONT_ID, legendY, "Enter: OK | ", ": Cancel");
     const char* keysLegend = isPassword ? "Alt+P: show/hide password" : "Alt+H/L: move cursor";
     char withHelp[64];
-    snprintf(withHelp, sizeof(withHelp), "%s   Alt+%s", keysLegend, tr(STR_KH_LEGEND_HELP));
+    // DECKPOINT: a bare '?' types here, so help is advertised as Alt+v (Alt+? also works).
+    snprintf(withHelp, sizeof(withHelp), "%s | Alt+v: Help", keysLegend);
     if (renderer.getTextWidth(SMALL_FONT_ID, withHelp) <= renderer.getScreenWidth() - 8) keysLegend = withHelp;
     renderer.drawCenteredText(SMALL_FONT_ID, legendY + legendLh, keysLegend, true);
     renderer.displayBuffer();
@@ -1080,7 +1081,9 @@ void KeyboardEntryActivity::onKey(const freeink::KeyEvent& event) {
   if (event.ch == 0) return;
   if (alt) {
     switch (event.ch) {
-      case '?':  // plain '?' types; Alt+? is key help
+      case '?':  // plain '?' types; Alt+? (or Alt+v) is key help
+      case 'v':
+      case 'V':
         deckpoint::openKeyHelp(renderer, mappedInput, name.c_str(), keyHelp());
         return;
       case 'h':

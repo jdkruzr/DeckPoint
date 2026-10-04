@@ -574,6 +574,8 @@ void setup() {
   if (gpio.hasTouch()) {
     SETTINGS.readerMenuStyle = CrossPointSettings::READER_MENU_TOOLBAR;
   }
+  // DECKPOINT: board reader touch defaults, seeded like readerMenuStyle above.
+  deckpoint::touch::applyReaderTouchDefaults(BoardConfig::isTDeckPro(), SETTINGS.readerTouchSettings());
   SETTINGS.loadFromFile();
   // DECKPOINT: touch event accessors read the Touchscreen setting live.
   gpio.bindTouchInputSetting(&SETTINGS.touchscreen);

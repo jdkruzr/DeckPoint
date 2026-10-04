@@ -38,6 +38,40 @@ constexpr KeyHelp makeKeyHelp(const KeyHelpEntry (&entries)[N], const KeyHelpExt
   return KeyHelp{entries, static_cast<uint8_t>(N), extra};
 }
 
+// When a touch help row applies; KeyHelpActivity checks the live reader
+// settings so the page never describes a gesture that is switched off.
+enum class TouchWhen : uint8_t {
+  Always,
+  TapZones,     // both directions tap-enabled, not inverted: left third / right side
+  PageSwipe,    // either direction swipe-enabled
+  MenuTap,      // Show reader menu = Tap
+  ReaderTouch,  // touch reader controls on
+};
+
+// A touch help row: both columns translated (gestures are words, not caps).
+struct TouchHelpEntry {
+  StrId gesture;
+  StrId what;
+  TouchWhen when;
+};
+
+struct TouchHelp {
+  StrId title;
+  const TouchHelpEntry* entries;
+  uint8_t count;
+};
+
+template <size_t N>
+constexpr TouchHelp makeTouchHelp(const StrId title, const TouchHelpEntry (&entries)[N]) {
+  static_assert(N <= UINT8_MAX, "touch help table too long");
+  return TouchHelp{title, entries, static_cast<uint8_t>(N)};
+}
+
+// Touch section of the `?` page, shown while touch input is on: the book one
+// in the reader, the lists one everywhere else.
+extern const TouchHelp TOUCH_BOOK_HELP;
+extern const TouchHelp TOUCH_LISTS_HELP;
+
 // Hand-written tables (KeyHelpTables.cpp, flash-resident).
 extern const KeyHelp HOME_KEY_HELP;
 extern const KeyHelp LIBRARY_KEY_HELP;

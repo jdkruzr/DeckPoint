@@ -89,7 +89,8 @@ void SettingsActivity::rebuildSettingsLists() {
   }
 
   // Append device-only ACTION items
-  if (!BoardConfig::hasTouch()) {
+  // DECKPOINT: keyboard boards have no front buttons to remap.
+  if (!BoardConfig::hasTouch() && !FREEINK_CAP_KEYBOARD) {
     controlsSettings.insert(controlsSettings.begin(),
                             SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
   }

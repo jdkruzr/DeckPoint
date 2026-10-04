@@ -731,6 +731,26 @@ void list(Frame<MaxInteractions> &frame, Rect rect, const ListProps &props) {
         hit.y = row.y;
         hit.height = row.height;
       }
+      if (!frame.device().hasTouch) {
+        // DECKPOINT: compact (key-first) rows sit closer together than the
+        // minimum touch size, so growing each row to it overlapped the next
+        // row (newest-first routing then sent a tap low on a row to the row
+        // below), while partialTrailingRow left the gaps dead. Tile the row
+        // pitch instead: each row owns its height plus half the gap on each
+        // side. The first / last row keep the min-size reach outward, but
+        // only up to the list's own rect, so they never cover a tab bar or a
+        // header button above it (registered earlier, so it would lose).
+        const int16_t bandTop = static_cast<int16_t>(row.y - rowGap / 2);
+        const int16_t bandBottom = static_cast<int16_t>(row.bottom() + (rowGap - rowGap / 2));
+        const bool firstRow = i == top;
+        const bool lastRow = i + 1 >= props.count;
+        const int16_t reachTop = hit.y > rect.y ? hit.y : rect.y;
+        const int16_t reachBottom = hit.bottom() < rect.bottom() ? hit.bottom() : rect.bottom();
+        const int16_t hitTop = firstRow && reachTop < bandTop ? reachTop : bandTop;
+        const int16_t hitBottom = lastRow && reachBottom > bandBottom ? reachBottom : bandBottom;
+        hit.y = hitTop;
+        hit.height = static_cast<int16_t>(hitBottom - hitTop);
+      }
       frame.hit(hit, props.action, item.actionValue, props.inputMask, hitState);
       if (revealed)
         frame.hit(actionRect, reveal->action, item.actionValue,

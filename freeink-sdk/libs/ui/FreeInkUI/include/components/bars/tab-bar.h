@@ -184,8 +184,19 @@ void tabBar(Frame<MaxInteractions>& frame, Rect rect, const TabBarProps& props) 
     State state = tab.selected ? StateSelected : StateNormal;
     if (!tab.enabled) state |= StateDisabled;
     if (tab.enabled && props.action != NO_ACTION) {
-      frame.hit(ensureMinTouchRect(slot, props.minTouchSize, frame.screen()), props.action, tab.value,
-                props.inputMask, state);
+      Rect hit = ensureMinTouchRect(slot, props.minTouchSize, frame.screen());
+      if (!frame.device().hasTouch) {
+        // DECKPOINT: compact (key-first) bars: each tab owns its slot plus half
+        // the gap on each side (no dead gaps between tabs) and stays inside
+        // the bar's band, so it neither covers the header above nor competes
+        // with the list's first row below.
+        const bool tiled = !distribute && slotGap > 0;
+        const int16_t left = tiled && i > 0 ? static_cast<int16_t>(slot.x - slotGap / 2) : hit.x;
+        const int16_t right =
+            tiled && i + 1 < props.count ? static_cast<int16_t>(slot.right() + (slotGap - slotGap / 2)) : hit.right();
+        hit = Rect{left, slot.y, static_cast<int16_t>(right - left), slot.height};
+      }
+      frame.hit(hit, props.action, tab.value, props.inputMask, state);
     }
     state = frame.stateFor(props.action, tab.value, state);
     const BoxStyle& style = styles.resolve(state);

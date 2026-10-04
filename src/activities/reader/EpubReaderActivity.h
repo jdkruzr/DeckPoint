@@ -277,6 +277,18 @@ class EpubReaderActivity final : public ReaderActivity {
   // opens the definition (Left) or writes why not into msg (Message).
   // Progress shows in the command band, or as a popup for the hints.
   deckpoint::CommandResult lookUpWord(const char* word, char* msg, size_t msgSize, bool fromHints);
+  // Inverts a picked word on the page in the framebuffer (caller holds the
+  // RenderLock); lookUpPickedWord() then pushes it with the lookup popup.
+  void markPickedWordLocked(const deckpoint::reader::WordBox& box);
+  void lookUpPickedWord(const char* word);
+
+  // DECKPOINT: touch alongside the keyboard (deckpoint/reader/EpubReaderTouch.cpp).
+  // From loop(): a touch while a keyboard mode is up (`:` / `/` line, running
+  // search, hint labels, search mark) cancels that mode and is swallowed.
+  bool keyModeTouchTick();
+  // From loop(): a long-press claims its contact and looks up the word under
+  // it (none: ignored); true when it fired.
+  bool touchLookUpTick();
 
   // DECKPOINT: `/` search with n / N (deckpoint/reader/EpubReaderSearch.cpp).
   // The session runs in slices from loop() and owns input while it exists;

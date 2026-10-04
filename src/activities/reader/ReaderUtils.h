@@ -11,6 +11,7 @@
 
 #include "MappedInputManager.h"
 #include "activities/ActivityManager.h"
+#include "deckpoint/reader/ReaderTapZones.h"  // DECKPOINT
 
 namespace ReaderUtils {
 
@@ -118,23 +119,19 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
     return result;
   }
 
-  const int width = renderer.getScreenWidth();
-  const int height = renderer.getScreenHeight();
   // The centered reader-menu tap target (isTouchMenuTap below) keeps priority
-  // over the page-turn zones.
-  if (SETTINGS.showReaderMenu == CrossPointSettings::READER_MENU_TAP && x >= width / 3 && x < width - width / 3 &&
-      y >= height / 3 && y < height - height / 3) {
-    return result;
-  }
-
-  // Give the whole page to the sole tap-enabled direction. When both accept
-  // taps, split at the left third. RTL books and Inverted Tap each reverse
-  // the shared zones.
+  // over the page-turn zones. Give the whole page to the sole tap-enabled
+  // direction. When both accept taps, split at the left third. RTL books and
+  // Inverted Tap each reverse the shared zones.
+  // DECKPOINT: zone math in deckpoint/reader/ReaderTapZones.h (host-tested).
   const bool inverted = (SETTINGS.pageTurnGesture == CrossPointSettings::INVERTED_TAP ||
                          SETTINGS.previousPageGesture == CrossPointSettings::INVERTED_TAP) != rtlBook;
-  const bool nextZone = inverted ? x < (width * 2) / 3 : x >= width / 3;
-  result.next = nextTaps && (!prevTaps || nextZone);
-  result.prev = prevTaps && (!nextTaps || !nextZone);
+  const auto turn = deckpoint::reader::tapTurnAt(x, y, renderer.getScreenWidth(), renderer.getScreenHeight(),
+                                                 SETTINGS.showReaderMenu == CrossPointSettings::READER_MENU_TAP,
+                                                 nextTaps, prevTaps, inverted);
+  if (!turn.prev && !turn.next) return result;
+  result.next = turn.next;
+  result.prev = turn.prev;
   result.heldMs = gpio.lastTouchHeldMs();
   return result;
 }
@@ -150,11 +147,7 @@ inline bool isTouchMenuTap(const GfxRenderer& renderer, const MappedInputManager
   int x = 0;
   int y = 0;
   if (!input.wasScreenTapped(x, y)) return false;
-  const int width = renderer.getScreenWidth();
-  const int height = renderer.getScreenHeight();
-  const int zoneWidth = width / 3;
-  const int zoneHeight = height / 3;
-  return x >= zoneWidth && x < width - zoneWidth && y >= zoneHeight && y < height - zoneHeight;
+  return deckpoint::reader::inMenuTapZone(x, y, renderer.getScreenWidth(), renderer.getScreenHeight());  // DECKPOINT
 }
 
 // Reader menu opens on the menu edge-swipe or a center-third tap. Home-key

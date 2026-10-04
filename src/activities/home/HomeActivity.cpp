@@ -431,8 +431,13 @@ void HomeActivity::loop() {
   // Row height from the theme, not the metrics table: RoundedRaff draws
   // font-derived rows and the touch grid must match the visuals exactly.
   const int menuRowHeight = GUI.getMenuRowHeight(renderer);
-  const auto menuTouch = mappedInput.rowTouch(menuRow, menuTop, menuRowHeight + metrics.menuSpacing, renderedMenuCount,
-                                              0, INT32_MAX, menuRowHeight);
+  // DECKPOINT: compact (key-first) rows are only a few px apart; each row also
+  // owns half the spacing above and below it, so no tap between rows is dead.
+  const bool compactRows = !mappedInput.hasTouch();
+  const auto menuTouch =
+      mappedInput.rowTouch(menuRow, compactRows ? menuTop - metrics.menuSpacing / 2 : menuTop,
+                           menuRowHeight + metrics.menuSpacing, renderedMenuCount, 0, INT32_MAX,
+                           compactRows ? 0 : menuRowHeight);
   if (menuTouch != MappedInputManager::RowTouch::None) {
     const int touchedIndex =
         metrics.homeContinueReadingInMenu ? menuRow : menuRow + static_cast<int>(recentBooks.size());

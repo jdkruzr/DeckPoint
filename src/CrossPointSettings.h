@@ -6,6 +6,7 @@
 
 #include <cstdint>
 
+#include "deckpoint/TouchDefaults.h"  // DECKPOINT
 #include "util/HomeButtonInput.h"
 
 class CrossPointSettings : public PersistableStore<CrossPointSettings> {
@@ -371,6 +372,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // up-swipe). Only surfaced on home-key boards, where Home is the capacitive
   // key and the bottom edge is free; elsewhere it stays at the Tap default.
   uint8_t showReaderMenu = READER_MENU_TAP;
+  // DECKPOINT: the reader touch fields deckpoint/TouchDefaults.h seeds per board
+  // (before the load) and migrates once (in fromJson).
+  deckpoint::touch::ReaderTouchSettings readerTouchSettings() {
+    return {touchReaderControls, pageTurnGesture, previousPageGesture, showReaderMenu};
+  }
   // Frontlight quick-panel state. Category-less SettingsList entries persist
   // these without adding them to the regular Settings screen.
   uint8_t frontlightBrightness = 60;

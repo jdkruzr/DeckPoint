@@ -533,11 +533,21 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   // reachable without the tap and the bottom edge is free (the capacitive
   // Home key); everywhere else the bottom-edge up-swipe is Home and the
   // center tap is the primary path, so the setting stays at its Tap default.
-  if (!BoardConfig::hasHomeKey()) {
+  // DECKPOINT: touch boards without a Home key still open the reader menu by tapping the center.
+  if (!BoardConfig::hasHomeKey() && !BoardConfig::hasTouchController()) {
     v.erase(std::remove_if(v.begin(), v.end(),
                            [](const SettingInfo& s) { return s.nameId == StrId::STR_SHOW_READER_MENU; }),
             v.end());
   }
+#if FREEINK_CAP_KEYBOARD
+  // DECKPOINT: keyboard boards have no front or side page buttons.
+  v.erase(std::remove_if(v.begin(), v.end(),
+                         [](const SettingInfo& s) {
+                           return s.nameId == StrId::STR_SIDE_BTN_LAYOUT ||
+                                  s.nameId == StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION;
+                         }),
+          v.end());
+#endif
   if (BoardConfig::hasHomeKey()) {
     v.reserve(v.size() + 3);
     for (unsigned i = 0; i < 3; ++i) {

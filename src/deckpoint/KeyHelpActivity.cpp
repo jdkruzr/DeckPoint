@@ -10,7 +10,9 @@
 #include <cstdio>
 #include <cstring>
 
+#include "CrossPointSettings.h"
 #include "KeyLegend.h"
+#include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -67,6 +69,28 @@ constexpr int ROW_GAP = 3;
 constexpr int COLUMN_GAP = 8;
 constexpr int KEY_MAX_LINES = 2;
 constexpr int WHAT_MAX_LINES = 3;
+
+// Whether a touch help row's gesture is on under the current reader settings
+// (same predicates as ReaderUtils::detectTouchPageTurn / isTouchMenuTap).
+bool touchRowApplies(const TouchWhen when) {
+  const bool readerTouch = SETTINGS.touchReaderControls != 0;
+  const uint8_t next = SETTINGS.pageTurnGesture;
+  const uint8_t prev = SETTINGS.previousPageGesture;
+  switch (when) {
+    case TouchWhen::Always:
+      return true;
+    case TouchWhen::TapZones:
+      return readerTouch && ReaderUtils::gestureAllowsTap(next) && ReaderUtils::gestureAllowsTap(prev) &&
+             next != CrossPointSettings::INVERTED_TAP && prev != CrossPointSettings::INVERTED_TAP;
+    case TouchWhen::PageSwipe:
+      return readerTouch && (ReaderUtils::gestureAllowsSwipe(next) || ReaderUtils::gestureAllowsSwipe(prev));
+    case TouchWhen::MenuTap:
+      return SETTINGS.showReaderMenu == CrossPointSettings::READER_MENU_TAP;
+    case TouchWhen::ReaderTouch:
+      return readerTouch;
+  }
+  return true;
+}
 
 }  // namespace
 
@@ -136,6 +160,16 @@ void KeyHelpActivity::buildRows() {
   addRow(strcmp(ownerName, "KeyboardEntry") == 0 ? "Alt+?" : "?", tr(STR_KH_THIS_HELP));
   addRow("Esc", tr(STR_KH_CLOSE_BACK));
   addRow(tr(STR_KH_KEY_POWER), tr(STR_KH_SLEEP_WAKE));
+
+  if (mappedInput.hasTouchInput()) {
+    const TouchHelp& section = strcmp(ownerName, "EpubReader") == 0 ? TOUCH_BOOK_HELP : TOUCH_LISTS_HELP;
+    addRow(nullptr, I18N.get(section.title), true);
+    for (uint8_t i = 0; i < section.count; i++) {
+      const TouchHelpEntry& entry = section.entries[i];
+      if (touchRowApplies(entry.when)) addRow(I18N.get(entry.gesture), I18N.get(entry.what));
+    }
+    addRow(tr(STR_KH_T_TAP_HERE), tr(STR_KH_T_CLOSE_HELP));
+  }
   firstHiddenRow = rowCount;
 }
 
@@ -169,11 +203,23 @@ void KeyHelpActivity::onKey(const freeink::KeyEvent& event) {
   finish();
 }
 
-// Button / touch boards: Back or Confirm close, Up / Down page.
+// Button / touch boards: Back or Confirm close, Up / Down page. Touch: a tap
+// closes, a vertical swipe pages.
 void KeyHelpActivity::loop() {
+  int tapX = 0;
+  int tapY = 0;
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      mappedInput.wasReleased(MappedInputManager::Button::Confirm) || mappedInput.wasScreenTapped(tapX, tapY)) {
     finish();
+    return;
+  }
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Up) {
+    scroll(1);
+    return;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Down) {
+    scroll(-1);
     return;
   }
   if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {

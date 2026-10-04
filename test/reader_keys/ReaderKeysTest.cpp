@@ -206,6 +206,14 @@ TEST(ReaderKeys, HelpPassesThroughAndResets) {
   EXPECT_FALSE(p.pending());
 }
 
+TEST(ReaderKeys, AltVIsHelpPlainVIsNot) {
+  ReaderKeys p;
+  KeyEvent altV = ch('v');
+  altV.mods = freeink::KeyMod::Alt;
+  EXPECT_EQ(p.feed(altV).type, ReaderCmd::Help);
+  EXPECT_NE(p.feed(ch('v')).type, ReaderCmd::Help);
+}
+
 TEST(ReaderKeys, SingleCommands) {
   ReaderKeys p;
   EXPECT_EQ(p.feed(ch('t')).type, ReaderCmd::Toc);

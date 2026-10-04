@@ -1,4 +1,5 @@
 #include "ActivityManager.h"
+#include "deckpoint/HelpKey.h"  // DECKPOINT
 
 #include <BoardConfig.h>
 #include <FontCacheManager.h>
@@ -145,7 +146,7 @@ void ActivityManager::loop() {
         // over any screen; the rest of the queue is dropped.
         freeink::KeyEvent event;
         bool helpRequested = false;
-        while (halKeyboard.pop(event)) helpRequested = helpRequested || event.ch == '?';
+        while (halKeyboard.pop(event)) helpRequested = helpRequested || deckpoint::isHelpKey(event);
         if (helpRequested && currentActivity->name != "KeyHelp") {
           deckpoint::openKeyHelp(renderer, mappedInput, currentActivity->name.c_str(), currentActivity->keyHelp());
           return;

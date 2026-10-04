@@ -117,35 +117,51 @@ void drawHintLegend(const GfxRenderer& renderer, const char* back, const char* c
   recordLegend(back, confirm, previous, next);
   if (!keyLegendEnabled()) return;
   const auto nonEmpty = [](const char* s) { return s != nullptr && *s != '\0'; };
-  std::string parts[6];
+  // Parts in display order with a drop rank: when the line is too wide, the highest rank goes
+  // first. "?: Help" is never dropped, so every screen advertises its help page.
+  struct Part {
+    std::string text;
+    uint8_t dropRank;  // 0 = never dropped
+  };
+  Part parts[6];
   int count = 0;
   const std::string backL = cleanLabel(back), confirmL = cleanLabel(confirm);
   const std::string prevL = cleanLabel(previous), nextL = cleanLabel(next);
-  if (!backL.empty()) parts[count++] = std::string("Esc (") + MIC + "): " + backL;
-  if (!confirmL.empty()) parts[count++] = std::string("Enter: ") + confirmL;
-  if (s_legendExtra && *s_legendExtra) parts[count++] = s_legendExtra;
+  if (!backL.empty()) parts[count++] = {std::string(1, MIC) + ": " + backL, 2};
+  if (!confirmL.empty()) parts[count++] = {std::string("Enter: ") + confirmL, 3};
+  if (s_legendExtra && *s_legendExtra) parts[count++] = {s_legendExtra, 4};
   const bool prevDir = isDirection(previous), nextDir = isDirection(next);
   if ((prevDir || !nonEmpty(previous)) && (nextDir || !nonEmpty(next)) && (prevDir || nextDir)) {
-    parts[count++] = "j/k: move";
+    parts[count++] = {"j/k: move", 5};
   } else {
-    if (!prevL.empty()) parts[count++] = std::string("k: ") + prevL;
-    if (!nextL.empty()) parts[count++] = std::string("j: ") + nextL;
+    if (!prevL.empty()) parts[count++] = {std::string("k: ") + prevL, 5};
+    if (!nextL.empty()) parts[count++] = {std::string("j: ") + nextL, 5};
   }
   if (count == 0) return;
-  parts[count++] = tr(STR_KH_LEGEND_HELP);  // last, so it is the first part dropped when the line is full
+  parts[count++] = {tr(STR_KH_LEGEND_HELP), 0};
 
-  // Widest spacing that fits, then fewer parts if even single spaces overflow.
   const int maxW = renderer.getScreenWidth() - 8;
   std::string line;
-  for (const char* gap : {"    ", "   ", "  "}) {
+  const auto build = [&](const char* sep) {
     line.clear();
-    for (int i = 0; i < count; i++) line += (i ? gap : "") + parts[i];
-    if (glyphAwareWidth(renderer, SMALL_FONT_ID, line) <= maxW) break;
-  }
-  while (count > 1 && glyphAwareWidth(renderer, SMALL_FONT_ID, line) > maxW) {
-    count--;
-    line.clear();
-    for (int i = 0; i < count; i++) line += (i ? "  " : "") + parts[i];
+    bool first = true;
+    for (int i = 0; i < count; i++) {
+      if (parts[i].text.empty()) continue;
+      if (!first) line += sep;
+      line += parts[i].text;
+      first = false;
+    }
+    return glyphAwareWidth(renderer, SMALL_FONT_ID, line) <= maxW;
+  };
+  // Roomiest separator that fits; otherwise drop the highest-ranked part and retry.
+  while (!build(" | ") && !build("|")) {
+    int victim = -1;
+    for (int i = 0; i < count; i++) {
+      if (parts[i].text.empty() || parts[i].dropRank == 0) continue;
+      if (victim < 0 || parts[i].dropRank >= parts[victim].dropRank) victim = i;
+    }
+    if (victim < 0) break;
+    parts[victim].text.clear();
   }
   // Popups draw over the previous screen's legend; clear the band so the two don't overprint.
   const int bandTop = renderer.getScreenHeight() - keyLegendBandHeight(renderer);
@@ -165,8 +181,8 @@ int drawBottomKeyLegend(const GfxRenderer& renderer, const int fontId, const cha
 void drawCenteredEscLegend(const GfxRenderer& renderer, const int fontId, const int y, const char* before,
                            const char* after) {
   constexpr int iconGap = 1;
-  const std::string head = std::string(before) + "Esc (";
-  const std::string tail = std::string(")") + after;
+  const std::string head = std::string(before);
+  const std::string tail = std::string(after);
   const int headW = renderer.getTextWidth(fontId, head.c_str());
   const int afterW = renderer.getTextWidth(fontId, tail.c_str());
   const int iconW = Mic12Icon.w;

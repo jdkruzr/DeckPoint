@@ -133,6 +133,22 @@ constexpr KeyHelpEntry GO_TO_PERCENT[] = {
     {"Esc", StrId::STR_KH_CANCEL},
 };
 
+// Rows whose gesture is switched off in Settings > Controls are left out.
+constexpr TouchHelpEntry TOUCH_BOOK[] = {
+    {StrId::STR_KH_T_TAP_LEFT, StrId::STR_KH_PREV_PAGE, TouchWhen::TapZones},
+    {StrId::STR_KH_T_TAP_RIGHT, StrId::STR_KH_NEXT_PAGE, TouchWhen::TapZones},
+    {StrId::STR_KH_T_TAP_CENTER, StrId::STR_KH_READER_MENU, TouchWhen::MenuTap},
+    {StrId::STR_KH_T_SWIPE_SIDEWAYS, StrId::STR_KH_T_TURN_PAGE, TouchWhen::PageSwipe},
+    {StrId::STR_KH_T_SWIPE_TOP, StrId::STR_KH_READER_MENU, TouchWhen::Always},
+    {StrId::STR_KH_T_HOLD_WORD, StrId::STR_KH_LOOK_UP, TouchWhen::ReaderTouch},
+    {StrId::STR_KH_T_TAP_IN_MODE, StrId::STR_KH_T_CANCEL_MODE, TouchWhen::Always},
+};
+
+constexpr TouchHelpEntry TOUCH_LISTS[] = {
+    {StrId::STR_KH_T_TAP_ITEM, StrId::STR_KH_T_SELECT, TouchWhen::Always},
+    {StrId::STR_KH_T_SWIPE_UP_DOWN, StrId::STR_KH_T_SCROLL, TouchWhen::Always},
+};
+
 }  // namespace
 
 constexpr KeyHelp HOME_KEY_HELP = makeKeyHelp(HOME);
@@ -148,5 +164,8 @@ constexpr KeyHelp DEFINITION_KEY_HELP = makeKeyHelp(DEFINITION);
 constexpr KeyHelp KEYBOARD_ENTRY_KEY_HELP = makeKeyHelp(KEYBOARD_ENTRY);
 constexpr KeyHelp IMAGE_VIEWER_KEY_HELP = makeKeyHelp(IMAGE_VIEWER);
 constexpr KeyHelp GO_TO_PERCENT_KEY_HELP = makeKeyHelp(GO_TO_PERCENT);
+
+constexpr TouchHelp TOUCH_BOOK_HELP = makeTouchHelp(StrId::STR_KH_SECTION_TOUCH_BOOK, TOUCH_BOOK);
+constexpr TouchHelp TOUCH_LISTS_HELP = makeTouchHelp(StrId::STR_KH_SECTION_TOUCH_LISTS, TOUCH_LISTS);
 
 }  // namespace deckpoint

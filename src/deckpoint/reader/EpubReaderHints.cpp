@@ -1,5 +1,6 @@
 // DECKPOINT: the reader's `d` hint-mode dictionary. Every word on the page
-// gets a short label (HintMode, host-tested) drawn as a small inverted tag;
+// gets a short label (HintMode, host-tested) drawn as a small inverted tag
+// just above the word (hintTagRect), so its first letter stays visible;
 // typing a label looks that word up through the `:dict` path.
 //
 // Refresh model (same as the `:` line): the clean page is copied out of the
@@ -108,19 +109,28 @@ void EpubReaderActivity::drawHintLabels() const {
   const size_t typedLen = strlen(matcher.typed());
   const int screenW = renderer.getScreenWidth();
   const int screenH = renderer.getScreenHeight();
-  const int tagH = renderer.getLineHeight(LABEL_FONT_ID) + 2 * LABEL_PAD;
+  const int labelAscender = renderer.getFontAscenderSize(LABEL_FONT_ID);
+  const int readerAscender = renderer.getFontAscenderSize(SETTINGS.getReaderFontId());
+  const int tagH = deckpoint::reader::hintLabelCapHeight(labelAscender) + 2 * LABEL_PAD;
   for (uint16_t i = 0; i < matcher.labels().count(); i++) {
     if (!matcher.matches(i)) continue;
     char label[HintLabels::MAX_LABEL_LEN + 1];
     matcher.labels().label(i, label);
-    // Once a prefix is typed only the letter still to type is shown.
-    const char* shown = label + typedLen;
+    // Once a prefix is typed only the letter still to type is shown, in
+    // capitals (typing is case-blind).
+    char shown[HintLabels::MAX_LABEL_LEN + 1];
+    size_t n = 0;
+    for (const char* c = label + typedLen; *c && n < HintLabels::MAX_LABEL_LEN; c++) {
+      shown[n++] = (*c >= 'a' && *c <= 'z') ? static_cast<char>(*c - 'a' + 'A') : *c;
+    }
+    shown[n] = '\0';
     const WordBox& word = hints->words[i];
     const int tagW = renderer.getTextWidth(LABEL_FONT_ID, shown) + 2 * LABEL_PAD;
-    const int x = std::max(0, std::min(static_cast<int>(word.x), screenW - tagW));
-    const int y = std::max(0, std::min(static_cast<int>(word.y), screenH - tagH));
-    renderer.fillRect(x, y, tagW, tagH, true);
-    renderer.drawText(LABEL_FONT_ID, x + LABEL_PAD, y + LABEL_PAD, shown, false);
+    const auto tag = deckpoint::reader::hintTagRect(word.x, word.y, readerAscender, tagW, tagH, screenW, screenH);
+    renderer.fillRect(tag.x, tag.y, tag.width, tag.height, true);
+    // drawText's y is the line top (baseline = y + ascender): sit the
+    // baseline on the tag's bottom padding.
+    renderer.drawText(LABEL_FONT_ID, tag.x + LABEL_PAD, tag.y + tag.height - LABEL_PAD - labelAscender, shown, false);
   }
 }
 
@@ -192,13 +202,7 @@ void EpubReaderActivity::hintKey(const freeink::KeyEvent& event) {
           settleOverlayRefresh();
           if (hints->pageStored) renderer.restoreBwBuffer(/*resyncPanelBaseline=*/false);
           hints->pageStored = false;
-          // The chosen word inverted on the clean page; the "Looking up"
-          // popup that follows pushes both in one refresh.
-          const int fontId = SETTINGS.getReaderFontId();
-          renderer.getFontCacheManager()->prewarmCache(
-              fontId, box.text, static_cast<uint8_t>(1u << (static_cast<uint8_t>(box.style) & 0x03)));
-          renderer.fillRect(box.x - 2, box.y - 2, box.width + 4, renderer.getLineHeight(fontId) + 4, true);
-          renderer.drawText(fontId, box.x, box.y, box.text, false, box.style);
+          markPickedWordLocked(box);
           hints.reset();
           hintsOpen = false;
           break;
@@ -215,7 +219,21 @@ void EpubReaderActivity::hintKey(const freeink::KeyEvent& event) {
     return;
   }
   if (word[0] == '\0') return;
+  lookUpPickedWord(word);
+}
 
+void EpubReaderActivity::markPickedWordLocked(const WordBox& box) {
+  // The chosen word inverted on the clean page; the "Looking up" popup that
+  // follows pushes both in one refresh.
+  const int fontId = SETTINGS.getReaderFontId();
+  if (auto* fontCache = renderer.getFontCacheManager()) {
+    fontCache->prewarmCache(fontId, box.text, static_cast<uint8_t>(1u << (static_cast<uint8_t>(box.style) & 0x03)));
+  }
+  renderer.fillRect(box.x - 2, box.y - 2, box.width + 4, renderer.getLineHeight(fontId) + 4, true);
+  renderer.drawText(fontId, box.x, box.y, box.text, false, box.style);
+}
+
+void EpubReaderActivity::lookUpPickedWord(const char* word) {
   char msg[96];
   msg[0] = '\0';
   switch (lookUpWord(word, msg, sizeof(msg), true)) {

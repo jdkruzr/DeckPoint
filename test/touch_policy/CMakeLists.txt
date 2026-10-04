@@ -1,4 +1,4 @@
-add_executable(TouchPolicyTest TouchPolicyTest.cpp)
+add_executable(TouchPolicyTest TouchPolicyTest.cpp ReaderTouchTest.cpp)
 
 target_include_directories(TouchPolicyTest PRIVATE
   ../../src

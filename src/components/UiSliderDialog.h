@@ -48,6 +48,9 @@ inline void buildSliderDialogScreen(UiAppHost::UiScreen& screen, freeink::ui::Gf
   uiTarget.setFont(fui::GfxRendererTarget::FONT_TITLE, NOTOSANS_18_FONT_ID);
 
   const bool touch = mappedInput.hasTouch();
+  // DECKPOINT: a key-first layout with touch input still needs a way to
+  // confirm by touch: the [-] [+] [Confirm] row follows touch input.
+  const bool touchButtons = mappedInput.hasTouchInput();
   // Touch boards get the finger-sized pill (same as the frontlight rows); on
   // button boards the capsule is a read-only gauge driven by the keys, so a
   // slim band is enough.
@@ -75,8 +78,8 @@ inline void buildSliderDialogScreen(UiAppHost::UiScreen& screen, freeink::ui::Gf
   static fui::OptionDialogProps props;
   props.title = spec.title;
   props.headline = spec.readout;
-  props.options = touch ? options : nullptr;
-  props.optionCount = touch ? 3 : 0;
+  props.options = touchButtons ? options : nullptr;  // DECKPOINT
+  props.optionCount = touchButtons ? 3 : 0;
   props.inputMask = fui::InputTouch;
   props.titleText = theme.smallText;
   props.titleText.bold = true;
