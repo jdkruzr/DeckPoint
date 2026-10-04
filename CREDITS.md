@@ -45,9 +45,12 @@ CrossInk lives at <https://github.com/uxjulia/CrossInk>.
   behave. It is GPL-3, so **no code was copied**.
 - **LilyGo**, for making the T-Deck Pro and publishing the schematics and example material that
   made bring-up possible. Their repository and `bb_epaper` are GPL-3 and were reference only.
-- **GxEPD2**: the UC8253 driver follows its forced-temperature trick for the panel's OTP
-  waveforms (see `Uc8253Gdeq031Driver.cpp`). TODO(user): confirm whether to list GxEPD2 formally
-  and with which license.
+- **[GxEPD2](https://github.com/ZinggJM/GxEPD2)** by Jean-Marc Zingg: the reference for
+  the T-Deck Pro's GDEQ031T10 panel. DeckPoint's UC8253 driver
+  (`freeink-sdk/libs/display/FreeInkDisplay/src/driver/Uc8253Gdeq031Driver.cpp`) follows
+  `GxEPD2_310_GDEQ031T10` for its init and refresh register values, the forced-temperature
+  trick that selects the panel's OTP waveforms, and the soft re-init before RAM writes. FreeInk
+  also uses GxEPD2 as a reference for the X4 panels (`freeink-sdk/docs/display-driver-references.md`).
 
 ## What came from where
 
@@ -63,7 +66,7 @@ Verified from the repository (git history, file headers, `// DECKPOINT:` markers
 | Keyboard layer, `?` help, key legend, `:` command line, vim keys, hint-mode lookup, compact UI, font pipeline (`src/deckpoint/`) | DeckPoint |
 | Highlights, note editor, `:notes`, Markdown / My Clippings export | Written from scratch for DeckPoint; the idea is inspired by CrossInk's clippings feature |
 | KOReader XPointers, annotation store, AnnotationSync-format WebDAV sync | DeckPoint, written against KOReader's and AnnotationSync's observable formats |
-| CrossInk quick actions, reading stats | Not ported: no such code in the repo (listed as ideas in `docs/deckpoint/NEXT_STEPS.md`). TODO(user): update if that changes |
+| CrossInk quick actions, reading stats | Not ported: no such code in the repo (listed as ideas in `docs/deckpoint/NEXT_STEPS.md`). |
 
 ## Licenses
 
@@ -73,6 +76,7 @@ Verified from the repository (git history, file headers, `// DECKPOINT:` markers
 | FreeInk SDK (vendored) | MIT, "Copyright (c) 2026 FreeInk" | `freeink-sdk/LICENSE`, `freeink-sdk/NOTICE` (also carries the OpenX4 E-Paper Community SDK MIT notice) |
 | CrossInk | MIT (inherits CrossPoint's license) | <https://github.com/uxjulia/CrossInk/blob/HEAD/LICENSE> |
 | Meshtastic, LilyGo T-Deck-Pro repo, bb_epaper | GPL-3: reference only, no code copied | nothing included |
+| GxEPD2 | GPL-3: reference for panel register values and sequencing; no source files included | nothing included |
 | Bundled libraries in `lib/` (expat, miniz, uzlib, ...) | their own licenses | each library's directory |
 
 TODO(user): add your own copyright line for DeckPoint changes next to the CrossPoint one in
