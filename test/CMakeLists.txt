@@ -87,6 +87,7 @@ add_subdirectory(commands)
 add_subdirectory(hint_mode)
 add_subdirectory(selection)  # DECKPOINT
 add_subdirectory(note_editor)  # DECKPOINT
+add_subdirectory(notes_export)  # DECKPOINT
 add_subdirectory(search_match)
 add_subdirectory(protected_paths)
 add_subdirectory(touch_cst3xx)

@@ -95,6 +95,16 @@ constexpr KeyHelpEntry BOOKMARKS[] = {
     {DECKPOINT_KEY_MIC, StrId::STR_KH_BACK_TO_BOOK},
 };
 
+constexpr KeyHelpEntry NOTES[] = {
+    {"j / k", StrId::STR_KH_MOVE},
+    {"hold j / k", StrId::STR_KH_PAGE_JUMP},
+    {"Enter", StrId::STR_KH_GO_TO_HIGHLIGHT},
+    {"e", StrId::STR_KH_NOTES_EDIT},
+    {"x  x", StrId::STR_KH_NOTES_DELETE},
+    {"hold Enter", StrId::STR_KH_NOTES_ACTIONS},
+    {DECKPOINT_KEY_MIC, StrId::STR_KH_BACK_TO_BOOK},
+};
+
 constexpr KeyHelpEntry WORD_SELECT[] = {
     {"h / l", StrId::STR_KH_PREV_NEXT_WORD},
     {"k / j", StrId::STR_KH_PREV_NEXT_LINE},
@@ -195,6 +205,7 @@ constexpr KeyHelp TEXT_SETTINGS_KEY_HELP = makeKeyHelp(TEXT_SETTINGS);
 constexpr KeyHelp READER_KEY_HELP = makeKeyHelp(READER, &reader::READER_COMMAND_HELP);
 constexpr KeyHelp READER_MENU_KEY_HELP = makeKeyHelp(READER_MENU);
 constexpr KeyHelp BOOKMARKS_KEY_HELP = makeKeyHelp(BOOKMARKS);
+constexpr KeyHelp NOTES_KEY_HELP = makeKeyHelp(NOTES);
 constexpr KeyHelp WORD_SELECT_KEY_HELP = makeKeyHelp(WORD_SELECT);
 constexpr KeyHelp DEFINITION_KEY_HELP = makeKeyHelp(DEFINITION);
 constexpr KeyHelp KEYBOARD_ENTRY_KEY_HELP = makeKeyHelp(KEYBOARD_ENTRY);

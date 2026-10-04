@@ -66,6 +66,10 @@ class Activity {
   // as ordinary button presses and the rest are discarded.
   virtual bool wantsRawKeys() const { return false; }
   virtual void onKey(const freeink::KeyEvent& /*event*/) {}
+  // DECKPOINT: bridge mode only -- every key press in the queue (bridged keys
+  // included: they also arrive as buttons, so screens look only at the keys
+  // they add, e.g. letters). '?' is taken for help first.
+  virtual void onUnmappedKey(const freeink::KeyEvent& /*event*/) {}
   // DECKPOINT: hand-written key help for the global '?' screen; screens
   // without one fall back to their last drawn key legend.
   virtual const deckpoint::KeyHelp* keyHelp() const { return nullptr; }

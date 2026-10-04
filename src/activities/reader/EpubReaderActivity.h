@@ -400,6 +400,22 @@ class EpubReaderActivity final : public ReaderActivity {
   // From loop(): runs a serial seeding request (CMD:ANNOTATE...), if any.
   void annotationsTick();
 
+  // DECKPOINT: notes list + export (deckpoint/reader/EpubReaderNotes.cpp).
+  // fromKeys: cancel returns to the page (not the reader menu). False when
+  // the book has no annotation store (or OOM).
+  bool openNotesList(bool fromKeys);
+  // Goes to the page holding highlight `index`'s start (resolving its chapter
+  // first if needed); editNote opens the note sheet there after the render.
+  void jumpToAnnotation(int index, bool editNote, const deckpoint::reader::MarkPosition& origin);
+  // Highlight whose note sheet the next hint session opens on (-1: none).
+  // Shared with the render task (RenderLock).
+  int pendingNoteHighlight = -1;
+  // From beginHints(): installs `session` with the pending highlight's note
+  // sheet. False (session dropped) when the highlight is not on the page.
+  bool openPendingNoteLocked(std::unique_ptr<deckpoint::reader::HintSession> session);
+  // `:export`: Markdown + My Clippings; msg gets the outcome.
+  bool exportNotes(char* msg, size_t msgSize);
+
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;

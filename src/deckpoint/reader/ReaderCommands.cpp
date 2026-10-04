@@ -3,7 +3,6 @@
 // editing state machine (CommandLine) and the parser / matcher (Commands) are
 // pure and host-tested; this file is the reader glue.
 
-#include "deckpoint/KeyHelp.h"
 #include "ReaderCommands.h"
 
 #include <BoardConfig.h>
@@ -26,6 +25,7 @@
 #include "activities/reader/EpubReaderActivity.h"
 #include "activities/reader/EpubReaderBookmarksActivity.h"
 #include "activities/reader/ReaderUtils.h"
+#include "deckpoint/KeyHelp.h"
 #include "deckpoint/KeyHelpActivity.h"
 #include "deckpoint/SleepRequest.h"
 #include "fontIds.h"
@@ -34,8 +34,8 @@
 using deckpoint::CommandLine;
 using deckpoint::CommandResult;
 using deckpoint::NumberTarget;
-using deckpoint::ParseKind;
 using deckpoint::ParsedCommand;
+using deckpoint::ParseKind;
 
 namespace {
 
@@ -72,6 +72,22 @@ struct ReaderCommandHandlers {
     if (r->cachedBookmarks.empty()) return message(msg, msgSize, tr(STR_NO_BOOKMARKS));
     r->openBookmarksList(true);
     return CommandResult::Left;
+  }
+
+  static CommandResult notes(void* ctx, const char*, char* msg, const size_t msgSize) {
+    auto* r = reader(ctx);
+    if (!r->annotationStore) return message(msg, msgSize, tr(STR_SEL_UNAVAILABLE));
+    const auto& list = r->annotationStore->annotations();
+    bool any = false;
+    for (size_t i = 0; i < list.size() && !any; i++) any = !list[i].deleted && list[i].isHighlight();
+    if (!any) return message(msg, msgSize, tr(STR_NOTES_EMPTY));
+    if (!r->openNotesList(true)) return message(msg, msgSize, tr(STR_DICT_LOW_MEMORY));
+    return CommandResult::Left;
+  }
+
+  static CommandResult exportNotes(void* ctx, const char*, char* msg, const size_t msgSize) {
+    reader(ctx)->exportNotes(msg, msgSize);
+    return CommandResult::Message;
   }
 
   static CommandResult bookmark(void* ctx, const char*, char*, size_t) {
@@ -246,6 +262,8 @@ constexpr CommandSpec READER_COMMANDS[] = {
     {"toc", "t", nullptr, StrId::STR_KH_CONTENTS, &H::toc},
     {"bookmarks", "bm", nullptr, StrId::STR_CMD_HELP_BOOKMARKS, &H::bookmarks},
     {"bookmark", "mark", nullptr, StrId::STR_KH_TOGGLE_BOOKMARK, &H::bookmark},
+    {"notes", "n", nullptr, StrId::STR_CMD_HELP_NOTES, &H::notes},
+    {"export", nullptr, nullptr, StrId::STR_CMD_HELP_EXPORT, &H::exportNotes},
     {"goto", "g", "N | pN", StrId::STR_CMD_HELP_GOTO, &H::gotoCmd},
     {"sync", nullptr, nullptr, StrId::STR_CMD_HELP_SYNC, &H::sync},
     {"dict", nullptr, "word", StrId::STR_CMD_HELP_DICT, &H::dict},
@@ -268,12 +286,9 @@ struct FixedRow {
   StrId what;
 };
 constexpr FixedRow LINE_ROWS[] = {
-    {":N", StrId::STR_KH_CMD_NUMBER},
-    {":pN  :#N", StrId::STR_KH_CMD_PAGE},
-    {"Alt+Space", StrId::STR_KH_CMD_COMPLETE},
-    {"Alt+k", StrId::STR_KH_CMD_RECALL},
-    {"Alt+Backspace", StrId::STR_KH_CLEAR_ALL},
-    {DECKPOINT_KEY_MIC, StrId::STR_KH_CMD_CANCEL},
+    {":N", StrId::STR_KH_CMD_NUMBER},           {":pN  :#N", StrId::STR_KH_CMD_PAGE},
+    {"Alt+Space", StrId::STR_KH_CMD_COMPLETE},  {"Alt+k", StrId::STR_KH_CMD_RECALL},
+    {"Alt+Backspace", StrId::STR_KH_CLEAR_ALL}, {DECKPOINT_KEY_MIC, StrId::STR_KH_CMD_CANCEL},
 };
 
 StrId commandHelpRow(const uint8_t index, char* keys, const size_t keysSize) {
@@ -294,9 +309,8 @@ StrId commandHelpRow(const uint8_t index, char* keys, const size_t keysSize) {
 
 }  // namespace
 
-constexpr KeyHelpExtra READER_COMMAND_HELP = {StrId::STR_KH_SECTION_COMMANDS,
-                                              static_cast<uint8_t>(READER_COMMAND_COUNT + std::size(LINE_ROWS)),
-                                              &commandHelpRow};
+constexpr KeyHelpExtra READER_COMMAND_HELP = {
+    StrId::STR_KH_SECTION_COMMANDS, static_cast<uint8_t>(READER_COMMAND_COUNT + std::size(LINE_ROWS)), &commandHelpRow};
 
 }  // namespace deckpoint::reader
 
@@ -625,9 +639,9 @@ CommandResult EpubReaderActivity::lookUpWord(const char* word, char* msg, const 
     progress(tr(STR_DICT_INDEXING));
     Dictionary::IndexResult indexResult = Dictionary::IndexResult::Ok;
     if (!dictionary->buildIndex(&indexBuildYield, nullptr, &indexResult)) {
-      return message(msg, msgSize,
-                     indexResult == Dictionary::IndexResult::LowMemory ? tr(STR_DICT_LOW_MEMORY)
-                                                                        : tr(STR_DICT_READ_FAILED));
+      return message(
+          msg, msgSize,
+          indexResult == Dictionary::IndexResult::LowMemory ? tr(STR_DICT_LOW_MEMORY) : tr(STR_DICT_READ_FAILED));
     }
   }
   std::string definition;

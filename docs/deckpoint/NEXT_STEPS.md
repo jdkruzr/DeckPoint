@@ -26,7 +26,24 @@ Read `PROGRESS.md` first (dev loop, conventions). Current plan with rationale:
   changed), Alt+h/l/k/j cursor, Alt+Bksp clear, Alt+v help. One FAST refresh per idle panel (keys
   coalesce). Code: deckpoint/NoteEditor (test/note_editor), reader/EpubReaderNote.cpp. Known:
   Caps Lock makes Enter a newline; a page render or sleep while editing loses the text.
-- **Next: step 5** (`:notes` + export).
+- **Step 5 done** (2026-10-05; list, reader-menu entry and export checked on the glass; note
+  previews show the first line; the export locator drops the misleading TOC-position chapter number): `:notes` (`:n`) / reader menu "Notes" list
+  (book order under chapter headings; j/k, Enter goes to the page, `e` goes there and opens the
+  note sheet, `x` twice deletes, hold Enter / long-press: Go to / Edit note / Delete; tap goes to
+  it) and `:export` (`/DeckPoint/notes/<title>.md` for Obsidian + `/DeckPoint/My Clippings.txt`,
+  this book's old blocks replaced by streaming the file through a filter). Code:
+  annotations/AnnotationExport (test/notes_export), reader/NotesListActivity, reader/NotesExport,
+  reader/EpubReaderNotes.cpp. Bridge-mode screens now see letter keys via
+  `Activity::onUnmappedKey()`. Clippings page/location/percent are estimates (spine bytes +
+  visible offset when placed, chapter start otherwise; page = KOReader pageno when present).
+- **Round 2a complete.** Next: **2b** (WebDAV sync with Nextcloud `/eBooks` in AnnotationSync
+  format) built around the plan's "Sync paradigm: surviving time travel" rules (trust bit per
+  timestamp, HTTP Date as clock source, stamp-at-sync, tombstones only from user deletes, dev
+  seeds never upload, remote backup). Wipe the T-Deck's `/.crosspoint/annotations/` (test data)
+  before the first real sync.
+- **Theme pass** (user, 2026-10-05): Classic, Lyra Extended, RoundedRaff, Cover Grid look bad on
+  240x320 (our tuning went into Lyra only). Screenshot every theme on each top-level screen via
+  the bridge, list breakages, then fix or hide per theme with the user.
 - Before 2b ships: undated-highlight stamping (plan file, "Undated highlights").
 - Test rig: Boox Go 6 II over adb (KOReader F-Droid `org.koreader.launcher.fdroid`, AnnotationSync
   v2.0.0 → Nextcloud `/eBooks`, KOSync → this host). `adb shell input text` drops shifted chars;

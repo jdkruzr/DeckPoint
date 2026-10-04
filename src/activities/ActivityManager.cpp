@@ -134,7 +134,7 @@ void ActivityManager::loop() {
 
     // DECKPOINT: physical keyboard routing. Raw-key activities get every press
     // (and mute the button bridge); for the rest, mapped keys already arrived as
-    // button presses and the leftover queue is dropped so nothing goes stale.
+    // button presses and the queue is drained through onUnmappedKey().
     if (halKeyboard.present()) {
       const bool raw = currentActivity->wantsRawKeys();
       halKeyboard.setRawMode(raw);
@@ -146,10 +146,16 @@ void ActivityManager::loop() {
         while (pendingAction == PendingAction::None && halKeyboard.pop(event)) currentActivity->onKey(event);
       } else {
         // DECKPOINT: '?' (Sym+v, never bridged to a button) opens key help
-        // over any screen; the rest of the queue is dropped.
+        // over any screen; the other keys go to onUnmappedKey().
         freeink::KeyEvent event;
         bool helpRequested = false;
-        while (halKeyboard.pop(event)) helpRequested = helpRequested || deckpoint::isHelpKey(event);
+        while (halKeyboard.pop(event)) {
+          if (deckpoint::isHelpKey(event)) {
+            helpRequested = true;
+          } else if (!helpRequested && pendingAction == PendingAction::None) {
+            currentActivity->onUnmappedKey(event);
+          }
+        }
         if (helpRequested && currentActivity->name != "KeyHelp") {
           deckpoint::openKeyHelp(renderer, mappedInput, currentActivity->name.c_str(), currentActivity->keyHelp());
           return;

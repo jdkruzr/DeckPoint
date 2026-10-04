@@ -108,7 +108,16 @@ std::unique_ptr<HintSession> EpubReaderActivity::loadHintSessionLocked() {
 void EpubReaderActivity::beginHints() {
   hintOpenPending = false;
   auto session = loadHintSessionLocked();
-  if (!session) return;
+  if (!session) {
+    pendingNoteHighlight = -1;
+    return;
+  }
+  if (pendingNoteHighlight >= 0) {
+    // `e` in the notes list: straight to the note sheet on this page (if it
+    // is not there, hintsTick() closes the empty session).
+    openPendingNoteLocked(std::move(session));
+    return;
+  }
   if (session->words.empty()) {
     showKeyPopupLocked(tr(STR_KEYS_NO_WORDS), true);
     return;
@@ -183,6 +192,7 @@ bool EpubReaderActivity::closeHintsLocked(const bool restorePage) {
   hintsOpen = false;
   hintsSelect = false;
   hintOpenPending = false;
+  pendingNoteHighlight = -1;
   if (!hints) return false;
   bool rerender = false;
   if (restorePage && hints->pageStored && !hints->stale && !pageHasGray) {

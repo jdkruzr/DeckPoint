@@ -55,6 +55,12 @@ struct ProgressChangeResult {
 
 enum class NetworkMode;
 
+// DECKPOINT: a highlight picked in the notes list (AnnotationList index).
+struct AnnotationResult {
+  int index = -1;
+  bool editNote = false;  // open the note sheet once the page is up
+};
+
 struct NetworkModeResult {
   NetworkMode mode;
 };
@@ -69,7 +75,7 @@ struct FilePathResult {
 
 using ResultVariant =
     std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult, IntervalResult,
-                 PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult, FilePathResult>;
+                 PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult, FilePathResult, AnnotationResult>;
 
 struct ActivityResult {
   bool isCancelled = false;

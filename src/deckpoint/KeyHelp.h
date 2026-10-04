@@ -85,6 +85,7 @@ extern const KeyHelp TEXT_SETTINGS_KEY_HELP;
 extern const KeyHelp READER_KEY_HELP;
 extern const KeyHelp READER_MENU_KEY_HELP;
 extern const KeyHelp BOOKMARKS_KEY_HELP;
+extern const KeyHelp NOTES_KEY_HELP;
 extern const KeyHelp WORD_SELECT_KEY_HELP;
 extern const KeyHelp DEFINITION_KEY_HELP;
 extern const KeyHelp KEYBOARD_ENTRY_KEY_HELP;
