@@ -98,13 +98,35 @@ class Annotation {
   bool undated = false;
   bool localOnly = false;
 
-  // Placement cache (not serialized): the highlight as visible-text offsets in
-  // spineIndex, [startOffset, endOffset). spineIndex is parsed from pos0 at
-  // load (-1: not an EPUB XPointer).
+  // Placement cache (not serialized): the highlight runs from visible offset
+  // startOffset in spineIndex to endOffset (exclusive) in endSpineIndex, which
+  // differ for a range KOReader made across a chapter break. Both are parsed
+  // from pos0 / pos1 at load (-1: not an EPUB XPointer).
   int16_t spineIndex = -1;
+  int16_t endSpineIndex = -1;
   Placement placement = Placement::Unresolved;
   uint32_t startOffset = 0;
   uint32_t endOffset = 0;
+
+  // Live highlight whose range reaches into spine item `spine` (placed or not).
+  bool spans(const int spine) const {
+    return !deleted && spineIndex >= 0 && spine >= spineIndex && spine <= endSpineIndex;
+  }
+  // Its part in `spine` as [start, end) visible offsets of that chapter: the
+  // whole chapter between the end chapters, open-ended (UINT32_MAX) where it
+  // runs on into the next one. False unless resolved, live and spanning it.
+  bool rangeIn(const int spine, uint32_t& start, uint32_t& end) const {
+    if (placement != Placement::Resolved || !spans(spine)) return false;
+    start = spine == spineIndex ? startOffset : 0;
+    end = spine == endSpineIndex ? endOffset : UINT32_MAX;
+    return true;
+  }
+  // rangeIn(spine) contains `offset`.
+  bool covers(const int spine, const uint32_t offset) const {
+    uint32_t start;
+    uint32_t end;
+    return rangeIn(spine, start, end) && offset >= start && offset < end;
+  }
 
  private:
   struct BlobFree {

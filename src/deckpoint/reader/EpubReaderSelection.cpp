@@ -60,7 +60,6 @@ using deckpoint::annotations::AnnotationStore;
 using deckpoint::annotations::Field;
 using deckpoint::annotations::FIELD_COUNT;
 using deckpoint::annotations::NoteMerge;
-using deckpoint::annotations::Placement;
 using deckpoint::reader::ActionMenu;
 using deckpoint::reader::BarLayout;
 using deckpoint::reader::ExtendPlan;
@@ -414,12 +413,12 @@ bool EpubReaderActivity::saveSelectionLocked() {
     const auto& list = annotationStore->annotations();
     std::vector<PlacedHighlight> placed;
     size_t inChapter = 0;
-    for (size_t i = 0; i < list.size(); i++) inChapter += list[i].spineIndex == currentSpineIndex ? 1 : 0;
+    for (size_t i = 0; i < list.size(); i++) inChapter += list[i].spans(currentSpineIndex) ? 1 : 0;
     placed.reserve(inChapter);
     for (size_t i = 0; i < list.size(); i++) {
-      const Annotation& h = list[i];
-      if (h.spineIndex != currentSpineIndex || h.deleted || h.placement != Placement::Resolved) continue;
-      placed.push_back({h.startOffset, h.endOffset, static_cast<int>(i)});
+      uint32_t start;
+      uint32_t end;
+      if (list[i].rangeIn(currentSpineIndex, start, end)) placed.push_back({start, end, static_cast<int>(i)});
     }
     OffsetRange page{UINT32_MAX, 0};
     for (const WordBox& w : s.words) {
@@ -428,6 +427,12 @@ bool EpubReaderActivity::saveSelectionLocked() {
       page.end = std::max(page.end, e.end);
     }
     plan = deckpoint::reader::planExtend(range, placed.data(), placed.size(), page);
+    // A highlight across a chapter break has more than this page, even where
+    // its part here starts at the chapter's first word.
+    for (uint8_t k = 0; plan.kind == ExtendPlan::Kind::Extend && k < plan.count; k++) {
+      const Annotation& h = list[static_cast<size_t>(plan.indices[k])];
+      if (h.spineIndex != h.endSpineIndex) plan.kind = ExtendPlan::Kind::OffPage;
+    }
   }
   switch (plan.kind) {
     case ExtendPlan::Kind::Covered:

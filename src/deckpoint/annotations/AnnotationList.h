@@ -5,10 +5,12 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <string_view>
 #include <vector>
 
 #include "Annotation.h"
+#include "AnnotationGeometry.h"
 
 namespace deckpoint::annotations {
 
@@ -60,8 +62,26 @@ class AnnotationList {
 
   // Index of the entry with this AnnotationSync key, or -1.
   int find(std::string_view key) const;
-  // True when some live highlight sits in this spine item.
+  // True when some live, placeable highlight reaches into this spine item.
   bool hasHighlightsIn(int spineIndex) const;
+
+  // Resolves an XPointer to a visible offset in spine item `spineIndex`.
+  using ResolveXPointer = bool (*)(void* ctx, int spineIndex, const std::string& xpointer, uint32_t& out);
+  struct PlaceCount {
+    unsigned placed = 0;
+    unsigned failed = 0;
+  };
+  // Places every not-yet-placed live highlight reaching into `spineIndex`:
+  // pos0 in its own chapter, pos1 in its own (a range across chapters
+  // resolves both ends, once). Unresolvable ones become Placement::Failed.
+  PlaceCount placeChapter(int spineIndex, ResolveXPointer resolve, void* ctx);
+  // This chapter's part of every placed, live highlight reaching into it, in
+  // list order (cleared first). A note counts only in the chapter where its
+  // highlight ends, so the marker is drawn once.
+  void rangesFor(int spineIndex, std::vector<HighlightRange>& out) const;
+  // Index of the placed, live highlight covering `offset` of this chapter
+  // (the most recent one when several do), or -1.
+  int highlightAt(int spineIndex, uint32_t offset) const;
 
   // Set when something in the file could not be held (oversized value, cap,
   // budget, malformed entry): saving would lose it, so the list stays read-only.

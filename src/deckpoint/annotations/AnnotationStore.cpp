@@ -231,7 +231,7 @@ AddResult AnnotationStore::addPlacedAndSave(Annotation&& annotation, const int s
   const int index = list.find(key);
   if (index >= 0) {
     Annotation& a = list[static_cast<size_t>(index)];
-    if (a.spineIndex == spineIndex && endOffset > startOffset) {
+    if (a.spineIndex == spineIndex && a.endSpineIndex == spineIndex && endOffset > startOffset) {
       a.startOffset = startOffset;
       a.endOffset = endOffset;
       a.placement = Placement::Resolved;
@@ -268,7 +268,7 @@ AddResult AnnotationStore::replacePlacedAndSave(Annotation&& annotation, const i
   const int index = list.find(key);
   if (index >= 0) {
     Annotation& a = list[static_cast<size_t>(index)];
-    if (a.spineIndex == spineIndex && endOffset > startOffset) {
+    if (a.spineIndex == spineIndex && a.endSpineIndex == spineIndex && endOffset > startOffset) {
       a.startOffset = startOffset;
       a.endOffset = endOffset;
       a.placement = Placement::Resolved;
@@ -276,15 +276,6 @@ AddResult AnnotationStore::replacePlacedAndSave(Annotation&& annotation, const i
   }
   save();
   return result;
-}
-
-int AnnotationStore::highlightAt(const int spineIndex, const uint32_t offset) const {
-  for (size_t i = list.size(); i-- > 0;) {
-    const Annotation& a = list[i];
-    if (a.spineIndex != spineIndex || a.placement != Placement::Resolved || a.deleted) continue;
-    if (offset >= a.startOffset && offset < a.endOffset) return static_cast<int>(i);
-  }
-  return -1;
 }
 
 bool AnnotationStore::deleteAndSave(const size_t index) {
@@ -313,43 +304,21 @@ AddResult AnnotationStore::setNoteAndSave(const size_t index, const std::string_
 void AnnotationStore::placeChapter(const std::shared_ptr<Epub>& epub, const int spineIndex) {
   if (!epub) return;
   const auto t0 = millis();
-  unsigned placed = 0;
-  unsigned failed = 0;
-  for (size_t i = 0; i < list.size(); i++) {
-    Annotation& a = list[i];
-    if (a.spineIndex != spineIndex || a.placement != Placement::Unresolved || a.deleted || !a.isHighlight()) continue;
-    // Copies: the resolver takes std::string; the block may move on edits.
-    const std::string pos0(a.get(Field::Pos0));
-    const std::string pos1(a.get(Field::Pos1));
-    const auto start = resolve(epub, spineIndex, pos0);
-    std::optional<uint32_t> end;
-    if (start) {
-      // A highlight running into a later chapter is drawn to this one's end.
-      end =
-          spineFromXPointer(pos1) == spineIndex ? resolve(epub, spineIndex, pos1) : std::optional<uint32_t>(UINT32_MAX);
-    }
-    if (start && end && *end > *start) {
-      a.startOffset = *start;
-      a.endOffset = *end;
-      a.placement = Placement::Resolved;
-      placed++;
-    } else {
-      a.placement = Placement::Failed;
-      failed++;
-      LOG_INF("ANN", "Unresolved in spine %d, kept: %s", spineIndex, pos0.c_str());
-    }
-  }
-  if (placed + failed > 0) {
-    LOG_DBG("ANN", "Spine %d: placed %u, unresolved %u in %lums", spineIndex, placed, failed, millis() - t0);
-  }
-}
-
-void AnnotationStore::rangesFor(const int spineIndex, std::vector<HighlightRange>& out) const {
-  out.clear();
-  for (size_t i = 0; i < list.size(); i++) {
-    const Annotation& a = list[i];
-    if (a.spineIndex != spineIndex || a.placement != Placement::Resolved || a.deleted) continue;
-    out.push_back({a.startOffset, a.endOffset, a.has(Field::Note)});
+  const auto count = list.placeChapter(
+      spineIndex,
+      [](void* ctx, const int spine, const std::string& xpointer, uint32_t& out) {
+        const auto offset = resolve(*static_cast<const std::shared_ptr<Epub>*>(ctx), spine, xpointer);
+        if (!offset) {
+          LOG_INF("ANN", "Unresolved in spine %d, kept: %s", spine, xpointer.c_str());
+          return false;
+        }
+        out = *offset;
+        return true;
+      },
+      const_cast<std::shared_ptr<Epub>*>(&epub));
+  if (count.placed + count.failed > 0) {
+    LOG_DBG("ANN", "Spine %d: placed %u, unresolved %u in %lums", spineIndex, count.placed, count.failed,
+            millis() - t0);
   }
 }
 

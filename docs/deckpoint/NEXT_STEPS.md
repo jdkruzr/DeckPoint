@@ -144,7 +144,12 @@ Read `PROGRESS.md` first (dev loop, conventions). Current plan with rationale:
     after "…". Refine partial-word ranges when selection lands (step 3).
   - During a long `:search` the page stays on the B/W snapshot (no AA) under the progress line;
     re-render gray underneath when a search runs longer than a few seconds.
-  - Seeded/imported highlights placed only in the chapter where they start (cross-chapter ranges).
+  - Done (host-tested, not yet on glass): cross-chapter highlights (KOReader pos0 in
+    DocFragment[N], pos1 in [M>N]) are underlined from pos0 to N's end, through N+1..M-1 and
+    from M's start to pos1; note marker once, in M; tap/`v` anywhere opens the one entry;
+    `:notes`/export list it at its start. Check on glass with the Red Rising ch. 1 -> ch. 2 seed
+    (`CMD:ANNOTATE:/body/DocFragment[12]/body/p[39]/text()[2].256||/body/DocFragment[13]/body/p[1]/text().40||cross`).
+    Extending (`v` + Extend) never joins one: saved alongside, the sync collapses the overlap.
   - `:sync` used to bounce to Home (fixed in 954a9beb, ActivityManager).
 
 ## 1. Done this round (upstream candidates)

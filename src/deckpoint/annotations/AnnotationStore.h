@@ -49,11 +49,13 @@ class AnnotationStore {
 
   // Cheap check before any per-page work.
   bool hasHighlightsIn(int spineIndex) const { return list.hasHighlightsIn(spineIndex); }
-  // Resolves this chapter's not-yet-placed highlights (streams the chapter's
-  // XHTML twice per highlight; done once per chapter per session).
+  // Resolves the not-yet-placed highlights reaching into this chapter
+  // (streams the XHTML of each end's chapter once per end; done once per
+  // highlight per session).
   void placeChapter(const std::shared_ptr<Epub>& epub, int spineIndex);
-  // Placed, live highlights of the chapter (after placeChapter).
-  void rangesFor(int spineIndex, std::vector<HighlightRange>& out) const;
+  // This chapter's part of its placed, live highlights (after placeChapter);
+  // see AnnotationList::rangesFor.
+  void rangesFor(int spineIndex, std::vector<HighlightRange>& out) const { list.rangesFor(spineIndex, out); }
 
   // Adds (or replaces, same pos0||pos1) and saves. The result says why not.
   AddResult addAndSave(Annotation&& annotation);
@@ -65,9 +67,9 @@ class AnnotationStore {
   // one with the same key is replaced in place instead) and saves once.
   AddResult replacePlacedAndSave(Annotation&& annotation, int spineIndex, uint32_t startOffset, uint32_t endOffset,
                                  const int* replaced, size_t count);
-  // List index of the placed, live highlight of this chapter that covers
-  // `offset` (the most recent one when several do), or -1.
-  int highlightAt(int spineIndex, uint32_t offset) const;
+  // List index of the placed, live highlight covering `offset` of this
+  // chapter (also one running through it from another chapter), or -1.
+  int highlightAt(int spineIndex, uint32_t offset) const { return list.highlightAt(spineIndex, offset); }
   // Tombstones entry `index` (deleted, datetime_updated = now) and saves.
   bool deleteAndSave(size_t index);
   // Sets entry `index`'s note (empty: removes it), datetime_updated = now, and

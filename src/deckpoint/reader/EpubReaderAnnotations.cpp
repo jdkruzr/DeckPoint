@@ -227,6 +227,8 @@ void EpubReaderActivity::annotationsTick() {
   annotation.localOnly = true;  // test data: never uploaded, never merged
   const AddResult result = annotationStore->addAndSave(std::move(annotation));
   const bool stored = result == AddResult::Added || result == AddResult::Replaced;
-  LOG_INF("ANN", "Seed %s: %s||%s \"%s\"", stored ? "stored" : "rejected", pos0.c_str(), pos1.c_str(), text.c_str());
+  LOG_INF("ANN", "Seed %s (spine %d..%d): %s||%s \"%s\"", stored ? "stored" : "rejected",
+          deckpoint::annotations::spineFromXPointer(pos0), deckpoint::annotations::spineFromXPointer(pos1),
+          pos0.c_str(), pos1.c_str(), text.c_str());
   if (stored) requestUpdate();
 }

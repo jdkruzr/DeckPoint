@@ -157,7 +157,7 @@ bool EpubReaderActivity::openNoteEditorLocked(const int highlight, const bool pa
   int top = INT16_MAX;
   int bottom = 0;
   for (const WordBox& w : s.words) {
-    if (w.visibleOffset < a.startOffset || w.visibleOffset >= a.endOffset) continue;
+    if (!a.covers(currentSpineIndex, w.visibleOffset)) continue;
     top = std::min<int>(top, w.y);
     bottom = std::max<int>(bottom, w.y + lineH);
   }
