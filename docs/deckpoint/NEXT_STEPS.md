@@ -59,16 +59,16 @@ Read `PROGRESS.md` first (dev loop, conventions). Current plan with rationale:
     v2.0.0, run headless on Xvfb :77 from the scratchpad, KO_HOME=scratchpad/kohome) draws the
     T-Deck highlight as an underline on the exact words; Boox -> Nextcloud -> T-Deck pulled 6.
   - Timestamps are local time without a zone (AnnotationSync format): the T-Deck's timezone was
-    unset (UTC) so its edits looked ~4 h newer. Built (not verified): warning line in Annotation
+    unset (UTC) so its edits looked ~4 h newer. Done (490e051b, checked on the glass): warning line in Annotation
     Sync settings and under a successful sync result while no zone is chosen
     (`timezones::isChosen()`); all devices must share one timezone.
-  - Clock settings now listed on every board (built, not verified). Without an RTC: Time Zone,
+  - Clock settings now listed on every board (done, 490e051b, checked on the glass). Without an RTC: Time Zone,
     DST and Sync Clock Now (shows the time once `trustedtime::isCurrent()`); format / show-in-
     header hidden (nothing draws a clock). HalClock reads the system clock and NTP-syncs it when
     there is no RTC; header/status-bar clocks stay RTC-gated.
   - SecureHttpClient treated unframed 204 as body-until-close (20 s stall, PUT reported failed
     though it succeeded): fixed (no-body statuses / HEAD). Watch other servers for similar quirks.
-- **Modifier keys — built, not verified on the glass** (2026-10-04): Alt never locks (second
+- **Modifier keys — done (490e051b, checked on the glass)** (2026-10-04): Alt never locks (second
   tap cancels the one-shot; `StickyModifier` in BoardTDeckPro/src, test/modifier_badge). Badge
   ("SHIFT"/"CAPS"/"SYM"/"SYM LOCK"/"ALT", deckpoint/ModifierBadge) in every GUI.drawHeader header
   (clock slot), the `:` command band, the note sheet (Caps Lock: "CAPS: Enter = new line") and the
