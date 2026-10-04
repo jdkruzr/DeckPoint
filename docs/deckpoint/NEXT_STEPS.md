@@ -115,6 +115,16 @@ Read `PROGRESS.md` first (dev loop, conventions). Current plan with rationale:
   `deckpoint.local`, DHCP hostname, web UI titles). Internals (`/.crosspoint/`, class names,
   `window.CrossPoint` plugin API, Calibre plugin protocol, service URLs) intentionally unchanged.
 
+## 6d. Unified "Library server" (user, 2026-10-04)
+- One setting instead of separate OPDS + KOSync pages: base URL + credentials/API key; detect the
+  server type (Kavita, Calibre-Web-Automated, Grimmory/Booklore, plain koreader-sync-server, plain
+  OPDS catalog) and derive both endpoints. E.g. Kavita: OPDS `/api/opds/<key>`, KOSync
+  `/api/koreader/<key>`. Round-2 annotation sync hangs off the same entry. Keep the existing
+  separate settings as the "custom" fallback. Tested so far: Gutenberg OPDS (works, read the
+  Odyssey), Kavita OPDS added via the web UI OPDS page (podman `kavita-test`, library in
+  scratchpad/kavita, books must sit in per-series folders). Web UI nit: OPDS Save gives no visible
+  confirmation.
+
 ## 7. Docs & credits (user requirement)
 - README section crediting **CrossPoint Reader** and **CrossInk** as inspirations (not just code
   sources), plus FreeInk SDK, Meshtastic, LilyGo; `CREDITS.md` mapping pieces to origins.
