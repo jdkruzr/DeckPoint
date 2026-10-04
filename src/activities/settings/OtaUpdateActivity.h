@@ -26,6 +26,8 @@ class OtaUpdateActivity : public Activity {
   // Points into the i18n string table (flash-resident, so no lifetime concern);
   // nullptr means no extra detail.
   const char* failedDetail = nullptr;
+  // DECKPOINT: same, under "No update available" (no release / no asset).
+  const char* noUpdateDetail = nullptr;
   // Cancel/Update confirmation over the version info (replaces the old
   // hand-rolled bottom tap rects).
   OptionPopup confirmPopup;

@@ -40,6 +40,33 @@ Last updated: 2026-10-04 (session 4).
 - Getting files onto the SD: Home → File Transfer → USB Drive; card mounts at
   `/run/media/jtd/00D8-D230`; `udisksctl unmount -b /dev/sda1 && udisksctl power-off -b /dev/sda`.
 
+## Releasing
+- **Versioning**: DeckPoint has its own semver in `platformio.ini` `[crosspoint] version`
+  (started at `0.1.0`; `upstream_version` records the CrossPoint base, 1.6.5). Builds append a
+  board suffix (`0.1.0-tdeckpro`, shown in Settings/About); OTA compares only the numeric
+  triple (`src/deckpoint/ota/OtaRelease.*`, tests in `test/ota_release`), so the suffix is
+  cosmetic; `-rc`/`-dev` builds rank below the release of the same number. On upstream merges
+  keep our `version` line and update `upstream_version`.
+- **Cutting a release**: bump `version` (e.g. `0.2.0`), commit, then
+  `git tag v0.2.0 && git push origin deckpoint v0.2.0`. The tag must equal the ini version or
+  the workflow fails. A tag with a suffix (`v0.2.0-rc1`) becomes a GitHub pre-release, which
+  OTA ignores (it reads `releases/latest`).
+- **What the workflow produces** (`.github/workflows/deckpoint-release.yml`): builds
+  `tdeckpro-gh_release` (info logging, no key debug, no USB wait) and `x4pro-gh_release`, and
+  publishes release `vX.Y.Z` with `deckpoint-tdeckpro.bin`, `deckpoint-x4pro.bin` and
+  `SHA256SUMS` (uploads into an existing release of that tag if you made one by hand). The
+  X3/X4 C3 (`default`) build is not released, so those devices report "no firmware for this
+  device". Upstream's release/RC/fonts/PR-link workflows are guarded to run only on
+  `crosspoint-reader/crosspoint-reader`.
+- **How a device updates**: Settings > System > Check for Updates (WiFi) fetches
+  `api.github.com/repos/jdkruzr/DeckPoint/releases/latest`, picks `deckpoint-<board>.bin`
+  (board = `FirmwareBoardTag` name) and installs it only if the tag is newer. The install still
+  checks the image's chip id and board tag mid-stream and writes the inactive OTA slot, so a
+  wrong or broken image never becomes the boot target. Updating by SD card
+  (Settings > System > SD Card Firmware Update) works without GitHub.
+- **The repo must be public** for OTA: unauthenticated API calls to a private repo get 404, which
+  the device shows as "No DeckPoint release found". No tokens go in firmware.
+
 ## Done
 ### Board bring-up (SDK side)
 - `BoardConfig.h`: `FREEINK_DEVICE_TDECKPRO`, `TDECK_PRO` profile (landscape 320x240 framebuffer,

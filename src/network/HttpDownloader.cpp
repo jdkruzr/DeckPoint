@@ -25,7 +25,8 @@ HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::st
                                            const std::string& password,
                                            const std::vector<HttpDownloader::Header>& headers,
                                            const freeink::FetchSink& sink, const bool* cancelFlag = nullptr,
-                                           size_t* bytesOut = nullptr, const bool downgradeRedirectsToHttp = false) {
+                                           size_t* bytesOut = nullptr, const bool downgradeRedirectsToHttp = false,
+                                           int* statusOut = nullptr) {  // DECKPOINT: statusOut
   WifiPowerSaveGuard psGuard;
   freeink::FetchOptions options;
   options.redirectToHttp = downgradeRedirectsToHttp;
@@ -49,6 +50,7 @@ HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::st
       },
       sink, [cancelFlag] { return cancelFlag && *cancelFlag; });
   if (bytesOut) *bytesOut = result.bytes;
+  if (statusOut) *statusOut = result.status;  // DECKPOINT
 
   if (result.aborted) return HttpDownloader::ABORTED;
   if (result.stopped) return HttpDownloader::FILE_ERROR;
@@ -82,6 +84,17 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
   freeink::FetchSink sink;
   sink.write = onData;
   return runGetSecure(url, username, password, {}, sink) == OK;
+}
+
+// DECKPOINT: like fetchUrl, but reports the final HTTP status (<= 0 when no
+// response arrived) so callers can tell "not found" from a network failure.
+HttpDownloader::DownloadError HttpDownloader::fetchUrlStatus(const std::string& url, const DataCallback& onData,
+                                                             int* httpStatus) {
+  LOG_DBG("HTTP", "Fetching: %s", url.c_str());
+  freeink::FetchSink sink;
+  sink.write = onData;
+  if (httpStatus) *httpStatus = 0;
+  return runGetSecure(url, "", "", {}, sink, nullptr, nullptr, false, httpStatus);
 }
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,

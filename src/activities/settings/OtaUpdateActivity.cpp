@@ -27,12 +27,15 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   requestUpdateAndWait();
 
   const auto res = updater.checkForUpdate();
-  // NO_UPDATE here means the release carries no firmware asset for this board
-  // (expected until per-board assets are published) — not a failure.
-  if (res == OtaUpdater::NO_UPDATE) {
-    LOG_DBG("OTA", "No firmware asset for this board in latest release");
+  // DECKPOINT: no published release (or a private repo) and a release without
+  // this board's asset are "nothing to install", with a line saying which.
+  if (res == OtaUpdater::NO_UPDATE || res == OtaUpdater::NO_RELEASE || res == OtaUpdater::NO_ASSET) {
+    LOG_DBG("OTA", "Nothing to install (%d)", res);
     {
       RenderLock lock(*this);
+      noUpdateDetail = res == OtaUpdater::NO_RELEASE ? tr(STR_OTA_NO_RELEASE)
+                       : res == OtaUpdater::NO_ASSET ? tr(STR_OTA_NO_ASSET)
+                                                     : nullptr;
       state = NO_UPDATE;
     }
     return;
@@ -151,6 +154,13 @@ void OtaUpdateActivity::render(RenderLock&&) {
         (std::to_string(updater.getProcessedSize()) + " / " + std::to_string(updater.getTotalSize())).c_str());
   } else if (state == NO_UPDATE) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_NO_UPDATE), true, EpdFontFamily::BOLD);
+    if (noUpdateDetail != nullptr) {  // DECKPOINT
+      const int detailY = top + height + metrics.verticalSpacing;
+      const Rect detailBounds{metrics.contentSidePadding, detailY, pageWidth - metrics.contentSidePadding * 2,
+                              pageHeight - detailY};
+      UITheme::drawCenteredWrappedText(renderer, detailBounds, UI_10_FONT_ID, noUpdateDetail, 3, true,
+                                       EpdFontFamily::REGULAR, UITheme::TextVerticalAlignment::TOP);
+    }
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == FAILED) {

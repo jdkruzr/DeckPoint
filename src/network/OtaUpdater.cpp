@@ -17,19 +17,26 @@
 
 #include "FirmwareBoardTag.h"
 #include "FirmwareFlasher.h"
-
-namespace {
-constexpr char latestReleaseUrl[] = "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/latest";
-}  // namespace
+#include "deckpoint/ota/OtaRelease.h"  // DECKPOINT
 
 OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   LOG_DBG("OTA", "Checking for update (current: %s)", CROSSPOINT_VERSION);
 
+  // DECKPOINT: each board updates from deckpoint-<board>.bin on DeckPoint's
+  // own latest release; the name is fixed up front, so a release without this
+  // board's asset is refused rather than matched loosely.
+  char assetName[48] = {};
+  if (!deckpoint_ota::firmwareAssetName(board_tag::boardName(), board_tag::boardNameLen(), assetName,
+                                        sizeof(assetName))) {
+    LOG_ERR("OTA", "Board name does not fit an asset name");
+    return INTERNAL_UPDATE_ERROR;
+  }
+
   // Stream the ~32KB release JSON straight into the parser as it arrives.
   // Buffering the whole body in a std::string would add a growing allocation
   // on top of the TLS session's heap during the fetch; with -fno-exceptions an
-  // OOM there aborts. fetchUrl handles the verified-https GET, redirects, and
-  // User-Agent (see HttpDownloader).
+  // OOM there aborts. fetchUrlStatus handles the verified-https GET, redirects,
+  // and User-Agent (see HttpDownloader).
   // Heap-allocated: the parser embeds a 2 KB JSON token buffer.
   auto releaseParserPtr = makeUniqueNoThrow<ReleaseJsonParser>();
   if (!releaseParserPtr) {
@@ -37,33 +44,23 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
     return OOM_ERROR;
   }
   ReleaseJsonParser& releaseParser = *releaseParserPtr;
-  releaseParser.setFirmwareAssetName("");
-  // Each board updates from crosspoint-<version>-<device>.bin. The combined
-  // C3 image uses x3-x4; other asset suffixes match their firmware board tag.
-  const bool isX4 = board_tag::boardNameLen() == 2 && memcmp(board_tag::boardName(), "x4", 2) == 0;
-  char assetSuffix[20] = "-x3-x4";
-  if (!isX4) {
-    snprintf(assetSuffix, sizeof(assetSuffix), "-%.*s", static_cast<int>(board_tag::boardNameLen()),
-             board_tag::boardName());
+  releaseParser.setFirmwareAssetName(assetName);
+  int httpStatus = 0;
+  const auto fetchResult = HttpDownloader::fetchUrlStatus(
+      deckpoint_ota::LATEST_RELEASE_URL,
+      [&](const uint8_t* data, size_t len) {
+        releaseParser.feed(reinterpret_cast<const char*>(data), len);
+        return true;
+      },
+      &httpStatus);
+  // GitHub answers 404 both when no release is published yet and when the repo
+  // is private (unauthenticated requests cannot see it).
+  if (httpStatus == 404) {
+    LOG_INF("OTA", "No published release at %s", deckpoint_ota::LATEST_RELEASE_URL);
+    return NO_RELEASE;
   }
-  char assetName[48] = {};
-  bool assetNameSet = false;
-  const bool ok = HttpDownloader::fetchUrl(latestReleaseUrl, [&](const uint8_t* data, size_t len) {
-    size_t offset = 0;
-    while (!assetNameSet && offset < len) {
-      releaseParser.feed(reinterpret_cast<const char*>(data + offset), 1);
-      offset++;
-      if (releaseParser.foundTag()) {
-        snprintf(assetName, sizeof(assetName), "crosspoint-%s%s.bin", releaseParser.getTagName(), assetSuffix);
-        releaseParser.setFirmwareAssetName(assetName);
-        assetNameSet = true;
-      }
-    }
-    if (offset < len) releaseParser.feed(reinterpret_cast<const char*>(data + offset), len - offset);
-    return true;
-  });
-  if (!ok) {
-    LOG_ERR("OTA", "Release check fetch failed");
+  if (fetchResult != HttpDownloader::OK) {
+    LOG_ERR("OTA", "Release check fetch failed (status %d)", httpStatus);
     return HTTP_ERROR;
   }
 
@@ -75,12 +72,13 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
     return JSON_PARSE_ERROR;
   }
 
+  latestVersion = releaseParser.getTagName();
+
   if (!releaseParser.foundFirmware()) {
-    LOG_INF("OTA", "No %s asset in latest release", assetName);
-    return NO_UPDATE;
+    LOG_INF("OTA", "No %s asset in release %s", assetName, latestVersion.c_str());
+    return NO_ASSET;
   }
 
-  latestVersion = releaseParser.getTagName();
   otaUrl = releaseParser.getFirmwareUrl();
   otaSize = releaseParser.getFirmwareSize();
   totalSize = otaSize;
@@ -92,46 +90,9 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
 }
 
 bool OtaUpdater::isUpdateNewer() const {
-  if (!updateAvailable || latestVersion.empty() || latestVersion == CROSSPOINT_VERSION) {
-    return false;
-  }
-
-  int currentMajor, currentMinor, currentPatch;
-  int latestMajor, latestMinor, latestPatch;
-
-  const auto currentVersion = CROSSPOINT_VERSION;
-
-  // semantic version check (only match on 3 segments)
-  sscanf(latestVersion.c_str(), "%d.%d.%d", &latestMajor, &latestMinor, &latestPatch);
-  sscanf(currentVersion, "%d.%d.%d", &currentMajor, &currentMinor, &currentPatch);
-
-  /*
-   * Compare major versions.
-   * If they differ, return true if latest major version greater than current major version
-   * otherwise return false.
-   */
-  if (latestMajor != currentMajor) return latestMajor > currentMajor;
-
-  /*
-   * Compare minor versions.
-   * If they differ, return true if latest minor version greater than current minor version
-   * otherwise return false.
-   */
-  if (latestMinor != currentMinor) return latestMinor > currentMinor;
-
-  /*
-   * Check patch versions.
-   */
-  if (latestPatch != currentPatch) return latestPatch > currentPatch;
-
-  // If we reach here, it means all segments are equal.
-  // One final check, if we're on an RC build (contains "-rc"), we should consider the latest version as newer even if
-  // the segments are equal, since RC builds are pre-release versions.
-  if (strstr(currentVersion, "-rc") != nullptr) {
-    return true;
-  }
-
-  return false;
+  // DECKPOINT: semver triple compare (see deckpoint/ota/OtaRelease.h); board
+  // suffixes are ignored and rc/dev builds rank below their release.
+  return updateAvailable && deckpoint_ota::isNewerRelease(latestVersion.c_str(), CROSSPOINT_VERSION);
 }
 
 const std::string& OtaUpdater::getLatestVersion() const { return latestVersion; }
