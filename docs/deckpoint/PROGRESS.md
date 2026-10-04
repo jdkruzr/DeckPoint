@@ -130,3 +130,34 @@ Last updated: 2026-10-04 (session 4).
   OPDS at http://192.168.8.95:5000/api/opds/<key>, added via the web UI OPDS page).
 - Round 2 (highlights/notes/annotation sync) planned and approved: see the plan file
   `/home/jtd/.claude/plans/abstract-weaving-pike.md` (design, AnnotationSync + KOReader spec).
+
+## Session 5 (2026-10-04 -> 10-05): highlights, notes, KOReader-compatible sync
+- **Round 2a complete** (all checked on the glass): KOReader-exact XPointers + per-word offsets
+  (205a626b, verified against 6 real KOReader highlights and a live KOSync round trip), annotation
+  store + underline drawing (2e247436), selection by `v` labels / long-press popup (3f869d1c),
+  note editor bottom sheet (7d176147), `:notes` list + `:export` Markdown/My Clippings (d75f1009).
+- **Round 2b complete** (9ed88e80): `:sync` / reader-menu Sync syncs progress + highlights through
+  the user's Nextcloud (`/eBooks`) in AnnotationSync's format; verified Boox -> Nextcloud -> T-Deck
+  and T-Deck -> Nextcloud -> KOReader (highlight drawn on the exact words). Time-travel-safe merge
+  rules (plan file, "Sync paradigm"). SecureHttpClient 204 fix.
+- **Cleanup batch** (490e051b): Alt never locks + CAPS/SYM/ALT badge; Clock settings on RTC-less
+  boards + timezone warning; Filename matching removed everywhere; overlap merges keep notes;
+  Extend highlight; KOReader-style percentage; wrapped centered messages; reader-menu Sync moved up.
+- Fixes found by testing: `:sync` bounced to Home (954a9beb, ActivityManager), seeds' chapter
+  (b40b8c61).
+- **Test rigs** (session scratchpad `/tmp/claude-39601104/-home-jtd-DeckPoint/<session>/scratchpad`):
+  - Desktop KOReader v2026.07.1 + AnnotationSync v2.0.0 on Xvfb `:77` (`koreader/`, `kohome/`
+    = KO_HOME with settings.reader.lua pointing at Nextcloud; creds from
+    `~/.config/deckpoint/nextcloud`, mode 600). Launch: `env -u WAYLAND_DISPLAY DISPLAY=:77
+    SDL_VIDEODRIVER=x11 KO_HOME=... ./bin/koreader <book>` (without `env -u WAYLAND_DISPLAY` it
+    opens on the user's real desktop). Drive with `ko/tap.sh x y`, `ko/shot.sh name`.
+  - Boox Go 6 II over adb (KOReader uninstalled by the user since; AnnotationSync source kept in
+    `~/booxreverse/AnnotationSync.koplugin-v2.0.0`, samples in `~/booxreverse/koreader-samples/`).
+  - KOSync test server: `podman run -d --rm --name kosync-test -p 17200:17200
+    docker.io/koreader/kosync:latest` (ephemeral; user `deckpoint`, creds in scratchpad
+    `kosync-test-creds.txt`). Kavita test server `kavita-test` may still run.
+  - Theme survey: `themes/survey.sh <uiTheme> <tag>` + `themes/sheet.py <tag>` (contact sheets),
+    using the dev serial command `CMD:SET:<key>=<int>` (sets a setting by web key, saves,
+    restarts to Home).
+- USB Drive mode ignores mic while the host has the card mounted (looked frozen); eject on the
+  host (`udisksctl unmount -b /dev/sda1; udisksctl power-off -b /dev/sda`) releases it.

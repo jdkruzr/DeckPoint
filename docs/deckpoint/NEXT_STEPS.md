@@ -3,7 +3,18 @@
 Read `PROGRESS.md` first (dev loop, conventions). Current plan with rationale:
 `/home/jtd/.claude/plans/abstract-weaving-pike.md` (Phase T hybrid touch UX, then round 2).
 
-## 0. In progress — Round 2a (highlights & notes)
+## 0. In progress — Theme pass (end of session 5, before compaction)
+- **In flight:** an agent is fixing themes for 240x320 (user decisions: hide Cover Grid on
+  small screens with fallback to Lyra; fix Classic home cover/title + Settings header vs version
+  collision; fix Lyra Extended home cover overlapping the menu; scale RoundedRaff for compact
+  screens so home menu fits and tab labels read in full; keep X4 480x800 looks unchanged).
+  Uncommitted edits in src/components/themes/*, UITheme.cpp, FreeInkUI header.h if it didn't
+  finish — check `git status`, host tests, build, then flash and re-run the survey
+  (`themes/survey.sh N tag`, sheets in scratchpad `themes/`; before-shots `sheet_<tag>.png`).
+- Round 2a + 2b + cleanup batch are DONE and pushed (see PROGRESS session 5).
+- Release is the near-term goal (user, 2026-10-05).
+
+## 0b. Round 2 reference
 - Plan + research: `/home/jtd/.claude/plans/abstract-weaving-pike.md` (Round 2, incl. the
   "AnnotationSync v2.0.0 findings" appendix). User decisions: select by keyboard (`v` + hint
   labels) AND touch (long-press popup Look up/Highlight/Note); underline style; note editor =
@@ -76,6 +87,9 @@ Read `PROGRESS.md` first (dev loop, conventions). Current plan with rationale:
   stable (Sym+':' never flashes), removals at once. `Activity::onModifiersChanged()` defaults to
   requestUpdate(); the reader re-renders the page only on lock changes. Left: screens without a
   GUI header (KeyHelp, full-screen readers other than EPUB, the reader with its status bar off).
+- **USB Drive mode** (2026-10-04): while the host has the SD card mounted the mode ignores the
+  mic key with no explanation (user thought it froze). Show "Eject on your computer to exit" on
+  screen (and as the response to mic). Ejecting on the host releases it.
 - **Theme pass** (user, 2026-10-05): Classic, Lyra Extended, RoundedRaff, Cover Grid look bad on
   240x320 (our tuning went into Lyra only). Screenshot every theme on each top-level screen via
   the bridge, list breakages, then fix or hide per theme with the user.

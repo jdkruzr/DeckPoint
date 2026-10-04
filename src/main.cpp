@@ -39,6 +39,7 @@
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "SettingsList.h"
 #include "WifiCredentialStore.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
@@ -822,6 +823,33 @@ void loop() {
         renderer.displayBuffer(HalDisplay::FULL_REFRESH);
       } else if (cmd == "RESTART") {  // DECKPOINT: reproduce the post-Wi-Fi silent reboot
         silentRestartToSettings();
+      } else if (cmd.startsWith("SET:")) {
+        // DECKPOINT: dev "CMD:SET:<key>=<int>" sets a toggle/enum/value setting by its
+        // web-settings key (e.g. uiTheme=2), saves, and restarts to home to apply it.
+        const int eq = cmd.indexOf('=');
+        if (eq > 4) {
+          const String key = cmd.substring(4, eq);
+          const int val = cmd.substring(eq + 1).toInt();
+          bool applied = false;
+          for (const auto& s : getSettingsList()) {
+            if (!s.key || key != s.key) continue;
+            if (s.type == SettingType::TOGGLE || s.type == SettingType::ENUM || s.type == SettingType::VALUE) {
+              if (s.valuePtr) {
+                SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);
+                applied = true;
+              } else if (s.valueSetter) {
+                s.valueSetter(static_cast<uint8_t>(val));
+                applied = true;
+              }
+            }
+            break;
+          }
+          LOG_INF("CMD", "SET %s=%d %s", key.c_str(), val, applied ? "applied" : "not found");
+          if (applied) {
+            SETTINGS.saveToFile();
+            silentRestart();
+          }
+        }
       }
       // DECKPOINT: "CMD:GRAY:<light>,<dark>[,<repeat>]" (text profile) and
       // "CMD:GRAYIMG:<light>,<dark>" (image profile) set the gray waveform frame
