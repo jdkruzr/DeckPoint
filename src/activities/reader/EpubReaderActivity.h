@@ -17,13 +17,14 @@
 #include "ReaderActivity.h"
 #include "ReaderToolbarUi.h"
 #include "components/OptionPopup.h"
-#include "deckpoint/CommandLine.h"            // DECKPOINT
-#include "deckpoint/KeyHelp.h"                // DECKPOINT
-#include "deckpoint/reader/BookSearch.h"      // DECKPOINT
-#include "deckpoint/reader/HintSession.h"     // DECKPOINT
-#include "deckpoint/reader/Marks.h"           // DECKPOINT
-#include "deckpoint/reader/ReaderCommands.h"  // DECKPOINT
-#include "deckpoint/reader/ReaderKeys.h"      // DECKPOINT
+#include "deckpoint/CommandLine.h"                  // DECKPOINT
+#include "deckpoint/KeyHelp.h"                      // DECKPOINT
+#include "deckpoint/annotations/AnnotationStore.h"  // DECKPOINT
+#include "deckpoint/reader/BookSearch.h"            // DECKPOINT
+#include "deckpoint/reader/HintSession.h"           // DECKPOINT
+#include "deckpoint/reader/Marks.h"                 // DECKPOINT
+#include "deckpoint/reader/ReaderCommands.h"        // DECKPOINT
+#include "deckpoint/reader/ReaderKeys.h"            // DECKPOINT
 
 class EpubReaderActivity final : public ReaderActivity {
   std::shared_ptr<Epub> epub;
@@ -317,6 +318,20 @@ class EpubReaderActivity final : public ReaderActivity {
   bool drawSearchMarkLocked();
   void searchBeforeRender();
   void searchAfterRender();
+
+  // DECKPOINT: highlights / notes (deckpoint/reader/EpubReaderAnnotations.cpp).
+  // Opened with the book (book id + its file, if any); placement is resolved
+  // per chapter on first draw. Shared with the render task (RenderLock).
+  std::unique_ptr<deckpoint::annotations::AnnotationStore> annotationStore;
+  void openAnnotations();
+  // Underline + note-marker rectangles for this page; empty (and no work
+  // beyond one list scan) when the chapter has no highlights. Caller holds the
+  // RenderLock; fonts must be ready (after the prewarm scan).
+  void planAnnotationMarks(const Page& page, int fontId, int marginLeft, int marginTop,
+                           std::vector<deckpoint::annotations::MarkRect>& out);
+  void drawAnnotationMarks(const std::vector<deckpoint::annotations::MarkRect>& marks) const;
+  // From loop(): runs a serial seeding request (CMD:ANNOTATE...), if any.
+  void annotationsTick();
 
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);

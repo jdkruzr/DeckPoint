@@ -56,6 +56,7 @@ add_subdirectory(xml_parser_utils)
 add_subdirectory(token_boundary)
 add_subdirectory(koreader_xpath_resolver)
 add_subdirectory(word_offsets)  # DECKPOINT
+add_subdirectory(annotations)  # DECKPOINT
 add_subdirectory(progress_comparison)
 add_subdirectory(font_cache_manager)
 add_subdirectory(css_parser)

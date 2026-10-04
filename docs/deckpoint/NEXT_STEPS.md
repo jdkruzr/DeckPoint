@@ -12,7 +12,12 @@ Read `PROGRESS.md` first (dev loop, conventions). Current plan with rationale:
 - **Step 1 done** (205a626b): KOReader-exact XPointers + per-word offsets (section v55). Verified
   against 6 real KOReader highlights (samples in ~/booxreverse/koreader-samples/; env-gated test
   `KOReaderXPointer.MatchesRealKOReaderAnnotations`) and a live KOSync round trip Boox <-> T-Deck.
-- **Next: step 2** (model + store + underline drawing).
+- **Step 2 done**: annotation model/store (`/.crosspoint/annotations/<md5>.json`, AnnotationSync
+  shape), placement via the step-1 resolver, underline + note marker drawing, serial seeding
+  (`CMD:ANNOTATE:<pos0>||<pos1>[||note]`, `CMD:ANNOTATE_TEST[:note]`). All six real KOReader
+  highlights land on the same words on the T-Deck (incl. across paragraph and page breaks).
+- **Next: step 3** (selection: keyboard `v` + touch popup, save).
+- Before 2b ships: undated-highlight stamping (plan file, "Undated highlights").
 - Test rig: Boox Go 6 II over adb (KOReader F-Droid `org.koreader.launcher.fdroid`, AnnotationSync
   v2.0.0 → Nextcloud `/eBooks`, KOSync → this host). `adb shell input text` drops shifted chars;
   swipe up on the KOReader "." key for ':'. KOSync test server: `podman run -d --rm --name
@@ -28,6 +33,11 @@ Read `PROGRESS.md` first (dev loop, conventions). Current plan with rationale:
   - KOReader Sync settings: "Sync Server URL" label truncates to "Sync Server ...".
   - Reader page showed a leading space before a paragraph (" A new river…", Red Rising ch. 1);
     check whether it's text-indent rendering or a v55 regression.
+  - Highlight ends are whole-word: "prisoners…we" (no space) underlines "we" too; KOReader stops
+    after "…". Refine partial-word ranges when selection lands (step 3).
+  - During a long `:search` the page stays on the B/W snapshot (no AA) under the progress line;
+    re-render gray underneath when a search runs longer than a few seconds.
+  - Seeded/imported highlights placed only in the chapter where they start (cross-chapter ranges).
   - `:sync` used to bounce to Home (fixed in 954a9beb, ActivityManager).
 
 ## 1. Done this round (upstream candidates)

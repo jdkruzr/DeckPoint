@@ -44,13 +44,14 @@
 #include "activities/ActivityManager.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
+#include "deckpoint/SleepRequest.h"                // DECKPOINT
+#include "deckpoint/TestPattern.h"                 // DECKPOINT
+#include "deckpoint/TouchTestActivity.h"           // DECKPOINT
+#include "deckpoint/annotations/AnnotationSeed.h"  // DECKPOINT
 #include "fontIds.h"
 #include "platform/UsbSerialJtagHandoff.h"
 #include "util/ButtonNavigator.h"
 #include "util/PluginEvents.h"
-#include "deckpoint/SleepRequest.h"  // DECKPOINT
-#include "deckpoint/TestPattern.h"   // DECKPOINT
-#include "deckpoint/TouchTestActivity.h"  // DECKPOINT
 #include "util/ScreenshotUtil.h"
 #include "util/Timezones.h"
 
@@ -800,19 +801,21 @@ void loop() {
         RenderLock lock;
         deckpoint::drawTestPattern(renderer);
       }
+      // DECKPOINT: "CMD:ANNOTATE_TEST[:<note>]" / "CMD:ANNOTATE:<pos0>||<pos1>[||<note>]"
+      // seed a highlight in the open EPUB (see deckpoint/annotations/AnnotationSeed.h).
+      else if (cmd.startsWith("ANNOTATE")) {
+        logSerial.printf("[ANN] seed %s\n", deckpoint::annotations::requestSeed(cmd.c_str()) ? "queued" : "rejected");
+      }
 #if FREEINK_DEVICE_TDECKPRO
       else if (cmd == "BOARD") {  // DECKPOINT: reprint the board report
         BoardTDeckPro::logStatus();
-      }
-      else if (cmd == "TOUCHTEST") {  // DECKPOINT: touch calibration screen
+      } else if (cmd == "TOUCHTEST") {  // DECKPOINT: touch calibration screen
         deckpoint::openTouchTest(renderer, mappedInputManager);
-      }
-      else if (cmd == "CLEAN") {  // DECKPOINT: deep-clean the glass (white, standard waveform)
+      } else if (cmd == "CLEAN") {  // DECKPOINT: deep-clean the glass (white, standard waveform)
         RenderLock lock;
         renderer.clearScreen();
         renderer.displayBuffer(HalDisplay::FULL_REFRESH);
-      }
-      else if (cmd == "RESTART") {  // DECKPOINT: reproduce the post-Wi-Fi silent reboot
+      } else if (cmd == "RESTART") {  // DECKPOINT: reproduce the post-Wi-Fi silent reboot
         silentRestartToSettings();
       }
       // DECKPOINT: "CMD:GRAY:<light>,<dark>[,<repeat>]" (text profile) and

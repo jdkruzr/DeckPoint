@@ -177,7 +177,7 @@ EpubReaderActivity::~EpubReaderActivity() {
   // ActivityManager destroys activities with its RenderLock already held;
   // taking another here self-deadlocks (renderingMutex is non-recursive).
   settleOverlayRefresh();
-  discardOverlayPage();  // free the overlay's page snapshot if one is held
+  discardOverlayPage();                                              // free the overlay's page snapshot if one is held
   if (hints && hints->pageStored) renderer.discardStoredBwBuffer();  // DECKPOINT: `d` hints' page copy
   if (searchMark.pageStored) renderer.discardStoredBwBuffer();       // DECKPOINT: page under a search hit
   search.reset();                                                    // DECKPOINT: a running search's Section
@@ -265,6 +265,7 @@ bool EpubReaderActivity::loadBook() {
 
   loadLinkStack();
   loadCachedBookmarks();
+  openAnnotations();  // DECKPOINT
   return true;
 }
 
@@ -504,7 +505,8 @@ void EpubReaderActivity::loop() {
     showDictionaryMessage = false;
     requestUpdate();
   }
-  keyPopupTick();  // DECKPOINT: expire keyboard toasts
+  keyPopupTick();                 // DECKPOINT: expire keyboard toasts
+  annotationsTick();              // DECKPOINT: serial-seeded highlights (CMD:ANNOTATE...)
   if (commandLineTick()) return;  // DECKPOINT: the `:` line owns input while open
   if (hintsTick()) return;        // DECKPOINT: `d` hint labels own input while shown
 
@@ -816,30 +818,29 @@ void EpubReaderActivity::openChapterSelect(const bool fromKeys) {
     }
     section.reset();
   }
-  startActivityForResult(
-      std::make_unique<EpubReaderChapterSelectionActivity>(renderer, mappedInput, epub, spineIdx),
-      [this, fromKeys](const ActivityResult& result) {
-        if (result.isCancelled) {
-          if (fromKeys) {
-            requestUpdate();
-          } else {
-            openReaderMenu();
-          }
-          return;
-        }
-        if (fromKeys) {
-          jumpBackPosition = chapterSelectOrigin;
-          hasJumpBack = true;
-        }
-        const auto& chapterResult = std::get<ChapterResult>(result.data);
-        RenderLock lock;
-        clearDeferredReposition();
-        currentSpineIndex = chapterResult.spineIndex;
-        pendingAnchor = chapterResult.anchor;
-        nextPageNumber = 0;
-        section.reset();
-        requestUpdate();
-      });
+  startActivityForResult(std::make_unique<EpubReaderChapterSelectionActivity>(renderer, mappedInput, epub, spineIdx),
+                         [this, fromKeys](const ActivityResult& result) {
+                           if (result.isCancelled) {
+                             if (fromKeys) {
+                               requestUpdate();
+                             } else {
+                               openReaderMenu();
+                             }
+                             return;
+                           }
+                           if (fromKeys) {
+                             jumpBackPosition = chapterSelectOrigin;
+                             hasJumpBack = true;
+                           }
+                           const auto& chapterResult = std::get<ChapterResult>(result.data);
+                           RenderLock lock;
+                           clearDeferredReposition();
+                           currentSpineIndex = chapterResult.spineIndex;
+                           pendingAnchor = chapterResult.anchor;
+                           nextPageNumber = 0;
+                           section.reset();
+                           requestUpdate();
+                         });
 }
 
 // DECKPOINT: was the progressChangeResultHandler lambda in onReaderMenuConfirm.
@@ -1641,7 +1642,7 @@ void EpubReaderActivity::renderBook() {
   }
   commandLineAfterRender();  // DECKPOINT: keep an open `:` line on top
   hintsAfterRender();        // DECKPOINT: put up / redraw the `d` hint labels
-  searchAfterRender();        // DECKPOINT: invert the search hit on its page
+  searchAfterRender();       // DECKPOINT: invert the search hit on its page
 }
 
 void EpubReaderActivity::onEndOfBookRendered() {
@@ -1724,6 +1725,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   // its own SD pass after the scope ends.
   renderStatusBar();
   scope.endScanAndPrewarm();
+  // DECKPOINT: highlight underlines, measured once and drawn after every page->render below.
+  std::vector<deckpoint::annotations::MarkRect> annotationMarks;
+  planAnnotationMarks(*page, fontId, orientedMarginLeft, orientedMarginTop, annotationMarks);
   const auto tPrewarm = millis();
 
   const bool pageHasImages = page->hasImages();
@@ -1750,6 +1754,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   auto renderGrayscalePass = [&]() {
     if (absoluteImageGrayscale || needsTextGrayscale) {
       page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+      drawAnnotationMarks(annotationMarks);  // DECKPOINT
     } else {
       page->renderImages(renderer, fontId, orientedMarginLeft, orientedMarginTop);
     }
@@ -1764,6 +1769,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   }
 
   page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+  drawAnnotationMarks(annotationMarks);  // DECKPOINT
   renderStatusBar();
   const auto tBwRender = millis();
 
