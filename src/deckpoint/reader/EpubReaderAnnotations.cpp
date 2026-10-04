@@ -18,6 +18,7 @@
 #include "CrossPointSettings.h"
 #include "activities/RenderLock.h"
 #include "activities/reader/EpubReaderActivity.h"
+#include "deckpoint/annotations/AnnotationGeometry.h"
 #include "deckpoint/annotations/AnnotationSeed.h"
 
 using deckpoint::annotations::AddResult;
@@ -148,7 +149,13 @@ void EpubReaderActivity::annotationsTick() {
   std::string pos0 = std::move(request.pos0);
   std::string pos1 = std::move(request.pos1);
   std::string text;
-  const std::string chapter = currentChapterTitle();
+  std::string chapter = currentChapterTitle();
+  if (!request.testWords) {
+    // An explicit range names its own chapter, wherever the reader happens to be.
+    const int spine = deckpoint::annotations::spineFromXPointer(pos0);
+    const int toc = spine >= 0 ? epub->getTocIndexForSpineIndex(spine) : -1;
+    chapter = toc >= 0 ? epub->getTocItem(toc).title : std::string();
+  }
   RenderLock lock;
   if (request.testWords) {
     // Words 3-8 of the current page, as a highlight of ours would select them.
