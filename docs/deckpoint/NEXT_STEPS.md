@@ -3,21 +3,32 @@
 Read `PROGRESS.md` first (dev loop, conventions). Current plan with rationale:
 `/home/jtd/.claude/plans/abstract-weaving-pike.md` (Phase T hybrid touch UX, then round 2).
 
-## 0. In progress — Round 2a step 1 (position foundations)
-- Plan + research: `/home/jtd/.claude/plans/abstract-weaving-pike.md` (Round 2). User decisions:
-  select by keyboard (`v` + hint labels) AND touch (long-press popup Look up/Highlight/Note);
-  underline style; note editor = bottom sheet (~40% screen, page visible, Shift+Enter newline);
-  2a on-device + export, then 2b WebDAV sync with user's Nextcloud in AnnotationSync format.
-- Step 1 was being implemented by an agent at the end of session 4 (uncommitted edits in the
-  working tree if it didn't finish): fix XPointer counting mismatch (ChapterXPathResolver counts
-  only p/li text and skips whitespace vs layout counting all body text → drift; affects KOSync
-  too) + persist per-word visible offsets in TextBlock (section v55). Check `git status`/diff
-  and the host suite before continuing.
-- Verification plan: user installs KOReader on a Boox Go 6 II, opens the SAME Red Rising EPUB,
-  highlights a few phrases (plain paragraph, Contents div, across a line break), sends
-  `<book>.sdr/metadata.epub.lua` via ntfy (listener saves non-image files too); compare pos0/pos1
-  with DeckPoint's XPointers for the same phrases. AnnotationSync plugin later for 2b.
-- Kavita test server may still be running (`podman stop kavita-test`; ufw rule for port 5000).
+## 0. In progress — Round 2a (highlights & notes)
+- Plan + research: `/home/jtd/.claude/plans/abstract-weaving-pike.md` (Round 2, incl. the
+  "AnnotationSync v2.0.0 findings" appendix). User decisions: select by keyboard (`v` + hint
+  labels) AND touch (long-press popup Look up/Highlight/Note); underline style; note editor =
+  bottom sheet (~40% screen, page visible, Shift+Enter newline); 2a on-device + export, then 2b
+  WebDAV sync with the user's Nextcloud (`/eBooks`) in AnnotationSync format.
+- **Step 1 done** (205a626b): KOReader-exact XPointers + per-word offsets (section v55). Verified
+  against 6 real KOReader highlights (samples in ~/booxreverse/koreader-samples/; env-gated test
+  `KOReaderXPointer.MatchesRealKOReaderAnnotations`) and a live KOSync round trip Boox <-> T-Deck.
+- **Next: step 2** (model + store + underline drawing).
+- Test rig: Boox Go 6 II over adb (KOReader F-Droid `org.koreader.launcher.fdroid`, AnnotationSync
+  v2.0.0 → Nextcloud `/eBooks`, KOSync → this host). `adb shell input text` drops shifted chars;
+  swipe up on the KOReader "." key for ':'. KOSync test server: `podman run -d --rm --name
+  kosync-test -p 17200:17200 docker.io/koreader/kosync:latest` (ephemeral: re-register user
+  `deckpoint` after restarts; creds in the session scratchpad only). Kavita may still run
+  (`podman stop kavita-test`).
+- Nits found 2026-10-04:
+  - KOSync "Document Matching" defaulted to Filename on the T-Deck; default to Binary and
+    probably hide Filename (user: filename matching is "a recipe for utter disaster").
+  - Our KOSync percentage (0.75727) is lower than KOReader's (0.7582) for a position slightly
+    *ahead* of it; KOReader may treat ours as behind. Align the percentage formula.
+  - Wi-Fi Networks header: title and "N networks found" overtype at 240 px.
+  - KOReader Sync settings: "Sync Server URL" label truncates to "Sync Server ...".
+  - Reader page showed a leading space before a paragraph (" A new river…", Red Rising ch. 1);
+    check whether it's text-indent rendering or a v55 regression.
+  - `:sync` used to bounce to Home (fixed in 954a9beb, ActivityManager).
 
 ## 1. Done this round (upstream candidates)
 - Stylesheet scoping per document (5f80f808), hanging-indent clamp (bef53e2d), book center/right
