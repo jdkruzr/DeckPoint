@@ -53,6 +53,10 @@ Read `PROGRESS.md` first (dev loop, conventions). Current plan with rationale:
   - Timestamps are local time without a zone (AnnotationSync format): the T-Deck's timezone was
     unset (UTC) so its edits looked ~4 h newer. Warn when annotation sync is on and no timezone
     is set; all devices must share one timezone.
+  - Clock settings (Time Zone, DST, format) are hidden on boards without an RTC chip
+    (SettingsActivity.cpp:105 `halClock.isAvailable()`), so the T-Deck can only set its zone via
+    the web settings page. Show Clock settings whenever the device keeps time (TrustedTime /
+    network sync), and point the no-timezone warning there.
   - SecureHttpClient treated unframed 204 as body-until-close (20 s stall, PUT reported failed
     though it succeeded): fixed (no-body statuses / HEAD). Watch other servers for similar quirks.
 - **Modifier keys** (user got stuck with Alt locked): Alt never locks (double tap = one-shot);
