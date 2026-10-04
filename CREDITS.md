@@ -27,7 +27,7 @@ below. Short version: the repo records CrossInk-originated features arriving thr
 CrossPoint, and DeckPoint's own highlights stack is written from scratch with CrossInk as the
 inspiration.
 
-<!-- TODO(user): add the CrossInk repository link (and uxjulia's preferred credit line). -->
+CrossInk lives at <https://github.com/uxjulia/CrossInk>.
 
 ## Also with thanks
 
@@ -36,10 +36,11 @@ inspiration.
   a T-Deck Pro board, panel driver and keyboard driver there. FreeInk in turn derives from the
   OpenX4 E-Paper Community SDK, credited in `freeink-sdk/NOTICE` (e-paper driver authorship to
   CidVonHighwind).
-- **KOReader** and **AnnotationSync.koplugin**: DeckPoint reads and writes KOReader-compatible
+- **[KOReader](https://github.com/koreader/koreader)** and
+  **[AnnotationSync.koplugin](https://github.com/dani84bs/AnnotationSync.koplugin)** (Daniele
+  Trainini, MIT): DeckPoint reads and writes KOReader-compatible
   XPointers and AnnotationSync's file format so highlights round-trip between devices. This is
   format compatibility only; no KOReader or plugin code is included.
-  <!-- TODO(user): add links and author credit for AnnotationSync.koplugin. -->
 - **Meshtastic**: used as a hardware *reference* for how the T-Deck Pro's pins and panel
   behave. It is GPL-3, so **no code was copied**.
 - **LilyGo**, for making the T-Deck Pro and publishing the schematics and example material that
@@ -60,7 +61,7 @@ Verified from the repository (git history, file headers, `// DECKPOINT:` markers
 | `freeink-sdk/` (display, input, storage, UI toolkit) | FreeInk SDK (MIT), vendored at base `bbd528c`; see `freeink-sdk/VENDORED.md` |
 | T-Deck Pro board, UC8253/GDEQ031 panel driver, TCA8418 keyboard driver (`KeyMatrix`, `BoardTDeckPro`), `HalKeyboard` | DeckPoint, written from datasheets and schematics |
 | Keyboard layer, `?` help, key legend, `:` command line, vim keys, hint-mode lookup, compact UI, font pipeline (`src/deckpoint/`) | DeckPoint |
-| Highlights, note editor, `:notes`, Markdown / My Clippings export | DeckPoint, inspired by CrossInk's clippings feature. TODO(user): the repo has no CrossInk code markers for these; confirm nothing was ported line for line |
+| Highlights, note editor, `:notes`, Markdown / My Clippings export | Written from scratch for DeckPoint; the idea is inspired by CrossInk's clippings feature |
 | KOReader XPointers, annotation store, AnnotationSync-format WebDAV sync | DeckPoint, written against KOReader's and AnnotationSync's observable formats |
 | CrossInk quick actions, reading stats | Not ported: no such code in the repo (listed as ideas in `docs/deckpoint/NEXT_STEPS.md`). TODO(user): update if that changes |
 
@@ -70,7 +71,7 @@ Verified from the repository (git history, file headers, `// DECKPOINT:` markers
 | --- | --- | --- |
 | DeckPoint, CrossPoint Reader | MIT, "Copyright (c) 2025 CrossPoint Reader organization" | `LICENSE` |
 | FreeInk SDK (vendored) | MIT, "Copyright (c) 2026 FreeInk" | `freeink-sdk/LICENSE`, `freeink-sdk/NOTICE` (also carries the OpenX4 E-Paper Community SDK MIT notice) |
-| CrossInk | MIT per `docs/deckpoint/PROGRESS.md` | TODO(user): no CrossInk LICENSE file is in this repo; link or reproduce upstream's if you want it here |
+| CrossInk | MIT (inherits CrossPoint's license) | <https://github.com/uxjulia/CrossInk/blob/HEAD/LICENSE> |
 | Meshtastic, LilyGo T-Deck-Pro repo, bb_epaper | GPL-3: reference only, no code copied | nothing included |
 | Bundled libraries in `lib/` (expat, miniz, uzlib, ...) | their own licenses | each library's directory |
 
