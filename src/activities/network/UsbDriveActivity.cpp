@@ -96,6 +96,15 @@ void UsbDriveActivity::loop() {
     return;
   }
 
+  // DECKPOINT: Back while the host holds the card does nothing; flash a popup instead of silence.
+  if (state == State::Connected && !startFailed && mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    ejectNudgeUntil = millis() + EJECT_NUDGE_MS;
+    requestUpdate();
+  } else if (ejectNudgeUntil != 0 && static_cast<long>(millis() - ejectNudgeUntil) >= 0) {
+    ejectNudgeUntil = 0;
+    requestUpdate();
+  }
+
   const bool canExitWithInput = state == State::WaitingForHost || startFailed;
   if (canExitWithInput && (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
                            mappedInput.wasPressed(MappedInputManager::Button::Power) || mappedInput.wasHomeGesture())) {
@@ -122,6 +131,7 @@ void UsbDriveActivity::render(RenderLock&&) {
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
   renderer.displayBuffer();
+  if (ejectNudgeUntil != 0 && state == State::Connected) GUI.drawPopup(renderer, tr(STR_USB_DRIVE_EJECT_FIRST));
 }
 
 void UsbDriveActivity::driveScreen(UiScreen& screen, void* user) {
@@ -141,8 +151,9 @@ void UsbDriveActivity::buildDriveScreen(UiScreen& screen) const {
         message = tr(STR_USB_DRIVE_WAITING);
         break;
       case State::Connected:
+        // DECKPOINT: Back is ignored while the host holds the card, so say so.
         message = tr(STR_USB_DRIVE_CONNECTED);
-        detail = tr(STR_USB_DRIVE_CONNECT_DELAY);
+        detail = tr(STR_USB_DRIVE_EXIT_ON_HOST);
         secondaryDetail = tr(STR_USB_DRIVE_EJECT_HINT);
         break;
       case State::IoError:
@@ -167,11 +178,13 @@ void UsbDriveActivity::buildDriveScreen(UiScreen& screen) const {
   auto detailStyle = screen.theme().smallText;
   detailStyle.align = fui::TextAlign::Center;
   detailStyle.maxLines = 3;
+  auto exitStyle = detailStyle;
+  exitStyle.bold = state == State::Connected && !preparing;
 
   const fui::Rect body = screen.body();
   const int16_t messageHeight = fui::measureWrappedText(screen.target(), message, messageStyle, body.width).height;
   const int16_t detailHeight =
-      detail ? fui::measureWrappedText(screen.target(), detail, detailStyle, body.width).height : 0;
+      detail ? fui::measureWrappedText(screen.target(), detail, exitStyle, body.width).height : 0;
   const int16_t secondaryDetailHeight =
       secondaryDetail ? fui::measureWrappedText(screen.target(), secondaryDetail, detailStyle, body.width).height : 0;
   const int16_t gap = detail ? screen.theme().spaceMd : 0;
@@ -182,7 +195,7 @@ void UsbDriveActivity::buildDriveScreen(UiScreen& screen) const {
 
   screen.target().text(screen.takeTop(messageHeight, gap), message, messageStyle);
   if (detail) {
-    screen.target().text(screen.takeTop(detailHeight, secondaryGap), detail, detailStyle);
+    screen.target().text(screen.takeTop(detailHeight, secondaryGap), detail, exitStyle);
   }
   if (secondaryDetail) {
     screen.target().text(screen.takeTop(secondaryDetailHeight), secondaryDetail, detailStyle);

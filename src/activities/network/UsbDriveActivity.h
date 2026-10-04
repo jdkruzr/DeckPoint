@@ -24,6 +24,7 @@ class UsbDriveActivity final : public Activity, private UiAppHost {
   static constexpr unsigned long START_FAILURE_TIMEOUT_MS = 30UL * 1000UL;
   static constexpr unsigned long FORCED_DISCONNECT_TIMEOUT_MS = 1000UL;
   static constexpr unsigned long HOST_SUSPEND_TIMEOUT_MS = 2000UL;
+  static constexpr unsigned long EJECT_NUDGE_MS = 2500UL;
 
   static void driveScreen(UiScreen& screen, void* user);
   void buildDriveScreen(UiScreen& screen) const;
@@ -39,4 +40,5 @@ class UsbDriveActivity final : public Activity, private UiAppHost {
   unsigned long startFailureStartedAt = 0;
   unsigned long forcedDisconnectRequestedAt = 0;
   unsigned long hostSuspendStartedAt = 0;
+  unsigned long ejectNudgeUntil = 0;
 };
