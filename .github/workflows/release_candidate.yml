@@ -5,6 +5,8 @@ on:
 
 jobs:
   build-release-candidate:
+    # DECKPOINT: upstream-only (publishes CrossPoint assets); DeckPoint releases use deckpoint-release.yml.
+    if: github.repository == 'crosspoint-reader/crosspoint-reader'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

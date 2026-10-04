@@ -22,6 +22,8 @@ class OtaUpdater {
     INTERNAL_UPDATE_ERROR,
     OOM_ERROR,
     WRONG_DEVICE_ERROR,
+    NO_RELEASE,  // DECKPOINT: 404, nothing published yet or the repo is private
+    NO_ASSET,    // DECKPOINT: latest release has no firmware for this board
   };
 
   size_t getOtaSize() const { return otaSize; }
