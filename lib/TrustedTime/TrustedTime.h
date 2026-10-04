@@ -38,4 +38,20 @@ bool syncNow(uint32_t timeoutMs);
 // an expiry. Callers enforcing a date fail closed on 0.
 int64_t trustedNow();
 
+// DECKPOINT: true when the clock is known to show the real time, not just a
+// plausible one: SNTP completed this boot, an HTTP Date header was applied
+// this boot (applyHttpDate), or such a sync happened before a warm restart or
+// deep sleep that kept the RTC running (and at most a few days ago, bounding
+// RC-oscillator drift). False after a cold boot that restored the floor, which
+// can be days stale. Annotation stamps taken while false are "undated".
+bool isCurrent();
+
+// DECKPOINT: opportunistic clock source: the Date header of any HTTP response
+// (RFC 7231 IMF-fixdate). When the clock is not current yet, a plausible date
+// at or ahead of the clock (within a small tolerance) is applied, persisted as
+// the floor and marks the clock current. Never moves the clock backward and
+// never overrides a current clock. True when the clock is current afterwards.
+// Only call with responses from a server the user configured.
+bool applyHttpDate(const char* dateHeader);
+
 }  // namespace trustedtime

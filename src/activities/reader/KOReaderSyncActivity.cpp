@@ -23,6 +23,7 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "components/UiAppHelpers.h"  // list icons for the compare rows
+#include "deckpoint/sync/AnnotationSync.h"
 #include "fontIds.h"
 #include "network/WifiPowerSaveGuard.h"
 
@@ -93,6 +94,15 @@ void KOReaderSyncActivity::saveProgressAndReturn(int spineIndex, int page) {
     requestUpdate(true);
     return;
   }
+  if (highlightsRan && !highlightsOk) {
+    // Keep the failed highlight sync on screen until a key press.
+    {
+      RenderLock lock(*this);
+      state = PROGRESS_APPLIED;
+    }
+    requestUpdate(true);
+    return;
+  }
   returnToReader();
 }
 
@@ -102,7 +112,37 @@ bool KOReaderSyncActivity::smartSyncEnabled() const {
   return KOREADER_STORE.getSyncBehavior() == KOReaderSyncBehavior::SMART;
 }
 
-void KOReaderSyncActivity::markAutoReturn() { autoReturnAt = millis() + AUTO_RETURN_DELAY_MS; }
+void KOReaderSyncActivity::markAutoReturn() {
+  // A failed highlight sync waits for a key so its reason is read.
+  if (highlightsRan && !highlightsOk) return;
+  autoReturnAt = millis() + (highlightsRan ? AUTO_RETURN_WITH_HIGHLIGHTS_MS : AUTO_RETURN_DELAY_MS);
+}
+
+void KOReaderSyncActivity::syncHighlights() {
+  {
+    RenderLock lock(*this);
+    state = SYNCING;
+    statusMessage = tr(STR_HL_SYNCING);
+  }
+  requestUpdateAndWait();
+  LOG_DBG("KOSync", "Highlight sync (heap: %u)", (unsigned)ESP.getFreeHeap());
+  const annotationsync::BookResult result = annotationsync::syncBook(epubPath);
+  RenderLock lock(*this);
+  highlightsRan = true;
+  highlightsOk = result.ok();
+  annotationsync::describe(result, highlightLine1, sizeof(highlightLine1), highlightLine2, sizeof(highlightLine2));
+}
+
+void KOReaderSyncActivity::drawHighlightLines(const int y) const {
+  if (!highlightsRan) return;
+  Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, y, highlightLine1, true,
+                            highlightsOk ? EpdFontFamily::REGULAR : EpdFontFamily::BOLD);
+  if (highlightLine2[0] != '\0') {
+    UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, y + renderer.getLineHeight(UI_10_FONT_ID) + 4,
+                              highlightLine2);
+  }
+}
 
 void KOReaderSyncActivity::completeAlreadySynced() {
   {
@@ -127,6 +167,22 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
   // stalls that surface as HTTP timeouts. WiFi is torn down when this activity exits.
   WiFi.setSleep(false);
   LOG_DBG("KOSync", "WiFi sleep disabled for sync");
+
+  // DECKPOINT: highlights first, so their WebDAV TLS session is gone before
+  // the KOSync one; the Date header also makes the clock current for both.
+  if (annotationsync::ready()) {
+    syncHighlights();
+    if (!KOREADER_STORE.hasCredentials()) {
+      esp_wifi_stop();  // full teardown happens at the silent reboot
+      {
+        RenderLock lock(*this);
+        state = ANNOTATIONS_DONE;
+      }
+      markAutoReturn();
+      requestUpdate(true);
+      return;
+    }
+  }
 
   {
     RenderLock lock(*this);
@@ -399,8 +455,8 @@ void KOReaderSyncActivity::onEnter() {
   app.on(ACTION_ROW, &KOReaderSyncActivity::onResultRow, this);
   app.setScreen(&KOReaderSyncActivity::resultScreen, this);
 
-  // Check for credentials first
-  if (!KOREADER_STORE.hasCredentials()) {
+  // Check for credentials first (DECKPOINT: or a highlight sync account)
+  if (!KOREADER_STORE.hasCredentials() && !annotationsync::ready()) {
     state = NO_CREDENTIALS;
     requestUpdate();
     return;
@@ -615,7 +671,9 @@ void KOReaderSyncActivity::render(RenderLock&&) {
   Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
 
   GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
-                 state == SHOWING_RESULT ? tr(STR_PROGRESS_FOUND) : tr(STR_KOREADER_SYNC));
+                 state == SHOWING_RESULT           ? tr(STR_PROGRESS_FOUND)
+                 : KOREADER_STORE.hasCredentials() ? tr(STR_KOREADER_SYNC)
+                                                   : tr(STR_ANNOTATION_SYNC));
 
   int top = screen.y + screen.height / 2 - 40;
   if (state == NO_CREDENTIALS) {
@@ -632,6 +690,7 @@ void KOReaderSyncActivity::render(RenderLock&&) {
 
   if (state == SYNCING || state == UPLOADING) {
     UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top, statusMessage.c_str(), true, EpdFontFamily::BOLD);
+    drawHighlightLines(top + 80);
     renderer.displayBuffer();
     return;
   }
@@ -657,10 +716,22 @@ void KOReaderSyncActivity::render(RenderLock&&) {
     return;
   }
 
-  if (state == UPLOAD_COMPLETE || state == SYNC_COMPLETE) {
+  if (state == ANNOTATIONS_DONE) {
+    // DECKPOINT: highlight sync only: its result is the headline.
+    drawHighlightLines(top);
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_DONE), "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.displayBuffer();
+    return;
+  }
+
+  if (state == UPLOAD_COMPLETE || state == SYNC_COMPLETE || state == PROGRESS_APPLIED) {
     UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top,
-                              state == UPLOAD_COMPLETE ? tr(STR_UPLOAD_SUCCESS) : tr(STR_ALREADY_SYNCED), true,
-                              EpdFontFamily::BOLD);
+                              state == UPLOAD_COMPLETE ? tr(STR_UPLOAD_SUCCESS)
+                              : state == SYNC_COMPLETE ? tr(STR_ALREADY_SYNCED)
+                                                       : tr(STR_PROGRESS_APPLIED),
+                              true, EpdFontFamily::BOLD);
+    drawHighlightLines(top + 80);
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_DONE), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -671,6 +742,7 @@ void KOReaderSyncActivity::render(RenderLock&&) {
   if (state == SYNC_FAILED) {
     UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top, tr(STR_SYNC_FAILED_MSG), true, EpdFontFamily::BOLD);
     UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top + 40, statusMessage.c_str());
+    drawHighlightLines(top + 80);
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -680,7 +752,8 @@ void KOReaderSyncActivity::render(RenderLock&&) {
 }
 
 void KOReaderSyncActivity::loop() {
-  if (state == NO_CREDENTIALS || state == SYNC_FAILED || state == UPLOAD_COMPLETE || state == SYNC_COMPLETE) {
+  if (state == NO_CREDENTIALS || state == SYNC_FAILED || state == UPLOAD_COMPLETE || state == SYNC_COMPLETE ||
+      state == PROGRESS_APPLIED || state == ANNOTATIONS_DONE) {
     if (autoReturnAt != 0 && millis() >= autoReturnAt) {
       returnToReader();
       return;

@@ -70,6 +70,10 @@ void planPageMarks(const PageWord* words, size_t wordCount, const HighlightRange
 // KOReader's os.date("%Y-%m-%d %H:%M:%S") for a broken-down local time.
 void formatTimestamp(const std::tm& local, char (&out)[20]);
 
+// Inverse of formatTimestamp: "YYYY-MM-DD HH:MM:SS" as seconds since
+// 1970-01-01 00:00:00 of the same (unspecified) zone. False when malformed.
+bool parseTimestamp(std::string_view text, int64_t& secondsOut);  // years before 1970 are rejected
+
 // Written when the clock has never been set: sorts before every real time, so
 // AnnotationSync's newer-wins merge prefers any dated copy of the same
 // highlight. Sync (round 2b) re-dates such entries before uploading.

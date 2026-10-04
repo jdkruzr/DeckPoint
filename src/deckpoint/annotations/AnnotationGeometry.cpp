@@ -111,4 +111,33 @@ void formatTimestamp(const std::tm& local, char (&out)[20]) {
            u(local.tm_mday, 100), u(local.tm_hour, 100), u(local.tm_min, 100), u(local.tm_sec, 100));
 }
 
+bool parseTimestamp(const std::string_view text, int64_t& secondsOut) {
+  if (text.size() != 19) return false;
+  int v[6];
+  constexpr size_t STARTS[6] = {0, 5, 8, 11, 14, 17};
+  constexpr size_t WIDTHS[6] = {4, 2, 2, 2, 2, 2};
+  constexpr char SEPS[5] = {'-', '-', ' ', ':', ':'};
+  for (size_t f = 0; f < 6; f++) {
+    v[f] = 0;
+    for (size_t i = 0; i < WIDTHS[f]; i++) {
+      const char c = text[STARTS[f] + i];
+      if (c < '0' || c > '9') return false;
+      v[f] = v[f] * 10 + (c - '0');
+    }
+    if (f < 5 && text[STARTS[f] + WIDTHS[f]] != SEPS[f]) return false;
+  }
+  if (v[0] < 1970 || v[1] < 1 || v[1] > 12 || v[2] < 1 || v[2] > 31 || v[3] > 23 || v[4] > 59 || v[5] > 60)
+    return false;
+  // Days since 1970-01-01 (Hinnant's days_from_civil).
+  const int y = v[0] - (v[1] <= 2 ? 1 : 0);
+  const auto m = static_cast<unsigned>(v[1]);
+  const int era = y / 400;  // y >= 1969
+  const auto yoe = static_cast<unsigned>(y - era * 400);
+  const unsigned doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + static_cast<unsigned>(v[2]) - 1;
+  const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  const int64_t days = static_cast<int64_t>(era) * 146097 + static_cast<int64_t>(doe) - 719468;
+  secondsOut = days * 86400 + v[3] * 3600 + v[4] * 60 + v[5];
+  return true;
+}
+
 }  // namespace deckpoint::annotations

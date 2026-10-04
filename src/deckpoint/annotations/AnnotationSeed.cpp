@@ -1,5 +1,6 @@
 #include "AnnotationSeed.h"
 
+#include <Arduino.h>
 #include <Memory.h>
 
 #include <cstring>
@@ -12,6 +13,10 @@ namespace {
 // Pending request (main loop task writes, the same task's activity loop takes
 // it); allocated only while one is pending.
 std::unique_ptr<SeedRequest> pending;
+
+constexpr unsigned long WIPE_EXPIRY_MS = 3000;
+unsigned long wipeRequestedAt = 0;
+bool wipePending = false;
 
 std::string unescapeNewlines(const char* s) {
   std::string out;
@@ -53,6 +58,17 @@ bool requestSeed(const char* command) {
   }
   pending = std::move(request);
   return true;
+}
+
+void requestWipe() {
+  wipeRequestedAt = millis();
+  wipePending = true;
+}
+
+bool takeWipeRequest() {
+  if (!wipePending) return false;
+  wipePending = false;
+  return millis() - wipeRequestedAt <= WIPE_EXPIRY_MS;
 }
 
 bool takeSeedRequest(SeedRequest& out) {

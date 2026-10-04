@@ -12,8 +12,9 @@
 // match, so the stores' temp/backup siblings are covered too.
 namespace protectedpaths {
 
+// DECKPOINT: plus AnnotationSyncStore's WebDAV credentials.
 inline constexpr const char* SENSITIVE_FILES[] = {"/.crosspoint/wifi.json", "/.crosspoint/opds.json",
-                                                  "/.crosspoint/koreader.json"};
+                                                  "/.crosspoint/koreader.json", "/.crosspoint/annotation_sync.json"};
 
 // SdFat also opens a name by its generated 8.3 alias (".crosspoint" is
 // CROSSP~1), which no spelling check can map back to the long name.

@@ -69,6 +69,7 @@ class AnnotationList {
   void markReadOnly() { readOnlyFlag = true; }
 
   size_t blobBytes() const { return blobTotal; }
+  size_t blobBudgetBytes() const { return blobBudget; }
   void clear();
 
  private:

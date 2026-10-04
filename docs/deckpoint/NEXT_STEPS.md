@@ -41,10 +41,52 @@ Read `PROGRESS.md` first (dev loop, conventions). Current plan with rationale:
   timestamp, HTTP Date as clock source, stamp-at-sync, tombstones only from user deletes, dev
   seeds never upload, remote backup). Wipe the T-Deck's `/.crosspoint/annotations/` (test data)
   before the first real sync.
+- **2b follow-ups** (2026-10-05):
+  - Overlap rule (copied from AnnotationSync): touching/overlapping highlights collapse to the
+    newer one. Make it lossless where it matters: when a merge drops the loser of an overlap and
+    the loser has a note, append that note to the winner's note (marked as merged) — Boox sees an
+    edited note, nothing written is lost. Plus: creating a T-Deck highlight that touches/overlaps
+    an existing one offers "extend existing highlight" instead of making a second one.
+  - Verified 2026-10-04: T-Deck -> Nextcloud -> desktop KOReader (v2026.07.1 + AnnotationSync
+    v2.0.0, run headless on Xvfb :77 from the scratchpad, KO_HOME=scratchpad/kohome) draws the
+    T-Deck highlight as an underline on the exact words; Boox -> Nextcloud -> T-Deck pulled 6.
+  - Timestamps are local time without a zone (AnnotationSync format): the T-Deck's timezone was
+    unset (UTC) so its edits looked ~4 h newer. Warn when annotation sync is on and no timezone
+    is set; all devices must share one timezone.
+  - SecureHttpClient treated unframed 204 as body-until-close (20 s stall, PUT reported failed
+    though it succeeded): fixed (no-body statuses / HEAD). Watch other servers for similar quirks.
+- **Modifier keys** (user got stuck with Alt locked): Alt never locks (double tap = one-shot);
+  status-bar badge whenever Shift/Sym/Alt is latched or locked (state at BoardTDeckPro.cpp:450);
+  also covers the note editor's Caps-Lock-makes-Enter-a-newline trap.
 - **Theme pass** (user, 2026-10-05): Classic, Lyra Extended, RoundedRaff, Cover Grid look bad on
   240x320 (our tuning went into Lyra only). Screenshot every theme on each top-level screen via
   the bridge, list breakages, then fix or hide per theme with the user.
-- Before 2b ships: undated-highlight stamping (plan file, "Undated highlights").
+- **2b part B done** (WebDAV client + settings, untested on the glass): `deckpoint/sync/WebDavClient`
+  (GET to SD / PUT from SD with If-Match or If-None-Match: * / PROPFIND Depth 0 / MKCOL; returns
+  status, ETag and the `Date:` header), `dav::` URL/status/PROPFIND helpers (test/webdav),
+  `AnnotationSyncStore` (`/.crosspoint/annotation_sync.json`, obfuscated + CRC'd password, web
+  settings keys `as*`), Settings > System > Annotation Sync with Test connection. Part C: feed
+  `Result::date` to the time-trust code; rclone's WebDAV ignores If-Match (always 201), Apache
+  answers PUT without an ETag (client PROPFINDs it) and serves weak ETags right after a write.
+- **2b part A done** (merge engine + time trust, host-tested, untested on the glass):
+  `trustedtime::isCurrent()` (SNTP / HTTP Date this boot, or carried across a warm restart / deep
+  sleep for <= 3 days via RTC_NOINIT) and `applyHttpDate()` (KOSync responses already feed it);
+  `annotations/AnnotationMerge` (annotation_sweep.merge + plan rules 3-6, test/annotation_merge);
+  `undated` / `localOnly` flags in the `<md5>.local.json` sidecar (CMD:ANNOTATE seeds are local-only);
+  `AnnotationStore::mergeRemote / writeUpload / saveSyncSnapshot (<md5>.sync.json) / backupRemote*
+  (<md5>.remote.bak)` for part C.
+- **2b part C done** (sync orchestration, host-tested decisions, untested on the glass): `:sync` /
+  reader-menu Sync / long-press / home-button Sync now run highlight sync first (when Settings >
+  Annotation Sync is on and configured), then KOSync progress, in one Wi-Fi session; annotation
+  sync alone also works without a KOSync account. `deckpoint/sync/AnnotationSync` (per book: GET
+  `<folder>/<md5>.json` to `<md5>.remote.tmp`, Date header -> clock, abort "Clock not set" unless
+  `isCurrent()`, backup before first upload / removing merge, `mergeRemote`, PUT `<md5>.upload.tmp`
+  with If-Match / If-None-Match: *, MKCOL once on 409/404, one rerun on 412 then "Changed on server",
+  snapshot) and `AnnotationSyncPlan` (test/annotation_sync). Result line under the progress result
+  ("Highlights: +3 -1, uploaded"); a failed highlight sync stays on screen until a key. Serial:
+  one `ASYNC Sync doc=... get=... put=... uploaded=y|n new_etag=... result=...` line per sync;
+  `CMD:ANNOTATIONS_WIPE` deletes the open book's annotation files (main, flags, snapshot, backup,
+  temporaries). Next: wipe, then the first real sync against Nextcloud + the Boox.
 - Test rig: Boox Go 6 II over adb (KOReader F-Droid `org.koreader.launcher.fdroid`, AnnotationSync
   v2.0.0 → Nextcloud `/eBooks`, KOSync → this host). `adb shell input text` drops shifted chars;
   swipe up on the KOReader "." key for ':'. KOSync test server: `podman run -d --rm --name

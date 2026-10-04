@@ -303,25 +303,30 @@ constexpr WriteField WRITE_ORDER[] = {
     {"pos1", Slot::String, Field::Pos1},         {"text", Slot::String, Field::Text},
 };
 
+// The entry's map key, escaped piecewise (no concatenated copy).
+void writeKey(Out& out, const Annotation& a) {
+  if (a.isHighlight()) {
+    out.body(a.get(Field::Pos0));
+    out.raw("||", 2);
+    out.body(a.get(Field::Pos1));
+  } else {
+    out.raw("BOOKMARK|", 9);
+    out.body(a.get(Field::Page));
+  }
+}
+
 }  // namespace
 
-bool writeAnnotationMap(const AnnotationList& list, const JsonSink& sink) {
+bool writeAnnotationMap(const AnnotationList& list, const JsonSink& sink, const bool includeLocalOnly) {
   Out out(sink);
   out.raw("{", 1);
   bool firstEntry = true;
   for (size_t i = 0; i < list.size() && out.ok(); i++) {
     const Annotation& a = list[i];
-    // Same key annotationKey() builds, escaped piecewise (no concatenated copy).
+    if (a.localOnly && !includeLocalOnly) continue;
     out.raw(firstEntry ? "\"" : ",\"");
     firstEntry = false;
-    if (a.isHighlight()) {
-      out.body(a.get(Field::Pos0));
-      out.raw("||", 2);
-      out.body(a.get(Field::Pos1));
-    } else {
-      out.raw("BOOKMARK|", 9);
-      out.body(a.get(Field::Page));
-    }
+    writeKey(out, a);
     out.raw("\":{", 3);
     bool firstField = true;
     for (const auto& wf : WRITE_ORDER) {
@@ -362,6 +367,91 @@ bool writeAnnotationMap(const AnnotationList& list, const JsonSink& sink) {
   }
   out.raw("}", 1);
   return out.ok();
+}
+
+// --- local flags sidecar -------------------------------------------------------
+
+bool hasLocalFlags(const AnnotationList& list) {
+  for (size_t i = 0; i < list.size(); i++) {
+    if (list[i].undated || list[i].localOnly) return true;
+  }
+  return false;
+}
+
+bool writeLocalFlags(const AnnotationList& list, const JsonSink& sink) {
+  Out out(sink);
+  const auto array = [&](const char* name, bool Annotation::* flag) {
+    out.raw(name);
+    bool first = true;
+    for (size_t i = 0; i < list.size() && out.ok(); i++) {
+      if (!(list[i].*flag)) continue;
+      out.raw(first ? "\"" : ",\"");
+      first = false;
+      writeKey(out, list[i]);
+      out.raw("\"", 1);
+    }
+    out.raw("]");
+  };
+  array("{\"undated\":[", &Annotation::undated);
+  array(",\"local_only\":[", &Annotation::localOnly);
+  out.raw("}", 1);
+  return out.ok();
+}
+
+struct LocalFlagsReader::Callbacks {
+  static LocalFlagsReader& self(void* ctx) { return *static_cast<LocalFlagsReader*>(ctx); }
+  static void key(void* ctx, const char* s, size_t n) {
+    auto& r = self(ctx);
+    if (r.depth != 1) return;
+    const std::string_view name(s, n);
+    r.flag = name == "undated" ? 1 : name == "local_only" ? 2 : 0;
+  }
+  static void string(void* ctx, const char* s, size_t n) {
+    auto& r = self(ctx);
+    if (r.depth != 2 || r.flag == 0) return;
+    const int i = r.list.find(std::string_view(s, n));
+    if (i < 0) return;
+    Annotation& a = r.list[static_cast<size_t>(i)];
+    (r.flag == 1 ? a.undated : a.localOnly) = true;
+    r.applied++;
+  }
+  static void scalar(void*, const char*, size_t) {}
+  static void boolean(void*, bool) {}
+  static void null(void*) {}
+  static void start(void* ctx) { self(ctx).depth++; }
+  static void end(void* ctx) {
+    auto& r = self(ctx);
+    if (r.depth > 0) r.depth--;
+  }
+};
+
+LocalFlagsReader::LocalFlagsReader(AnnotationList& list) : list(list) {}
+LocalFlagsReader::~LocalFlagsReader() = default;
+
+bool LocalFlagsReader::begin() {
+  const JsonCallbacks cb{this,
+                         &Callbacks::key,
+                         &Callbacks::string,
+                         &Callbacks::scalar,
+                         &Callbacks::boolean,
+                         &Callbacks::null,
+                         &Callbacks::start,
+                         &Callbacks::end,
+                         &Callbacks::start,
+                         &Callbacks::end};
+  parser.reset(new (std::nothrow) StreamingJsonParser(cb));
+  return parser != nullptr;
+}
+
+void LocalFlagsReader::feed(const char* data, const size_t len) {
+  if (parser && !parser->hasError()) parser->feed(data, len);
+}
+
+bool LocalFlagsReader::finish(size_t* appliedOut) {
+  const bool ok = parser && !parser->hasError() && depth == 0;
+  parser.reset();
+  if (appliedOut) *appliedOut = applied;
+  return ok;
 }
 
 }  // namespace deckpoint::annotations

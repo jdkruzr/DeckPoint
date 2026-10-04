@@ -19,6 +19,7 @@ enum class SettingAction {
   CustomiseStatusBar,
   ClockSettings,
   KOReaderSync,
+  AnnotationSync,  // DECKPOINT
   OPDSBrowser,
   Network,
   ClearCache,

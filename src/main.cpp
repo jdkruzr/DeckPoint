@@ -48,6 +48,7 @@
 #include "deckpoint/TestPattern.h"                 // DECKPOINT
 #include "deckpoint/TouchTestActivity.h"           // DECKPOINT
 #include "deckpoint/annotations/AnnotationSeed.h"  // DECKPOINT
+#include "deckpoint/sync/AnnotationSyncStore.h"    // DECKPOINT
 #include "fontIds.h"
 #include "platform/UsbSerialJtagHandoff.h"
 #include "util/ButtonNavigator.h"
@@ -586,6 +587,7 @@ void setup() {
   RECENT_BOOKS.loadFromFile();
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
   KOREADER_STORE.loadFromFile();
+  ANNOTATION_SYNC_STORE.loadFromFile();  // DECKPOINT
   OPDS_STORE.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
@@ -803,7 +805,10 @@ void loop() {
       }
       // DECKPOINT: "CMD:ANNOTATE_TEST[:<note>]" / "CMD:ANNOTATE:<pos0>||<pos1>[||<note>]"
       // seed a highlight in the open EPUB (see deckpoint/annotations/AnnotationSeed.h).
-      else if (cmd.startsWith("ANNOTATE")) {
+      else if (cmd == "ANNOTATIONS_WIPE") {  // DECKPOINT: dev cleanup of the open book's annotation files
+        deckpoint::annotations::requestWipe();
+        logSerial.printf("[ANN] wipe queued (open book only, expires in 3 s)\n");
+      } else if (cmd.startsWith("ANNOTATE")) {
         logSerial.printf("[ANN] seed %s\n", deckpoint::annotations::requestSeed(cmd.c_str()) ? "queued" : "rejected");
       }
 #if FREEINK_DEVICE_TDECKPRO

@@ -28,6 +28,7 @@
 #include "deckpoint/KeyHelp.h"
 #include "deckpoint/KeyHelpActivity.h"
 #include "deckpoint/SleepRequest.h"
+#include "deckpoint/sync/AnnotationSync.h"
 #include "fontIds.h"
 #include "util/Dictionary.h"
 
@@ -296,6 +297,7 @@ StrId commandHelpRow(const uint8_t index, char* keys, const size_t keysSize) {
     const CommandSpec& c = READER_COMMANDS[index];
     snprintf(keys, keysSize, ":%s%s%s%s%s", c.name, c.alias ? " :" : "", c.alias ? c.alias : "", c.argHint ? " " : "",
              c.argHint ? c.argHint : "");
+    if (c.help == StrId::STR_CMD_HELP_SYNC && annotationsync::ready()) return StrId::STR_CMD_HELP_SYNC_HL;
     return c.help;
   }
   const size_t fixed = index - READER_COMMAND_COUNT;

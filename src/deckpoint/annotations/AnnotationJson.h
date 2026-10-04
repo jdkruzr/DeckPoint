@@ -84,7 +84,33 @@ struct JsonSink {
 };
 
 // Writes `list` in AnnotationSync's shape (tombstones included, '/' escaped as
-// "\/" like KOReader's encoder). False when the sink failed.
-bool writeAnnotationMap(const AnnotationList& list, const JsonSink& sink);
+// "\/" like KOReader's encoder). includeLocalOnly = false leaves out dev seeds
+// (what is uploaded). False when the sink failed.
+bool writeAnnotationMap(const AnnotationList& list, const JsonSink& sink, bool includeLocalOnly = true);
+
+// DECKPOINT: the local-only flags sidecar (<md5>.local.json), keyed like the
+// main file: {"undated":["<key>",...],"local_only":["<key>",...]}.
+bool hasLocalFlags(const AnnotationList& list);
+bool writeLocalFlags(const AnnotationList& list, const JsonSink& sink);
+
+// Applies a sidecar to an already loaded list (keys it does not hold are
+// ignored). Streamed like AnnotationJsonReader.
+class LocalFlagsReader {
+ public:
+  explicit LocalFlagsReader(AnnotationList& list);
+  ~LocalFlagsReader();
+  bool begin();  // false on OOM
+  void feed(const char* data, size_t len);
+  // Entries flagged; false when the sidecar was malformed (flags read so far stay).
+  bool finish(size_t* applied = nullptr);
+
+ private:
+  struct Callbacks;
+  AnnotationList& list;
+  std::unique_ptr<StreamingJsonParser> parser;
+  int depth = 0;
+  int flag = 0;  // 1 undated, 2 local_only, 0 other
+  size_t applied = 0;
+};
 
 }  // namespace deckpoint::annotations

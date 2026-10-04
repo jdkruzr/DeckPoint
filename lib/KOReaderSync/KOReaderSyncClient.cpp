@@ -4,9 +4,10 @@
 #include <HalMemory.h>
 #include <Logging.h>
 #include <MD5Builder.h>
-#include <esp_mac.h>
 #include <SecureHttpClient.h>
+#include <TrustedTime.h>
 #include <base64.h>
+#include <esp_mac.h>
 
 #include <string>
 
@@ -57,6 +58,11 @@ void applyAuthHeaders(freeink::SecureHttpClient& http) {
   http.addHeader("Authorization", std::string("Basic ") + encoded.c_str());
 }
 
+// DECKPOINT: any server answer doubles as a clock source (its Date header).
+void noteServerDate(const freeink::SecureHttpClient& http, const int httpCode) {
+  if (httpCode > 0) trustedtime::applyHttpDate(http.getHeader("date").c_str());
+}
+
 // True when free heap is too low to risk a TLS handshake.
 bool insufficientHeap() {
   const auto heap = HalMemory::getDefaultHeap();
@@ -89,6 +95,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
   }
   applyAuthHeaders(http);
   const int httpCode = http.GET();
+  noteServerDate(http, httpCode);
   http.end();
   lastHttpCode = httpCode;
 
@@ -129,6 +136,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::createUser() {
   http.addHeader("Accept", "application/vnd.koreader.v1+json");
   http.addHeader("Content-Type", "application/json");
   const int httpCode = http.sendRequest("POST", body);
+  noteServerDate(http, httpCode);
   http.end();
   lastHttpCode = httpCode;
 
@@ -160,6 +168,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
   }
   applyAuthHeaders(http);
   const int httpCode = http.GET();
+  noteServerDate(http, httpCode);
   lastHttpCode = httpCode;
 
   LOG_DBG("KOSync", "Get progress response: %d", httpCode);
@@ -287,6 +296,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   applyAuthHeaders(http);
   http.addHeader("Content-Type", "application/json");
   const int httpCode = http.sendRequest("PUT", body);
+  noteServerDate(http, httpCode);
   http.end();
   lastHttpCode = httpCode;
 

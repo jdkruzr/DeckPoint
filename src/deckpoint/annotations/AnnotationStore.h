@@ -18,14 +18,25 @@
 
 #include "AnnotationGeometry.h"
 #include "AnnotationList.h"
+#include "AnnotationMerge.h"
 
 class Epub;
 
 namespace deckpoint::annotations {
 
+struct JsonSink;
+
 class AnnotationStore {
  public:
   static constexpr const char* DIR = "/.crosspoint/annotations";
+  // Per-book files in DIR, named <docId><suffix>:
+  static constexpr const char* MAIN_SUFFIX = ".json";            // the annotations (AnnotationSync shape)
+  static constexpr const char* FLAGS_SUFFIX = ".local.json";     // local-only flags (undated, seeds)
+  static constexpr const char* SNAPSHOT_SUFFIX = ".sync.json";   // what we last uploaded
+  static constexpr const char* BACKUP_SUFFIX = ".remote.bak";    // remote copy before a risky upload
+  static constexpr const char* DOWNLOAD_SUFFIX = ".remote.tmp";  // sync: the GET body
+  static constexpr const char* UPLOAD_SUFFIX = ".upload.tmp";    // sync: the PUT body
+  static std::string filePath(const std::string& docId, const char* suffix);
 
   // Computes the book id and loads its file if there is one. Null on OOM or
   // when the book cannot be hashed.
@@ -61,11 +72,43 @@ class AnnotationStore {
 
   // "YYYY-MM-DD HH:MM:SS" local time from the system clock, or
   // UNSET_TIMESTAMP when the clock has never been set (no RTC, no sync yet).
+  // Entries stamped while trustedtime::isCurrent() is false are kept undated.
   static void now(char (&out)[20]);
+
+  // --- sync (round 2b) ---
+  // Merges a downloaded remote map (empty list for a 404) into this book:
+  // reads the snapshot, runs mergeAnnotations with now() / isCurrent(), and on
+  // Ok replaces the list and saves it when it changed. `remote` is consumed on
+  // Ok. Make the clock current first (rule 3). Refuses (status != Ok) when the
+  // local list or the snapshot cannot be read completely.
+  MergeReport mergeRemote(AnnotationList& remote);
+  // The upload body: the list in AnnotationSync shape, seeds left out.
+  bool writeUpload(const JsonSink& sink) const;
+  // Records the upload as the snapshot; call after a successful PUT (or when
+  // the merge reported !remoteChanged).
+  bool saveSyncSnapshot() const;
+  // Keeps the remote JSON as it was before we changed it (rule 7): before the
+  // first upload of a book (no snapshot yet) and when the merge reports
+  // removesOrBlanks. From a buffer or from a downloaded file.
+  bool hasSyncSnapshot() const;
+  static bool backupRemote(const std::string& docId, const char* data, size_t len);
+  static bool backupRemoteFile(const std::string& docId, const std::string& downloadedPath);
+  // Writes the upload body (writeUpload) to `file`.
+  bool writeUploadFile(const std::string& file) const;
+  // Streams an AnnotationSync map file (a downloaded remote) into `out`. False
+  // when the file cannot be opened or on OOM; a lossy read leaves
+  // out.readOnly() set (mergeAnnotations then refuses it).
+  static bool readMapFile(const std::string& file, AnnotationList& out);
+  // Dev cleanup (CMD:ANNOTATIONS_WIPE): removes every file of the book (main,
+  // flags, snapshot, backup, sync temporaries). Returns how many existed.
+  static unsigned removeAllFiles(const std::string& docId);
 
  private:
   std::string path() const;
   bool load();
+  void loadFlags();
+  bool saveFlags();
+  bool loadSnapshotKeys(std::vector<uint64_t>& out) const;
 
   std::string docId;
   AnnotationList list;

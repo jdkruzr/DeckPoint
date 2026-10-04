@@ -89,6 +89,14 @@ class Annotation {
   // Tombstone: AnnotationSync's way to propagate a delete. Kept and written.
   bool deleted = false;
 
+  // Local-only state, kept in the <md5>.local.json sidecar and never written
+  // into the AnnotationSync shape. undated: the latest stamp (datetime_updated,
+  // else datetime) was taken while the clock was not current
+  // (trustedtime::isCurrent); sync re-stamps it before merging. localOnly: a
+  // dev seed (CMD:ANNOTATE*), never uploaded and never merged.
+  bool undated = false;
+  bool localOnly = false;
+
   // Placement cache (not serialized): the highlight as visible-text offsets in
   // spineIndex, [startOffset, endOffset). spineIndex is parsed from pos0 at
   // load (-1: not an EPUB XPointer).

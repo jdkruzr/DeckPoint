@@ -40,7 +40,8 @@ struct Preferences {
   void end() {}
 };
 ''',
-    "Logging.h": '#pragma once\n#define LOG_DBG(...) ((void)0)\n',
+    "Logging.h": '#pragma once\n#define LOG_DBG(...) ((void)0)\n#define LOG_INF(...) ((void)0)\n',
+    "esp_attr.h": '#pragma once\n#define RTC_NOINIT_ATTR\n',
     "esp_sntp.h": r'''
 #pragma once
 #include <Arduino.h>
@@ -56,7 +57,31 @@ CHECK = r'''
 #include <Arduino.h>
 #include <cassert>
 #include <cstring>
+#include <ctime>
+#include <string>
+// HTTP Date as "Www, DD Mon YYYY HH:MM:SS GMT" for epoch t.
+static std::string httpDate(time_t t) {
+  char buf[40];
+  std::tm tm{};
+  gmtime_r(&t, &tm);
+  strftime(buf, sizeof(buf), "%a, %d %b %Y %H:%M:%S GMT", &tm);
+  return buf;
+}
 int main() {
+  // Trust bit: not current at boot without a carried-over sync.
+  trustedtime::init();
+  assert(!trustedtime::isCurrent());
+  assert(!trustedtime::applyHttpDate(nullptr));
+  assert(!trustedtime::applyHttpDate("garbage"));
+  assert(!trustedtime::applyHttpDate("Sun, 06 Nov 1994 08:49:37 GMT"));  // implausible
+  // A server far behind the clock never rolls it back nor confirms it.
+  assert(!trustedtime::applyHttpDate(httpDate(time(nullptr) - 86400).c_str()));
+  assert(!trustedtime::isCurrent());
+  // A date consistent with the clock confirms it (no clock change needed).
+  assert(trustedtime::applyHttpDate(httpDate(time(nullptr) - 30).c_str()));
+  assert(trustedtime::isCurrent());
+  // Once current, headers are accepted without touching the clock.
+  assert(trustedtime::applyHttpDate(httpDate(time(nullptr) - 86400).c_str()));
   const char* zone = "EST5EDT,M3.2.0,M11.1.0";
   setenv("TZ", zone, 1);
   tzset();
@@ -86,8 +111,9 @@ if __name__ == "__main__":
         subprocess.run([
             "c++", "-std=c++17", "-Wall", "-Wextra", "-Werror",
             f"-I{work}", f"-I{ROOT / 'lib/TrustedTime'}",
-            str(ROOT / "lib/TrustedTime/TrustedTime.cpp"), str(work / "check.cpp"),
+            str(ROOT / "lib/TrustedTime/TrustedTime.cpp"), str(ROOT / "lib/TrustedTime/HttpDate.cpp"),
+            str(work / "check.cpp"),
             "-o", str(work / "check"),
         ], check=True)
         subprocess.run([str(work / "check")], check=True)
-    print("TrustedTime timezone checks passed")
+    print("TrustedTime timezone and trust-bit checks passed")

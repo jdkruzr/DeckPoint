@@ -18,6 +18,7 @@
 #include "ReaderFontSizes.h"
 #include "activities/settings/SettingsActivity.h"
 #include "components/UITheme.h"
+#include "deckpoint/sync/AnnotationSyncStore.h"  // DECKPOINT
 #include "util/DictionaryRegistry.h"
 
 // Build the font family setting dynamically. When registry is non-null, SD card fonts
@@ -250,8 +251,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             StrId::STR_CAT_DISPLAY),
 #if FREEINK_CAP_KEYBOARD
         // DECKPOINT: key legend along the bottom of every non-reading screen.
-        SettingInfo::Toggle(StrId::STR_KEY_LEGEND, &CrossPointSettings::keyLegend, "keyLegend",
-                            StrId::STR_CAT_DISPLAY),
+        SettingInfo::Toggle(StrId::STR_KEY_LEGEND, &CrossPointSettings::keyLegend, "keyLegend", StrId::STR_CAT_DISPLAY),
 #endif
 #if FREEINK_CAP_FRONTLIGHT
         SettingInfo::Toggle(StrId::STR_RESTORE_LIGHT_ON_WAKE, &CrossPointSettings::frontlightRestoreOnWake,
@@ -458,6 +458,44 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
               KOREADER_STORE.saveToFile();
             },
             "koSyncBehavior", StrId::STR_KOREADER_SYNC),
+        // DECKPOINT: Annotation Sync (WebDAV; device UI is AnnotationSyncSettingsActivity).
+        SettingInfo::DynamicEnum(
+            StrId::STR_ANNOTATION_SYNC_ENABLED, {StrId::STR_STATE_OFF, StrId::STR_STATE_ON},
+            [] { return static_cast<uint8_t>(ANNOTATION_SYNC_STORE.isEnabled()); },
+            [](uint8_t v) {
+              ANNOTATION_SYNC_STORE.setEnabled(v != 0);
+              ANNOTATION_SYNC_STORE.saveToFile();
+            },
+            "asEnabled", StrId::STR_ANNOTATION_SYNC),
+        SettingInfo::DynamicString(
+            StrId::STR_WEBDAV_URL, [] { return ANNOTATION_SYNC_STORE.getServerUrl(); },
+            [](const std::string& v) {
+              ANNOTATION_SYNC_STORE.setServerUrl(v.substr(0, AnnotationSyncStore::MAX_URL));
+              ANNOTATION_SYNC_STORE.saveToFile();
+            },
+            "asServerUrl", StrId::STR_ANNOTATION_SYNC),
+        SettingInfo::DynamicString(
+            StrId::STR_USERNAME, [] { return ANNOTATION_SYNC_STORE.getUsername(); },
+            [](const std::string& v) {
+              ANNOTATION_SYNC_STORE.setUsername(v.substr(0, AnnotationSyncStore::MAX_FIELD));
+              ANNOTATION_SYNC_STORE.saveToFile();
+            },
+            "asUsername", StrId::STR_ANNOTATION_SYNC),
+        SettingInfo::DynamicString(
+            StrId::STR_APP_PASSWORD, [] { return ANNOTATION_SYNC_STORE.getPassword(); },
+            [](const std::string& v) {
+              ANNOTATION_SYNC_STORE.setPassword(v.substr(0, AnnotationSyncStore::MAX_FIELD));
+              ANNOTATION_SYNC_STORE.saveToFile();
+            },
+            "asPassword", StrId::STR_ANNOTATION_SYNC)
+            .withObfuscated(),
+        SettingInfo::DynamicString(
+            StrId::STR_SYNC_FOLDER, [] { return ANNOTATION_SYNC_STORE.getFolder(); },
+            [](const std::string& v) {
+              ANNOTATION_SYNC_STORE.setFolder(v.substr(0, AnnotationSyncStore::MAX_FIELD));
+              ANNOTATION_SYNC_STORE.saveToFile();
+            },
+            "asFolder", StrId::STR_ANNOTATION_SYNC),
         // --- Status Bar Settings (web-only, uses StatusBarSettingsActivity) ---
         SettingInfo::Toggle(StrId::STR_CHAPTER_PAGE_COUNT, &CrossPointSettings::statusBarChapterPageCount,
                             "statusBarChapterPageCount", StrId::STR_CUSTOMISE_STATUS_BAR),

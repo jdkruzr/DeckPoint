@@ -135,6 +135,18 @@ void EpubReaderActivity::drawAnnotationMarks(const std::vector<MarkRect>& marks)
 }
 
 void EpubReaderActivity::annotationsTick() {
+  if (deckpoint::annotations::takeWipeRequest()) {
+    if (annotationStore) {
+      const std::string id = annotationStore->documentId();
+      const unsigned removed = AnnotationStore::removeAllFiles(id);
+      LOG_INF("ANN", "CMD:ANNOTATIONS_WIPE %s: %u files removed", id.c_str(), removed);
+      RenderLock lock;
+      openAnnotations();  // empty store: the page redraws without marks
+      requestUpdate();
+    } else {
+      LOG_ERR("ANN", "CMD:ANNOTATIONS_WIPE ignored: no annotation store for the open book");
+    }
+  }
   deckpoint::annotations::SeedRequest request;
   if (!deckpoint::annotations::takeSeedRequest(request)) return;
   if (!epub || !section) {
@@ -212,6 +224,7 @@ void EpubReaderActivity::annotationsTick() {
     LOG_ERR("ANN", "OOM: seed annotation");
     return;
   }
+  annotation.localOnly = true;  // test data: never uploaded, never merged
   const AddResult result = annotationStore->addAndSave(std::move(annotation));
   const bool stored = result == AddResult::Added || result == AddResult::Replaced;
   LOG_INF("ANN", "Seed %s: %s||%s \"%s\"", stored ? "stored" : "rejected", pos0.c_str(), pos1.c_str(), text.c_str());

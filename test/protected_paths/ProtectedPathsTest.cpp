@@ -11,6 +11,9 @@ TEST(ProtectedPaths, CredentialStoresAreSensitive) {
   EXPECT_TRUE(isSensitivePath("/.crosspoint/koreader.json"));
   EXPECT_TRUE(isSensitivePath("/.crosspoint/wifi.json.tmp"));
   EXPECT_TRUE(isSensitivePath("/.CrossPoint/WIFI.json"));
+  // DECKPOINT: WebDAV credentials; the annotation files beside them stay reachable.
+  EXPECT_TRUE(isSensitivePath("/.crosspoint/annotation_sync.json"));
+  EXPECT_FALSE(isSensitivePath("/.crosspoint/annotations/5d09b7f28da63ec6d4a621fae1158d4c.json"));
 }
 
 TEST(ProtectedPaths, SpellingVariantsCannotDodgeTheMatch) {

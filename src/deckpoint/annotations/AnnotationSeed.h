@@ -5,6 +5,8 @@
 //   CMD:ANNOTATE_TEST[:<note>]          words 3-8 of the current page
 //   CMD:ANNOTATE:<pos0>||<pos1>[||<note>]  an explicit XPointer range
 // A literal "\n" in <note> becomes a newline. Ignored outside the EPUB reader.
+//   CMD:ANNOTATIONS_WIPE                 deletes the open book's annotation files
+//                                        (dev cleanup before a first real sync)
 
 #include <string>
 
@@ -21,5 +23,10 @@ struct SeedRequest {
 bool requestSeed(const char* command);
 // True once per request; moves it into `out`.
 bool takeSeedRequest(SeedRequest& out);
+
+// CMD:ANNOTATIONS_WIPE. A request not taken within a few seconds (no book
+// open) expires, so it never hits a book opened later.
+void requestWipe();
+bool takeWipeRequest();
 
 }  // namespace deckpoint::annotations

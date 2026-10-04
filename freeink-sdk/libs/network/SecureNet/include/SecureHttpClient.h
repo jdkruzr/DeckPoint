@@ -37,10 +37,11 @@
 
 #include <algorithm>
 #include <cctype>
-#include <iterator>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
+#include <iterator>
 #include <string>
 #include <utility>
 #include <vector>
@@ -56,6 +57,19 @@ class SecureHttpClient {
   // (bytes so far, total from Content-Length or 0 when unknown).
   // Return false to abort the transfer.
   using ProgressCallback = std::function<bool(size_t downloaded, size_t total)>;
+
+  // A request body streamed from storage instead of one RAM buffer (WebDAV
+  // PUT of a file). The source owns its chunk buffer. rewind() runs before
+  // every send, so a keep-alive retry or a 307/308 hop resends the whole body.
+  class BodySource {
+   public:
+    virtual ~BodySource() = default;
+    virtual size_t size() const = 0;
+    virtual bool rewind() = 0;
+    // Points *data at the next chunk and returns its length; 0 at the end,
+    // < 0 on a read error.
+    virtual int next(const uint8_t** data) = 0;
+  };
 
   SecureHttpClient() = default;
   ~SecureHttpClient() { end(); }
@@ -114,6 +128,7 @@ class SecureHttpClient {
     _headers.clear();
     _body.clear();
     _status = 0;
+    _bodySource = nullptr;
     return parseUrl(url, _scheme, _host, _path, _port);
   }
   // Closes the kept-alive connection (if any). Call when done with a server;
@@ -123,6 +138,10 @@ class SecureHttpClient {
   void addHeader(const std::string& name, const std::string& value) {
     _headers.push_back(name + ": " + value + "\r\n");
   }
+  // Streams the body of the next request (called after begin()) from
+  // `source`, which must outlive it. A payload buffer passed to sendRequest
+  // takes precedence.
+  void setBodySource(BodySource* source) { _bodySource = source; }
 
   int GET() { return sendRequest("GET", nullptr, 0); }
   int GET(const DataCallback& onData, const AbortCallback& shouldAbort = nullptr) {
@@ -183,6 +202,7 @@ class SecureHttpClient {
         activeMethod = "GET";
         activePayload = nullptr;
         activePayloadLen = 0;
+        _bodySource = nullptr;
       }
     }
   }
@@ -253,8 +273,10 @@ class SecureHttpClient {
         } else if (name == "connection") {
           std::string v = value;
           std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) { return static_cast<char>(tolower(c)); });
-          if (v.find("close") != std::string::npos) keepAlive = false;
-          else if (v.find("keep-alive") != std::string::npos) keepAlive = true;
+          if (v.find("close") != std::string::npos)
+            keepAlive = false;
+          else if (v.find("keep-alive") != std::string::npos)
+            keepAlive = true;
         }
       }
       if (_aborted) {
@@ -274,7 +296,13 @@ class SecureHttpClient {
       _reportProgress = !discardBody && static_cast<bool>(_progress);
 
       bool reusableFraming = true;
-      if (transferEncoding.find("chunked") != std::string::npos) {
+      // DECKPOINT: 1xx/204/304 replies and HEAD never carry a body (RFC 9112
+      // 6.3); without this an unframed 204 waited for close and timed out.
+      const bool noBody =
+          (_status >= 100 && _status < 200) || _status == 204 || _status == 304 || strcmp(method, "HEAD") == 0;
+      if (noBody) {
+        _bodyComplete = true;
+      } else if (transferEncoding.find("chunked") != std::string::npos) {
         _bodyComplete = readChunked(*_conn, bodySink, shouldAbort);
       } else if (transferEncoding.empty() || transferEncoding == "identity") {
         if (_haveContentLength) {
@@ -385,9 +413,7 @@ class SecureHttpClient {
     return !host.empty() && (scheme == "http" || scheme == "https");
   }
 
-  std::string hostHeader() const {
-    return hostHeaderFor(_scheme, _host, _port);
-  }
+  std::string hostHeader() const { return hostHeaderFor(_scheme, _host, _port); }
 
   static std::string hostHeaderFor(const std::string& scheme, const std::string& host, uint16_t port) {
     const uint16_t defaultPort = scheme == "https" ? 443 : 80;
@@ -460,10 +486,31 @@ class SecureHttpClient {
       req += "Authorization: Basic " + std::string(base64::encode(creds.c_str()).c_str()) + "\r\n";
     }
     for (const std::string& h : _headers) req += h;
-    if (payload && payloadLen) req += "Content-Length: " + std::to_string(payloadLen) + "\r\n";
+    BodySource* const source = (payload && payloadLen) ? nullptr : _bodySource;
+    if (source) {
+      if (!source->rewind()) return false;
+      req += "Content-Length: " + std::to_string(source->size()) + "\r\n";
+    } else if (payload && payloadLen) {
+      req += "Content-Length: " + std::to_string(payloadLen) + "\r\n";
+    }
     req += "\r\n";
     if (_conn->write(reinterpret_cast<const uint8_t*>(req.data()), req.size()) != req.size()) return false;
+    if (source) return writeSource(*source);
     if (payload && payloadLen && _conn->write(payload, payloadLen) != payloadLen) return false;
+    return true;
+  }
+
+  // Exactly size() bytes, or false: a short source would leave the server
+  // waiting for the rest of a declared Content-Length.
+  bool writeSource(BodySource& source) {
+    size_t remaining = source.size();
+    while (remaining > 0) {
+      const uint8_t* data = nullptr;
+      const int n = source.next(&data);
+      if (n <= 0 || static_cast<size_t>(n) > remaining) return false;
+      if (_conn->write(data, static_cast<size_t>(n)) != static_cast<size_t>(n)) return false;
+      remaining -= static_cast<size_t>(n);
+    }
     return true;
   }
 
@@ -613,6 +660,7 @@ class SecureHttpClient {
   bool _aborted = false;
   uint32_t _timeoutMs = 15000;
   std::vector<std::string> _headers;
+  BodySource* _bodySource = nullptr;
 };
 
 }  // namespace freeink

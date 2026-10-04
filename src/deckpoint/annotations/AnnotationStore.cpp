@@ -91,7 +91,11 @@ std::unique_ptr<AnnotationStore> AnnotationStore::open(const std::string& bookPa
   return store;
 }
 
-std::string AnnotationStore::path() const { return std::string(DIR) + "/" + docId + ".json"; }
+std::string AnnotationStore::filePath(const std::string& docId, const char* suffix) {
+  return std::string(DIR) + "/" + docId + suffix;
+}
+
+std::string AnnotationStore::path() const { return filePath(docId, MAIN_SUFFIX); }
 
 bool AnnotationStore::load() {
   const std::string file = path();
@@ -127,16 +131,34 @@ bool AnnotationStore::load() {
             report.parseError ? "malformed" : "over limits", static_cast<unsigned>(report.skipped),
             addResultName(report.firstFailure));
   }
+  loadFlags();
   return !report.lossy;
 }
 
-bool AnnotationStore::save() {
-  if (list.readOnly()) {
-    LOG_ERR("ANN", "Not saving %s: loaded incompletely", docId.c_str());
-    return false;
+void AnnotationStore::loadFlags() {
+  const std::string file = filePath(docId, FLAGS_SUFFIX);
+  if (!Storage.exists(file.c_str())) return;
+  HalFile f;
+  if (!Storage.openFileForRead("ANN", file, f)) return;
+  auto reader = makeUniqueNoThrow<LocalFlagsReader>(list);
+  auto chunk = makeUniqueNoThrow<char[]>(IO_CHUNK);
+  if (!reader || !chunk || !reader->begin()) {
+    LOG_ERR("ANN", "OOM loading annotation flags");
+    return;
   }
-  Storage.mkdir(DIR);
-  const std::string file = path();
+  int n;
+  while ((n = f.read(chunk.get(), IO_CHUNK)) > 0) reader->feed(chunk.get(), static_cast<size_t>(n));
+  size_t applied = 0;
+  if (!reader->finish(&applied)) LOG_ERR("ANN", "%s malformed; flags read so far kept", file.c_str());
+  LOG_DBG("ANN", "%u local flags", static_cast<unsigned>(applied));
+}
+
+namespace {
+
+// Streams `write(list, sink)` into `file` through a .tmp and a rename.
+bool writeAtomically(const std::string& file, const AnnotationList& list,
+                     bool (*write)(const AnnotationList&, const JsonSink&)) {
+  Storage.mkdir(AnnotationStore::DIR);
   const std::string tmp = file + ".tmp";
   auto buf = makeUniqueNoThrow<char[]>(IO_CHUNK);
   if (!buf) {
@@ -147,7 +169,7 @@ bool AnnotationStore::save() {
     HalFile f;
     if (!Storage.openFileForWrite("ANN", tmp, f)) return false;
     FileSink sink{&f, buf.get(), 0, true};
-    const bool written = writeAnnotationMap(list, JsonSink{&sink, &FileSink::write}) && sink.flush();
+    const bool written = write(list, JsonSink{&sink, &FileSink::write}) && sink.flush();
     if (!written) {
       LOG_ERR("ANN", "Failed to write %s", tmp.c_str());
       f.close();  // before remove
@@ -159,11 +181,35 @@ bool AnnotationStore::save() {
     LOG_ERR("ANN", "Failed to replace %s", file.c_str());
     return false;
   }
-  LOG_DBG("ANN", "Saved %u annotations to %s", static_cast<unsigned>(list.size()), file.c_str());
   return true;
 }
 
+bool writeLocal(const AnnotationList& list, const JsonSink& sink) { return writeAnnotationMap(list, sink, true); }
+bool writeRemote(const AnnotationList& list, const JsonSink& sink) { return writeAnnotationMap(list, sink, false); }
+
+}  // namespace
+
+bool AnnotationStore::save() {
+  if (list.readOnly()) {
+    LOG_ERR("ANN", "Not saving %s: loaded incompletely", docId.c_str());
+    return false;
+  }
+  if (!writeAtomically(path(), list, &writeLocal)) return false;
+  LOG_DBG("ANN", "Saved %u annotations to %s", static_cast<unsigned>(list.size()), path().c_str());
+  return saveFlags();
+}
+
+bool AnnotationStore::saveFlags() {
+  const std::string file = filePath(docId, FLAGS_SUFFIX);
+  if (!hasLocalFlags(list)) {
+    if (Storage.exists(file.c_str())) Storage.remove(file.c_str());
+    return true;
+  }
+  return writeAtomically(file, list, &writeLocalFlags);
+}
+
 AddResult AnnotationStore::addAndSave(Annotation&& annotation) {
+  annotation.undated = !trustedtime::isCurrent();
   const AddResult result = list.add(std::move(annotation));
   if (result != AddResult::Added && result != AddResult::Replaced) {
     LOG_ERR("ANN", "Annotation not added: %s", addResultName(result));
@@ -176,6 +222,7 @@ AddResult AnnotationStore::addAndSave(Annotation&& annotation) {
 AddResult AnnotationStore::addPlacedAndSave(Annotation&& annotation, const int spineIndex, const uint32_t startOffset,
                                             const uint32_t endOffset) {
   const std::string key = annotationKey(annotation);
+  annotation.undated = !trustedtime::isCurrent();
   const AddResult result = list.add(std::move(annotation));
   if (result != AddResult::Added && result != AddResult::Replaced) {
     LOG_ERR("ANN", "Annotation not added: %s", addResultName(result));
@@ -210,6 +257,7 @@ bool AnnotationStore::deleteAndSave(const size_t index) {
     LOG_ERR("ANN", "Cannot delete annotation %u", static_cast<unsigned>(index));
     return false;
   }
+  list[index].undated = !trustedtime::isCurrent();
   return save();
 }
 
@@ -221,6 +269,7 @@ AddResult AnnotationStore::setNoteAndSave(const size_t index, const std::string_
     LOG_ERR("ANN", "Note not set on %u: %s", static_cast<unsigned>(index), addResultName(result));
     return result;
   }
+  list[index].undated = !trustedtime::isCurrent();
   return save() ? result : AddResult::ReadOnly;
 }
 
@@ -277,6 +326,144 @@ void AnnotationStore::now(char (&out)[20]) {
   std::tm local{};
   localtime_r(&t, &local);  // TZ from Settings > Clock (HalClock::setTimezone)
   formatTimestamp(local, out);
+}
+
+// --- sync ------------------------------------------------------------------
+
+bool AnnotationStore::hasSyncSnapshot() const { return Storage.exists(filePath(docId, SNAPSHOT_SUFFIX).c_str()); }
+
+bool AnnotationStore::readMapFile(const std::string& file, AnnotationList& out) {
+  HalFile f;
+  if (!Storage.openFileForRead("ANN", file, f)) return false;
+  out.reserve(f.fileSize() / TYPICAL_ENTRY_BYTES + 1);
+  auto reader = makeUniqueNoThrow<AnnotationJsonReader>(out);
+  auto chunk = makeUniqueNoThrow<char[]>(IO_CHUNK);
+  if (!reader || !chunk || !reader->begin()) {
+    LOG_ERR("ANN", "OOM reading %s", file.c_str());
+    return false;
+  }
+  int n;
+  while ((n = f.read(chunk.get(), IO_CHUNK)) > 0) reader->feed(chunk.get(), static_cast<size_t>(n));
+  const LoadReport report = reader->finish();
+  if (report.lossy) {
+    LOG_ERR("ANN", "%s is %s (%u entries not kept: %s)", file.c_str(), report.parseError ? "malformed" : "over limits",
+            static_cast<unsigned>(report.skipped), addResultName(report.firstFailure));
+  }
+  return true;
+}
+
+bool AnnotationStore::loadSnapshotKeys(std::vector<uint64_t>& out) const {
+  out.clear();
+  const std::string file = filePath(docId, SNAPSHOT_SUFFIX);
+  if (!Storage.exists(file.c_str())) return true;  // never uploaded
+  // Transient: only the keys are kept.
+  AnnotationList snapshot;
+  if (!readMapFile(file, snapshot) || snapshot.readOnly()) {
+    LOG_ERR("ANN", "%s unreadable", file.c_str());
+    return false;
+  }
+  snapshotKeys(snapshot, out);
+  return true;
+}
+
+MergeReport AnnotationStore::mergeRemote(AnnotationList& remote) {
+  MergeReport report;
+  if (list.readOnly()) {
+    report.status = MergeStatus::LocalReadOnly;
+    LOG_ERR("ANN", "Sync refused for %s: local annotations loaded incompletely", docId.c_str());
+    return report;
+  }
+  std::vector<uint64_t> keys;
+  if (!loadSnapshotKeys(keys)) {
+    // AnnotationSync aborts the same way when its last-sync file is unreadable.
+    report.status = MergeStatus::SnapshotUnreadable;
+    return report;
+  }
+  char stamp[20];
+  now(stamp);
+  const bool current = trustedtime::isCurrent();
+  if (!current) LOG_INF("ANN", "Syncing with a clock that is not current; undated entries stay undated");
+  AnnotationList merged;
+  report = mergeAnnotations(list, remote, keys, stamp, current, merged);
+  if (report.status != MergeStatus::Ok) {
+    LOG_ERR("ANN", "Merge failed for %s (status %u)", docId.c_str(), static_cast<unsigned>(report.status));
+    if (report.status == MergeStatus::OutOfMemory) {
+      list.clear();
+      load();  // the inputs were partly consumed
+    }
+    return report;
+  }
+  list = std::move(merged);
+  LOG_INF("ANN",
+          "Merged %s: +%u ~%u -%u local, -%u remote, %u conflicts, %u stamped, %u clamped, %u kept, "
+          "%u tombstones ignored, %u seeds; upload %s",
+          docId.c_str(), report.added, report.updated, report.deletedLocally, report.deletedRemotely, report.conflicts,
+          report.stamped, report.clamped, report.contentKept, report.tombstonesIgnored, report.localOnly,
+          report.remoteChanged ? "needed" : "not needed");
+  if (report.localChanged) save();
+  return report;
+}
+
+bool AnnotationStore::writeUpload(const JsonSink& sink) const { return writeAnnotationMap(list, sink, false); }
+
+bool AnnotationStore::saveSyncSnapshot() const {
+  return writeAtomically(filePath(docId, SNAPSHOT_SUFFIX), list, &writeRemote);
+}
+
+bool AnnotationStore::writeUploadFile(const std::string& file) const {
+  return writeAtomically(file, list, &writeRemote);
+}
+
+unsigned AnnotationStore::removeAllFiles(const std::string& docId) {
+  static constexpr const char* SUFFIXES[] = {MAIN_SUFFIX,      FLAGS_SUFFIX,     SNAPSHOT_SUFFIX, BACKUP_SUFFIX,
+                                             DOWNLOAD_SUFFIX,  UPLOAD_SUFFIX,    ".json.tmp",     ".local.json.tmp",
+                                             ".sync.json.tmp", ".upload.tmp.tmp"};
+  unsigned removed = 0;
+  for (const char* suffix : SUFFIXES) {
+    const std::string file = filePath(docId, suffix);
+    if (!Storage.exists(file.c_str())) continue;
+    if (Storage.remove(file.c_str())) {
+      removed++;
+      LOG_INF("ANN", "Wiped %s", file.c_str());
+    } else {
+      LOG_ERR("ANN", "Cannot remove %s", file.c_str());
+    }
+  }
+  return removed;
+}
+
+bool AnnotationStore::backupRemote(const std::string& docId, const char* data, const size_t len) {
+  Storage.mkdir(DIR);
+  const std::string file = filePath(docId, BACKUP_SUFFIX);
+  HalFile f;
+  if (!Storage.openFileForWrite("ANN", file, f)) return false;
+  if (len > 0 && f.write(data, len) != len) {
+    LOG_ERR("ANN", "Failed to write %s", file.c_str());
+    return false;
+  }
+  return true;
+}
+
+bool AnnotationStore::backupRemoteFile(const std::string& docId, const std::string& downloadedPath) {
+  HalFile in;
+  if (!Storage.openFileForRead("ANN", downloadedPath, in)) return false;
+  Storage.mkdir(DIR);
+  const std::string file = filePath(docId, BACKUP_SUFFIX);
+  HalFile out;
+  if (!Storage.openFileForWrite("ANN", file, out)) return false;
+  auto chunk = makeUniqueNoThrow<char[]>(IO_CHUNK);
+  if (!chunk) {
+    LOG_ERR("ANN", "OOM: backup buffer");
+    return false;
+  }
+  int n;
+  while ((n = in.read(chunk.get(), IO_CHUNK)) > 0) {
+    if (out.write(chunk.get(), static_cast<size_t>(n)) != static_cast<size_t>(n)) {
+      LOG_ERR("ANN", "Failed to write %s", file.c_str());
+      return false;
+    }
+  }
+  return true;
 }
 
 }  // namespace deckpoint::annotations

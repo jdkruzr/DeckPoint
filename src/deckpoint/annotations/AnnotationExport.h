@@ -23,6 +23,12 @@ namespace deckpoint::annotations {
 // order. <0, 0, >0 like strcmp.
 int compareXPointers(std::string_view a, std::string_view b);
 
+// FNV-1a hash of annotationKey(a) with every XPointer step's index made
+// explicit, so KOReader's Legacy / Explicit / Compat spellings of one position
+// ("/body/DocFragment[3]/body/div/p/text().5" vs "/body[1]/DocFragment[3]/body[1]/
+// div[1]/p[1]/text()[1].5") hash alike, exactly when compareXPointers says equal.
+uint64_t canonicalKeyHash(const Annotation& a);
+
 // List indices of the live highlights (not deleted, pos0 + pos1 set) in book
 // order: spine, then pos0 (compareXPointers). Non-EPUB entries go last.
 void browseOrder(const AnnotationList& list, std::vector<uint16_t>& out);

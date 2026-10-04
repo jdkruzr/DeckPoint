@@ -43,7 +43,9 @@ class KOReaderSyncActivity final : public Activity, private UiAppHost {
     SYNC_COMPLETE,
     NO_REMOTE_PROGRESS,
     SYNC_FAILED,
-    NO_CREDENTIALS
+    NO_CREDENTIALS,
+    PROGRESS_APPLIED,  // DECKPOINT: remote progress saved, kept on screen for a failed highlight sync
+    ANNOTATIONS_DONE   // DECKPOINT: highlight sync only (no KOSync account)
   };
 
   std::shared_ptr<Epub> epub;  // null until lazy-loaded after TLS in performSync()
@@ -69,6 +71,17 @@ class KOReaderSyncActivity final : public Activity, private UiAppHost {
   // Timed return for successful smart-sync terminal states.
   unsigned long autoReturnAt = 0;
   static constexpr unsigned long AUTO_RETURN_DELAY_MS = 1200;
+  // DECKPOINT: longer when a highlight summary is on screen too.
+  static constexpr unsigned long AUTO_RETURN_WITH_HIGHLIGHTS_MS = 2500;
+
+  // DECKPOINT: highlight sync (AnnotationSync over WebDAV) run first in the
+  // same Wi-Fi session; its result lines show under the progress result.
+  bool highlightsRan = false;
+  bool highlightsOk = true;
+  char highlightLine1[64] = {};
+  char highlightLine2[64] = {};
+  void syncHighlights();
+  void drawHighlightLines(int y) const;
 
   // Tracks whether this session activated WiFi. Set in onEnter past the credentials
   // check; checked in onExit to decide whether to silent-reboot. Can't rely on

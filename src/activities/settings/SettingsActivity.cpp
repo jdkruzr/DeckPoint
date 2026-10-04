@@ -39,6 +39,7 @@
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
+#include "deckpoint/sync/AnnotationSyncSettingsActivity.h"  // DECKPOINT
 #include "fontIds.h"
 
 namespace fui = freeink::ui;
@@ -105,6 +106,8 @@ void SettingsActivity::rebuildSettingsLists() {
     systemSettings.push_back(SettingInfo::Action(StrId::STR_CLOCK, SettingAction::ClockSettings));
   }
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
+  systemSettings.push_back(
+      SettingInfo::Action(StrId::STR_ANNOTATION_SYNC, SettingAction::AnnotationSync));  // DECKPOINT
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   // OTA fetches this board's own release asset (see OtaUpdater); boards whose
@@ -377,6 +380,13 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::KOReaderSync:
         startActivityForResult(std::make_unique<KOReaderSettingsActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::AnnotationSync:  // DECKPOINT
+        if (auto activity = makeUniqueNoThrow<AnnotationSyncSettingsActivity>(renderer, mappedInput)) {
+          startActivityForResult(std::move(activity), resultHandler);
+        } else {
+          LOG_ERR("SETTINGS", "OOM: AnnotationSyncSettingsActivity");
+        }
         break;
       case SettingAction::OPDSBrowser:
         startActivityForResult(std::make_unique<OpdsServerListActivity>(renderer, mappedInput), resultHandler);

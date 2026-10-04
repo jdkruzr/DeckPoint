@@ -46,6 +46,7 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/settings/TextSettingsActivity.h"
 #include "components/UITheme.h"
+#include "deckpoint/sync/AnnotationSync.h"
 #include "fontIds.h"
 #include "util/BookmarkUtil.h"
 #include "util/ButtonNavigator.h"
@@ -1030,7 +1031,7 @@ unsigned long EpubReaderActivity::confirmLongPressThreshold() const {
     case CrossPointSettings::LP_MENU_DICTIONARY:
       return ReaderUtils::BOOKMARK_HOLD_MS;
     case CrossPointSettings::LP_MENU_KOSYNC:
-      return KOREADER_STORE.hasCredentials() ? ReaderUtils::GO_HOME_MS : 0;
+      return KOREADER_STORE.hasCredentials() || annotationsync::ready() ? ReaderUtils::GO_HOME_MS : 0;
     case CrossPointSettings::LP_MENU_READER_MENU:
     case CrossPointSettings::LP_MENU_DISABLED:
     default:
@@ -1039,7 +1040,8 @@ unsigned long EpubReaderActivity::confirmLongPressThreshold() const {
 }
 
 bool EpubReaderActivity::launchKOReaderSync() {
-  if (!KOREADER_STORE.hasCredentials()) return false;
+  // DECKPOINT: the same session also syncs highlights (or only them).
+  if (!KOREADER_STORE.hasCredentials() && !annotationsync::ready()) return false;
 
   RenderLock renderLock;
 

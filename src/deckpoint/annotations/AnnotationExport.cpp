@@ -182,6 +182,47 @@ int compareXPointers(std::string_view a, std::string_view b) {
   return 0;
 }
 
+namespace {
+
+constexpr uint64_t FNV_OFFSET = 1469598103934665603ULL;
+constexpr uint64_t FNV_PRIME = 1099511628211ULL;
+
+uint64_t fnv(uint64_t h, const std::string_view s) {
+  for (const char c : s) {
+    h ^= static_cast<uint8_t>(c);
+    h *= FNV_PRIME;
+  }
+  return h;
+}
+
+uint64_t fnvNumber(uint64_t h, uint32_t n) {
+  for (int i = 0; i < 4; i++, n >>= 8) {
+    h ^= n & 0xFF;
+    h *= FNV_PRIME;
+  }
+  return h;
+}
+
+uint64_t hashXPointer(uint64_t h, std::string_view xp) {
+  while (!xp.empty()) {
+    const Segment s = nextSegment(xp);
+    h = fnv(h, "/");
+    h = fnv(h, s.name);
+    h = fnvNumber(h, s.index);
+    if (s.hasOffset) h = fnvNumber(fnv(h, "."), s.offset);
+  }
+  return h;
+}
+
+}  // namespace
+
+uint64_t canonicalKeyHash(const Annotation& a) {
+  if (a.isHighlight()) {
+    return hashXPointer(fnv(hashXPointer(FNV_OFFSET, a.get(Field::Pos0)), "||"), a.get(Field::Pos1));
+  }
+  return fnv(fnv(FNV_OFFSET, "BOOKMARK|"), a.get(Field::Page));
+}
+
 void browseOrder(const AnnotationList& list, std::vector<uint16_t>& out) {
   out.clear();
   size_t live = 0;

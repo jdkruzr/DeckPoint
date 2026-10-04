@@ -3,11 +3,15 @@
 #include <Arduino.h>
 #include <Logging.h>
 #include <Preferences.h>
+#include <esp_attr.h>
 #include <esp_sntp.h>
 
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+
+#include "HttpDate.h"
 
 namespace trustedtime {
 
@@ -20,6 +24,30 @@ constexpr int64_t MIN_ADVANCE_SECS = 60;
 
 constexpr const char* PREFS_NAMESPACE = "cptime";
 constexpr const char* PREFS_KEY = "floor";
+
+// A clock confirmed current (SNTP / HTTP Date) before a warm restart or deep
+// sleep stays current at the next boot for this long: the RTC keeps counting,
+// but on its RC oscillator, which drifts.
+constexpr int64_t MAX_CARRIED_CURRENT_SECS = 3 * 86400LL;
+// An HTTP Date this far behind the clock still confirms it (second precision,
+// request latency); further behind, the clock is ahead of the server and is
+// left alone rather than rolled back.
+constexpr int64_t HTTP_DATE_TOLERANCE_SECS = 120;
+constexpr uint32_t CURRENT_MAGIC = 0x434C4B31;  // "CLK1"
+
+// Survive warm restarts and deep sleep, not power loss (garbage at power-on,
+// hence the magic; the clock then reads ~0, which fails the epoch check too).
+RTC_NOINIT_ATTR uint32_t rtcCurrentMagic;
+RTC_NOINIT_ATTR int64_t rtcCurrentSince;
+
+// Set from the SNTP callback's lwIP task as well as the main task.
+std::atomic<bool> currentFlag{false};
+
+void markCurrent() {
+  rtcCurrentSince = static_cast<int64_t>(time(nullptr));
+  rtcCurrentMagic = CURRENT_MAGIC;
+  currentFlag.store(true);
+}
 
 // Latest time this boot has seen (or restored from NVS). trustedNow() never
 // reports earlier, so a backward clock step (a bad SNTP answer, a manual set)
@@ -53,7 +81,10 @@ void writeFloor(const int64_t value) {
 }
 
 // SNTP sync callback (lwIP task context; Preferences/NVS is mutex-guarded).
-void onTimeSynced(struct timeval*) { note(); }
+void onTimeSynced(struct timeval*) {
+  note();
+  markCurrent();
+}
 
 void configureSntp() {
   // SNTP uses UTC epochs regardless of the display timezone. Copy TZ before
@@ -68,10 +99,19 @@ void configureSntp() {
 
 void init() {
   sntp_set_time_sync_notification_cb(&onTimeSynced);
+  const auto clockNow = static_cast<int64_t>(time(nullptr));
+  bool carried = rtcCurrentMagic == CURRENT_MAGIC && clockNow >= MIN_VALID_EPOCH && clockNow >= rtcCurrentSince &&
+                 clockNow - rtcCurrentSince <= MAX_CARRIED_CURRENT_SECS;
   const int64_t floor = readFloor();
+  if (floor >= MIN_VALID_EPOCH) {
+    raiseFloor(floor);
+    if (clockNow < floor) carried = false;  // the RTC did not keep running
+  }
+  currentFlag.store(carried);
+  if (!carried) rtcCurrentMagic = 0;
+  LOG_DBG("TIME", "Clock %s", carried ? "current (kept across restart)" : "not current until a sync");
   if (floor < MIN_VALID_EPOCH) return;
-  raiseFloor(floor);
-  if (static_cast<int64_t>(time(nullptr)) < floor) {
+  if (clockNow < floor) {
     // Cold boot reset the clock; resume from the floor so time keeps moving
     // forward across power cycles instead of restarting at epoch 0.
     timeval tv = {static_cast<time_t>(floor), 0};
@@ -100,7 +140,10 @@ bool syncNow(const uint32_t timeoutMs) {
     delay(100);
   }
   const bool synced = sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED;
-  if (synced) note();
+  if (synced) {
+    note();
+    markCurrent();
+  }
   return synced;
 }
 
@@ -109,6 +152,27 @@ int64_t trustedNow() {
   // Never earlier than a time already seen; 0 while neither is trustworthy.
   const int64_t floor = raiseFloor(now >= MIN_VALID_EPOCH ? now : 0);
   return floor >= MIN_VALID_EPOCH ? floor : 0;
+}
+
+bool isCurrent() { return currentFlag.load(); }
+
+bool applyHttpDate(const char* dateHeader) {
+  if (currentFlag.load()) return true;  // SNTP or an earlier header already set it
+  int64_t serverTime = 0;
+  if (!dateHeader || !parseHttpDate(dateHeader, serverTime) || serverTime < MIN_VALID_EPOCH) return false;
+  const auto clockNow = static_cast<int64_t>(time(nullptr));
+  if (serverTime + HTTP_DATE_TOLERANCE_SECS < clockNow) {
+    LOG_INF("TIME", "HTTP Date %lld s behind the clock; ignored", static_cast<long long>(clockNow - serverTime));
+    return false;
+  }
+  if (serverTime > clockNow) {
+    timeval tv = {static_cast<time_t>(serverTime), 0};
+    settimeofday(&tv, nullptr);
+  }
+  note();
+  markCurrent();
+  LOG_INF("TIME", "Clock set from HTTP Date (%+lld s)", static_cast<long long>(serverTime - clockNow));
+  return true;
 }
 
 }  // namespace trustedtime

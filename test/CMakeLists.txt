@@ -88,10 +88,14 @@ add_subdirectory(hint_mode)
 add_subdirectory(selection)  # DECKPOINT
 add_subdirectory(note_editor)  # DECKPOINT
 add_subdirectory(notes_export)  # DECKPOINT
+add_subdirectory(webdav)  # DECKPOINT
 add_subdirectory(search_match)
 add_subdirectory(protected_paths)
 add_subdirectory(touch_cst3xx)
 add_subdirectory(touch_policy)
+add_subdirectory(http_date)  # DECKPOINT
+add_subdirectory(annotation_merge)  # DECKPOINT
+add_subdirectory(annotation_sync)  # DECKPOINT
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME TrustedTimeTimezone COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_trusted_time.py)
