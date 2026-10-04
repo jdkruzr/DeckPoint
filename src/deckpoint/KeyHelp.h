@@ -1,5 +1,7 @@
 #pragma once
 
+#include "KeyMic.h"
+
 // DECKPOINT: per-screen keyboard help shown by the global `?` key
 // (KeyHelpActivity). Screens with a hand-written table return it from
 // Activity::keyHelp(); every other screen falls back to its last key legend.

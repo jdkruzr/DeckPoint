@@ -3,6 +3,7 @@
 // editing state machine (CommandLine) and the parser / matcher (Commands) are
 // pure and host-tested; this file is the reader glue.
 
+#include "deckpoint/KeyHelp.h"
 #include "ReaderCommands.h"
 
 #include <BoardConfig.h>
@@ -272,7 +273,7 @@ constexpr FixedRow LINE_ROWS[] = {
     {"Alt+Space", StrId::STR_KH_CMD_COMPLETE},
     {"Alt+k", StrId::STR_KH_CMD_RECALL},
     {"Alt+Backspace", StrId::STR_KH_CLEAR_ALL},
-    {"Esc", StrId::STR_KH_CMD_CANCEL},
+    {DECKPOINT_KEY_MIC, StrId::STR_KH_CMD_CANCEL},
 };
 
 StrId commandHelpRow(const uint8_t index, char* keys, const size_t keysSize) {

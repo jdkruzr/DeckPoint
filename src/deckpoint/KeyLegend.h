@@ -27,7 +27,7 @@ int keyLegendBandHeight(const GfxRenderer& renderer);
 
 // Turn a screen's button-hint labels (what Back / Confirm / Previous / Next
 // do there) into a key legend on the bottom band, e.g.
-//   "Esc (mic): Back   Enter: Select   j/k: move".
+//   "[mic]: Back | Enter: Select | j/k: move | ?: Help".
 // Empty labels are skipped. Used by every theme's drawButtonHints() on
 // keyboard boards, so screens get legends without per-screen code.
 void drawHintLegend(const GfxRenderer& renderer, const char* back, const char* confirm, const char* previous,
@@ -42,7 +42,7 @@ void copyLastLegend(LegendSnapshot& out);
 // bottom of the screen (with a small margin). Returns the legend's top y.
 int drawBottomKeyLegend(const GfxRenderer& renderer, int fontId, const char* text);
 
-// Draw `before` + "Esc (" + [mic glyph] + ")" + `after`, centered on the screen at y.
+// Draw `before` + [mic glyph] + `after`, centered on the screen at y.
 void drawCenteredEscLegend(const GfxRenderer& renderer, int fontId, int y, const char* before, const char* after);
 
 }  // namespace deckpoint

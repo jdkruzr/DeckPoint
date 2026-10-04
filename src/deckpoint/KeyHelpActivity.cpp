@@ -1,3 +1,4 @@
+#include "deckpoint/KeyHelp.h"
 #include "KeyHelpActivity.h"
 
 #include <GfxRenderer.h>
@@ -12,6 +13,7 @@
 
 #include "CrossPointSettings.h"
 #include "KeyLegend.h"
+#include "icons/mic12.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -158,7 +160,7 @@ void KeyHelpActivity::buildRows() {
   addRow(nullptr, tr(STR_KH_SECTION_GLOBAL), true);
   // Text fields type a literal '?', so help there is Alt+?.
   addRow(strcmp(ownerName, "KeyboardEntry") == 0 ? "Alt+?" : "?", tr(STR_KH_THIS_HELP));
-  addRow("Esc", tr(STR_KH_CLOSE_BACK));
+  addRow(DECKPOINT_KEY_MIC, tr(STR_KH_CLOSE_BACK));
   addRow(tr(STR_KH_KEY_POWER), tr(STR_KH_SLEEP_WAKE));
 
   if (mappedInput.hasTouchInput()) {
@@ -177,11 +179,12 @@ bool KeyHelpActivity::scroll(const int direction) {
   const int hidden = firstHiddenRow.load();
   int next = topRow;
   if (direction > 0) {
-    if (hidden >= rowCount) return false;
+    if (hidden >= rowCount || pageDepth >= MAX_PAGES) return false;
+    pageStarts[pageDepth++] = topRow;  // pages vary in height; remember where this one began
     next = hidden;
   } else {
     if (topRow == 0) return false;
-    next = std::max(0, topRow - std::max(1, hidden - topRow));
+    next = pageDepth > 0 ? pageStarts[--pageDepth] : 0;
   }
   {
     RenderLock lock;
@@ -244,10 +247,12 @@ void KeyHelpActivity::render(RenderLock&&) {
   const int footerY = screenH - smallLh - 3;
   const int bottom = footerY - ROW_GAP;
 
+  const auto isMic = [](const char* keys) { return std::strcmp(keys, DECKPOINT_KEY_MIC) == 0; };
   int keyW = 0;
   for (int i = 0; i < rowCount; i++) {
     if (rows[i].heading) continue;
-    keyW = std::max(keyW, renderer.getTextWidth(UI_10_FONT_ID, rows[i].keys, EpdFontFamily::BOLD));
+    keyW = std::max(keyW, isMic(rows[i].keys) ? static_cast<int>(Mic12Icon.w)
+                                              : renderer.getTextWidth(UI_10_FONT_ID, rows[i].keys, EpdFontFamily::BOLD));
   }
   keyW = std::min(keyW, contentW * 2 / 5);
   const int whatX = x + keyW + COLUMN_GAP;
@@ -265,10 +270,13 @@ void KeyHelpActivity::render(RenderLock&&) {
       y += smallLh + 3 + ROW_GAP;
       continue;
     }
-    const auto keyLines = renderer.wrappedText(UI_10_FONT_ID, row.keys, keyW, KEY_MAX_LINES, EpdFontFamily::BOLD);
+    const bool mic = isMic(row.keys);
+    const auto keyLines =
+        mic ? std::vector<std::string>{} : renderer.wrappedText(UI_10_FONT_ID, row.keys, keyW, KEY_MAX_LINES, EpdFontFamily::BOLD);
     const auto whatLines = renderer.wrappedText(UI_10_FONT_ID, row.what, whatW, WHAT_MAX_LINES);
     const int lines = static_cast<int>(std::max<size_t>(1, std::max(keyLines.size(), whatLines.size())));
     if (y + lines * lh > bottom && i > topRow) break;
+    if (mic) drawIconLogical(renderer, Mic12Icon, x, y + (lh - static_cast<int>(Mic12Icon.h)) / 2);
     for (size_t l = 0; l < keyLines.size(); l++) {
       renderer.drawText(UI_10_FONT_ID, x, y + static_cast<int>(l) * lh, keyLines[l].c_str(), true,
                         EpdFontFamily::BOLD);

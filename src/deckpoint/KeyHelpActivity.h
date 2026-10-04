@@ -48,6 +48,9 @@ class KeyHelpActivity final : public Activity {
   char extraKeys[MAX_EXTRA_ROWS][EXTRA_KEYS_LEN]{};
   int rowCount = 0;
   int topRow = 0;  // main task writes under RenderLock; render reads
+  static constexpr int MAX_PAGES = 16;
+  int pageStarts[MAX_PAGES]{};  // first row of each earlier page, for paging back
+  int pageDepth = 0;
   // Set by render: first row that did not fit (rowCount when all fit).
   std::atomic<int> firstHiddenRow{0};
 };

@@ -14,7 +14,7 @@ constexpr KeyHelpEntry HOME[] = {
     {"j / k", StrId::STR_KH_MOVE},
     {"h / l", StrId::STR_KH_HOME_HL},
     {"Enter", StrId::STR_KH_OPEN},
-    {"Esc", StrId::STR_KH_RESUME},
+    {DECKPOINT_KEY_MIC, StrId::STR_KH_RESUME},
     // Keyboard primer: Home's help doubles as the general introduction.
     {"mic key", StrId::STR_KH_PRIMER_MIC},
     {"Sym", StrId::STR_KH_PRIMER_SYM},
@@ -29,7 +29,7 @@ constexpr KeyHelpEntry LIBRARY[] = {
     {"hold Enter", StrId::STR_KH_LIBRARY_HOLD_ENTER},
     {"k on tabs", StrId::STR_KH_SEARCH},
     {"hold j / k", StrId::STR_KH_PAGE_JUMP},
-    {"Esc", StrId::STR_KH_LIBRARY_BACK},
+    {DECKPOINT_KEY_MIC, StrId::STR_KH_LIBRARY_BACK},
 };
 
 constexpr KeyHelpEntry FILE_BROWSER[] = {
@@ -37,7 +37,7 @@ constexpr KeyHelpEntry FILE_BROWSER[] = {
     {"hold j / k", StrId::STR_KH_PAGE_JUMP},
     {"Enter", StrId::STR_KH_OPEN},
     {"hold Enter", StrId::STR_KH_FILE_ACTIONS},
-    {"Esc", StrId::STR_KH_UP_FOLDER},
+    {DECKPOINT_KEY_MIC, StrId::STR_KH_UP_FOLDER},
     {"hold Esc", StrId::STR_KH_TOP_FOLDER},
 };
 
@@ -45,14 +45,14 @@ constexpr KeyHelpEntry SETTINGS_SCREEN[] = {
     {"j / k", StrId::STR_KH_MOVE},
     {"h / l", StrId::STR_KH_SWITCH_TAB},
     {"Enter", StrId::STR_KH_CHANGE_SETTING},
-    {"Esc", StrId::STR_KH_SETTINGS_BACK},
+    {DECKPOINT_KEY_MIC, StrId::STR_KH_SETTINGS_BACK},
 };
 
 constexpr KeyHelpEntry TEXT_SETTINGS[] = {
     {"j / k", StrId::STR_KH_MOVE},
     {"h / l", StrId::STR_KH_SWITCH_TAB},
     {"Enter", StrId::STR_KH_CHANGE_SETTING},
-    {"Esc", StrId::STR_KH_BACK},
+    {DECKPOINT_KEY_MIC, StrId::STR_KH_BACK},
 };
 
 // Raw-key reader (ReaderKeys): Sym gives the digits and ' ( ) / : ?
@@ -69,7 +69,7 @@ constexpr KeyHelpEntry READER[] = {
     {"''", StrId::STR_KH_JUMP_BACK},
     {"B", StrId::STR_KH_TOGGLE_BOOKMARK},
     {"Enter", StrId::STR_KH_READER_MENU},
-    {"Esc", StrId::STR_KH_READER_ESC},
+    {DECKPOINT_KEY_MIC, StrId::STR_KH_READER_ESC},
     {":", StrId::STR_KH_COMMAND_LINE},
     {"D", StrId::STR_KH_LOOKUP_TYPED},
     {"d", StrId::STR_KH_DICT_HINTS},
@@ -83,7 +83,7 @@ constexpr KeyHelpEntry READER_MENU[] = {
     {"j / k", StrId::STR_KH_MOVE},
     {"hold j / k", StrId::STR_KH_PAGE_JUMP},
     {"Enter", StrId::STR_KH_CHOOSE},
-    {"Esc", StrId::STR_KH_BACK_TO_BOOK},
+    {DECKPOINT_KEY_MIC, StrId::STR_KH_BACK_TO_BOOK},
 };
 
 constexpr KeyHelpEntry BOOKMARKS[] = {
@@ -91,25 +91,25 @@ constexpr KeyHelpEntry BOOKMARKS[] = {
     {"hold j / k", StrId::STR_KH_PAGE_JUMP},
     {"Enter", StrId::STR_KH_GO_TO_BOOKMARK},
     {"hold Enter", StrId::STR_KH_BOOKMARK_ACTIONS},
-    {"Esc", StrId::STR_KH_BACK_TO_BOOK},
+    {DECKPOINT_KEY_MIC, StrId::STR_KH_BACK_TO_BOOK},
 };
 
 constexpr KeyHelpEntry WORD_SELECT[] = {
     {"h / l", StrId::STR_KH_PREV_NEXT_WORD},
     {"k / j", StrId::STR_KH_PREV_NEXT_LINE},
     {"Enter", StrId::STR_KH_LOOK_UP},
-    {"Esc", StrId::STR_KH_BACK_TO_BOOK},
+    {DECKPOINT_KEY_MIC, StrId::STR_KH_BACK_TO_BOOK},
 };
 
 constexpr KeyHelpEntry DEFINITION[] = {
     {"Space / j / l", StrId::STR_KH_NEXT_PAGE},
     {"k / h", StrId::STR_KH_PREV_PAGE},
-    {"Esc", StrId::STR_KH_BACK},
+    {DECKPOINT_KEY_MIC, StrId::STR_KH_BACK},
 };
 
 constexpr KeyHelpEntry KEYBOARD_ENTRY[] = {
     {"Enter", StrId::STR_KH_DONE},
-    {"Esc", StrId::STR_KH_CANCEL},
+    {DECKPOINT_KEY_MIC, StrId::STR_KH_CANCEL},
     {"Backspace", StrId::STR_KH_DELETE_BACK},
     {"Shift+Backspace", StrId::STR_KH_DELETE_FORWARD},
     {"Alt+Backspace", StrId::STR_KH_CLEAR_ALL},
@@ -121,7 +121,7 @@ constexpr KeyHelpEntry IMAGE_VIEWER[] = {
     {"Space / j / l", StrId::STR_KH_NEXT_IMAGE},
     {"k / h", StrId::STR_KH_PREV_IMAGE},
     {"Enter", StrId::STR_KH_SET_SLEEP_COVER},
-    {"Esc", StrId::STR_KH_BACK_TO_FILES},
+    {DECKPOINT_KEY_MIC, StrId::STR_KH_BACK_TO_FILES},
 };
 
 constexpr KeyHelpEntry GO_TO_PERCENT[] = {
@@ -130,7 +130,7 @@ constexpr KeyHelpEntry GO_TO_PERCENT[] = {
     {"j / k", StrId::STR_KH_STEP_LARGE},
     {"Backspace", StrId::STR_KH_DELETE_DIGIT},
     {"Enter", StrId::STR_KH_GO},
-    {"Esc", StrId::STR_KH_CANCEL},
+    {DECKPOINT_KEY_MIC, StrId::STR_KH_CANCEL},
 };
 
 // Rows whose gesture is switched off in Settings > Controls are left out.

@@ -63,7 +63,7 @@ TEST(KeyHelpText, DirectionalLegendCollapsesToMove) {
   HelpRow rows[6];
   const int n = deckpoint::legendHelpRows(legend, "Move", rows, 6);
   ASSERT_EQ(n, 4);
-  EXPECT_STREQ(rows[0].keys, "Esc");
+  EXPECT_STREQ(rows[0].keys, "\x01");  // mic glyph marker
   EXPECT_STREQ(rows[0].what, "Back");
   EXPECT_STREQ(rows[1].keys, "Enter");
   EXPECT_STREQ(rows[1].what, "Select");
@@ -78,7 +78,7 @@ TEST(KeyHelpText, NamedPrevNextMapToKAndJ) {
   HelpRow rows[6];
   const int n = deckpoint::legendHelpRows(legend, "Move", rows, 6);
   ASSERT_EQ(n, 3);
-  EXPECT_STREQ(rows[0].keys, "Esc");
+  EXPECT_STREQ(rows[0].keys, "\x01");  // mic glyph marker
   EXPECT_STREQ(rows[1].keys, "k");
   EXPECT_STREQ(rows[1].what, "Search");
   EXPECT_STREQ(rows[2].keys, "j");

@@ -1,3 +1,4 @@
+#include "deckpoint/KeyMic.h"
 #include "KeyHelpText.h"
 
 #include <cstring>
@@ -78,7 +79,7 @@ int legendHelpRows(const LegendSnapshot& legend, const char* moveLabel, HelpRow*
   const auto add = [&](const char* keys, const char* what) {
     if (n < max && what && *what) out[n++] = HelpRow{keys, what};
   };
-  add("Esc", legend.back);
+  add(DECKPOINT_KEY_MIC, legend.back);
   add("Enter", legend.confirm);
   add(legend.extraKeys[0] ? legend.extraKeys : "", legend.extraWhat);
   const bool hasPrev = legend.prev[0] != '\0';
