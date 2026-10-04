@@ -8,6 +8,10 @@
 // are pushed with a FAST refresh. Narrowing restores the copy and draws the
 // remaining tags; cancelling restores it and pushes once. Without a copy
 // (allocation failed, X4-class panels) the page is re-rendered instead.
+//
+// The session machinery (page + word boxes, stored page, stale / redraw
+// handling) also carries the highlight selection (purpose Select,
+// EpubReaderSelection.cpp); drawHintOverlay() picks what to draw.
 
 #include <BoardConfig.h>
 #include <FontCacheManager.h>
@@ -29,6 +33,7 @@
 using deckpoint::CommandResult;
 using deckpoint::reader::HintLabels;
 using deckpoint::reader::HintMatcher;
+using deckpoint::reader::HintPurpose;
 using deckpoint::reader::HintSession;
 using deckpoint::reader::WordBox;
 
@@ -46,17 +51,23 @@ bool xteinkClassPanel() { return gpio.isXteinkDevice() || BoardConfig::isX4Pro()
 
 }  // namespace
 
-void EpubReaderActivity::openHints(const bool pageDirty) {
+void EpubReaderActivity::openHints(const bool pageDirty, const HintPurpose purpose) {
   readerKeys.reset();
   pendingManualTurn = 0;
-  if (SETTINGS.dictionaryName[0] == '\0') {
+  if (purpose == HintPurpose::Lookup && SETTINGS.dictionaryName[0] == '\0') {
     showKeyPopup(tr(STR_DICT_NO_DICT_SET), true);
+    return;
+  }
+  if (purpose == HintPurpose::Select && (!annotationStore || annotationStore->readOnly())) {
+    showKeyPopup(tr(STR_SEL_UNAVAILABLE), true);
     return;
   }
   if (!section) return;
   keyPopupShown = false;
   hintsOpen = true;
+  hintsSelect = purpose == HintPurpose::Select;
   RenderLock lock;
+  hintPendingPurpose = purpose;
   if (pageDirty || showBookmarkMessage || showDictionaryMessage) {
     // A popup is painted on the page: render a clean one first,
     // hintsAfterRender() puts the labels on it.
@@ -70,20 +81,19 @@ void EpubReaderActivity::openHints(const bool pageDirty) {
   beginHints();
 }
 
-void EpubReaderActivity::beginHints() {
-  hintOpenPending = false;
-  if (!section || !renderer.hasFrameBuffer()) return;
-  // Page + word boxes (~2 KB for a full page) live until the hints close.
+std::unique_ptr<HintSession> EpubReaderActivity::loadHintSessionLocked() {
+  if (!section || !renderer.hasFrameBuffer()) return nullptr;
+  // Page + word boxes (~2 KB for a full page) live until the overlay closes.
   auto session = makeUniqueNoThrow<HintSession>();
   if (!session) {
     LOG_ERR("HNT", "OOM: HintSession");
     showKeyPopupLocked(tr(STR_DICT_LOW_MEMORY), true);
-    return;
+    return nullptr;
   }
   session->page = section->loadPage(section->currentPage);
   if (!session->page) {
     LOG_ERR("HNT", "Failed to load page %d", section->currentPage);
-    return;
+    return nullptr;
   }
   // Same origin renderBook() draws the page at.
   int marginTop, marginRight, marginBottom, marginLeft;
@@ -92,15 +102,50 @@ void EpubReaderActivity::beginHints() {
   marginLeft += SETTINGS.screenMargin;
   deckpoint::reader::extractPageWords(renderer, *session->page, SETTINGS.getReaderFontId(), marginLeft, marginTop,
                                       session->words);
+  return session;
+}
+
+void EpubReaderActivity::beginHints() {
+  hintOpenPending = false;
+  auto session = loadHintSessionLocked();
+  if (!session) return;
   if (session->words.empty()) {
     showKeyPopupLocked(tr(STR_KEYS_NO_WORDS), true);
     return;
   }
+  session->purpose = hintPendingPurpose;
+  if (session->purpose == HintPurpose::Select) session->selection.begin();
   session->matcher.begin(static_cast<uint16_t>(std::min<size_t>(session->words.size(), HintLabels::MAX_TARGETS)));
-  session->pageStored = !xteinkClassPanel() && renderer.storeBwBuffer();
+  session->pageStored = storeHintPageLocked();
   hints = std::move(session);
-  drawHintLabels();
+  drawHintOverlay();
   pushOverlayRefresh();
+}
+
+bool EpubReaderActivity::storeHintPageLocked() { return !xteinkClassPanel() && renderer.storeBwBuffer(); }
+
+void EpubReaderActivity::drawHintOverlay() {
+  if (!hints) return;
+  if (hints->purpose == HintPurpose::Select) {
+    drawSelectionOverlay();
+  } else {
+    drawHintLabels();
+  }
+}
+
+bool EpubReaderActivity::repaintHintsLocked() {
+  if (!hints) return false;
+  if (!hints->pageStored) {
+    hints->redrawAfterRender = true;
+    return true;
+  }
+  settleOverlayRefresh();
+  renderer.restoreBwBuffer(/*resyncPanelBaseline=*/false);
+  // The restore freed the copy; take a fresh one for the next change.
+  hints->pageStored = renderer.storeBwBuffer();
+  drawHintOverlay();
+  pushOverlayRefresh();
+  return false;
 }
 
 void EpubReaderActivity::drawHintLabels() const {
@@ -136,6 +181,7 @@ void EpubReaderActivity::drawHintLabels() const {
 
 bool EpubReaderActivity::closeHintsLocked(const bool restorePage) {
   hintsOpen = false;
+  hintsSelect = false;
   hintOpenPending = false;
   if (!hints) return false;
   bool rerender = false;
@@ -180,18 +226,7 @@ void EpubReaderActivity::hintKey(const freeink::KeyEvent& event) {
     } else {
       switch (hints->matcher.feed(event)) {
         case HintMatcher::Result::Narrowed:
-          if (hints->pageStored) {
-            settleOverlayRefresh();
-            renderer.restoreBwBuffer(/*resyncPanelBaseline=*/false);
-            // The restore freed the copy; take a fresh one (at most once per
-            // session, labels being two letters at most).
-            hints->pageStored = renderer.storeBwBuffer();
-            drawHintLabels();
-            pushOverlayRefresh();
-          } else {
-            hints->redrawAfterRender = true;
-            rerender = true;
-          }
+          rerender = repaintHintsLocked();
           break;
         case HintMatcher::Result::Cancelled:
           rerender = closeHintsLocked(true);
@@ -205,6 +240,7 @@ void EpubReaderActivity::hintKey(const freeink::KeyEvent& event) {
           markPickedWordLocked(box);
           hints.reset();
           hintsOpen = false;
+          hintsSelect = false;
           break;
         }
         case HintMatcher::Result::Ignored:
@@ -252,7 +288,8 @@ void EpubReaderActivity::lookUpPickedWord(const char* word) {
 
 bool EpubReaderActivity::hintsTick() {
   if (!hintsOpen) return false;
-  if (!wantsRawKeys()) {
+  // A touch-opened selection also runs without a keyboard.
+  if (hintsSelect ? !readerOwnsPage() : !wantsRawKeys()) {
     // Something else took over the screen: drop the labels without painting.
     closeHints(false);
     return false;
@@ -281,13 +318,20 @@ void EpubReaderActivity::hintsBeforeRender() {
 }
 
 void EpubReaderActivity::hintsAfterRender() {
+  if (pendingHintToast != nullptr) {
+    // A selection ended with a message and a page render (saved / deleted
+    // highlight, or a gray page re-rendered): the message goes on top of it.
+    const char* toast = pendingHintToast;
+    pendingHintToast = nullptr;
+    showKeyPopupLocked(toast, true);
+  }
   if (hintOpenPending) {
     beginHints();
     return;
   }
   if (!hints || hints->stale || !hints->redrawAfterRender || !renderer.hasFrameBuffer()) return;
   hints->redrawAfterRender = false;
-  hints->pageStored = !xteinkClassPanel() && renderer.storeBwBuffer();
-  drawHintLabels();
+  hints->pageStored = storeHintPageLocked();
+  drawHintOverlay();
   pushOverlayRefresh();
 }

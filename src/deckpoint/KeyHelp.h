@@ -73,6 +73,7 @@ constexpr TouchHelp makeTouchHelp(const StrId title, const TouchHelpEntry (&entr
 // in the reader, the lists one everywhere else.
 extern const TouchHelp TOUCH_BOOK_HELP;
 extern const TouchHelp TOUCH_LISTS_HELP;
+extern const TouchHelp TOUCH_SELECT_HELP;  // the reader's highlight selection
 
 // Hand-written tables (KeyHelpTables.cpp, flash-resident).
 extern const KeyHelp HOME_KEY_HELP;
@@ -88,5 +89,9 @@ extern const KeyHelp DEFINITION_KEY_HELP;
 extern const KeyHelp KEYBOARD_ENTRY_KEY_HELP;
 extern const KeyHelp IMAGE_VIEWER_KEY_HELP;
 extern const KeyHelp GO_TO_PERCENT_KEY_HELP;
+extern const KeyHelp SELECTION_KEY_HELP;
+
+// Owner name the reader's highlight selection opens `?` help under.
+constexpr const char* SELECTION_HELP_OWNER = "Highlight";
 
 }  // namespace deckpoint

@@ -45,6 +45,14 @@ class AnnotationStore {
 
   // Adds (or replaces, same pos0||pos1) and saves. The result says why not.
   AddResult addAndSave(Annotation&& annotation);
+  // As addAndSave, for a highlight made on a laid-out page: its placement in
+  // spineIndex is already known, so it is drawn without resolving its XPointers.
+  AddResult addPlacedAndSave(Annotation&& annotation, int spineIndex, uint32_t startOffset, uint32_t endOffset);
+  // List index of the placed, live highlight of this chapter that covers
+  // `offset` (the most recent one when several do), or -1.
+  int highlightAt(int spineIndex, uint32_t offset) const;
+  // Tombstones entry `index` (deleted, datetime_updated = now) and saves.
+  bool deleteAndSave(size_t index);
   bool save();
 
   // "YYYY-MM-DD HH:MM:SS" local time from the system clock, or

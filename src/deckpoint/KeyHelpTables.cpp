@@ -74,6 +74,7 @@ constexpr KeyHelpEntry READER[] = {
     {"D", StrId::STR_KH_LOOKUP_TYPED},
     {"d", StrId::STR_KH_DICT_HINTS},
     {"d: a-z / Bksp / Esc", StrId::STR_KH_HINT_KEYS},
+    {"v", StrId::STR_KH_HIGHLIGHT},
     {"/", StrId::STR_KH_SEARCH_BOOK},
     {"n / N", StrId::STR_KH_SEARCH_NEXT_PREV},
     {"/: Alt+k / Esc", StrId::STR_KH_SEARCH_KEYS},
@@ -125,12 +126,29 @@ constexpr KeyHelpEntry IMAGE_VIEWER[] = {
 };
 
 constexpr KeyHelpEntry GO_TO_PERCENT[] = {
-    {"0 - 9", StrId::STR_KH_TYPE_PERCENT},
-    {"h / l", StrId::STR_KH_STEP_SMALL},
-    {"j / k", StrId::STR_KH_STEP_LARGE},
-    {"Backspace", StrId::STR_KH_DELETE_DIGIT},
-    {"Enter", StrId::STR_KH_GO},
-    {DECKPOINT_KEY_MIC, StrId::STR_KH_CANCEL},
+    {"0 - 9", StrId::STR_KH_TYPE_PERCENT}, {"h / l", StrId::STR_KH_STEP_SMALL},
+    {"j / k", StrId::STR_KH_STEP_LARGE},   {"Backspace", StrId::STR_KH_DELETE_DIGIT},
+    {"Enter", StrId::STR_KH_GO},           {DECKPOINT_KEY_MIC, StrId::STR_KH_CANCEL},
+};
+
+// `v` / long-press highlight selection (EpubReaderSelection.cpp), all stages.
+constexpr KeyHelpEntry SELECTION[] = {
+    {"a-z", StrId::STR_KH_SEL_PICK},
+    {"Enter", StrId::STR_KH_SEL_ONE_WORD},
+    {"Enter", StrId::STR_KH_SEL_SAVE},
+    {"n", StrId::STR_KH_SEL_NOTE},
+    {"Backspace", StrId::STR_KH_SEL_UNDO},
+    {DECKPOINT_KEY_MIC, StrId::STR_KH_SEL_CANCEL},
+    {"a-z", StrId::STR_KH_SEL_ON_HIGHLIGHT},
+    {"j / k, Enter", StrId::STR_KH_SEL_MENU_MOVE},
+    {"d / v / n / x", StrId::STR_KH_SEL_MENU_KEYS},
+};
+
+constexpr TouchHelpEntry TOUCH_SELECT[] = {
+    {StrId::STR_KH_T_TAP_WORD, StrId::STR_KH_T_SET_END, TouchWhen::Always},
+    {StrId::STR_KH_T_TAP_BAR, StrId::STR_KH_T_BAR_WHAT, TouchWhen::Always},
+    {StrId::STR_KH_T_TAP_ITEM, StrId::STR_KH_T_SELECT, TouchWhen::Always},
+    {StrId::STR_KH_T_TAP_OUTSIDE, StrId::STR_KH_SEL_CANCEL, TouchWhen::Always},
 };
 
 // Rows whose gesture is switched off in Settings > Controls are left out.
@@ -140,7 +158,8 @@ constexpr TouchHelpEntry TOUCH_BOOK[] = {
     {StrId::STR_KH_T_TAP_CENTER, StrId::STR_KH_READER_MENU, TouchWhen::MenuTap},
     {StrId::STR_KH_T_SWIPE_SIDEWAYS, StrId::STR_KH_T_TURN_PAGE, TouchWhen::PageSwipe},
     {StrId::STR_KH_T_SWIPE_TOP, StrId::STR_KH_READER_MENU, TouchWhen::Always},
-    {StrId::STR_KH_T_HOLD_WORD, StrId::STR_KH_LOOK_UP, TouchWhen::ReaderTouch},
+    {StrId::STR_KH_T_HOLD_WORD, StrId::STR_KH_T_WORD_MENU, TouchWhen::ReaderTouch},
+    {StrId::STR_KH_T_TAP_HIGHLIGHT, StrId::STR_KH_T_HIGHLIGHT_MENU, TouchWhen::ReaderTouch},
     {StrId::STR_KH_T_TAP_IN_MODE, StrId::STR_KH_T_CANCEL_MODE, TouchWhen::Always},
 };
 
@@ -164,8 +183,10 @@ constexpr KeyHelp DEFINITION_KEY_HELP = makeKeyHelp(DEFINITION);
 constexpr KeyHelp KEYBOARD_ENTRY_KEY_HELP = makeKeyHelp(KEYBOARD_ENTRY);
 constexpr KeyHelp IMAGE_VIEWER_KEY_HELP = makeKeyHelp(IMAGE_VIEWER);
 constexpr KeyHelp GO_TO_PERCENT_KEY_HELP = makeKeyHelp(GO_TO_PERCENT);
+constexpr KeyHelp SELECTION_KEY_HELP = makeKeyHelp(SELECTION);
 
 constexpr TouchHelp TOUCH_BOOK_HELP = makeTouchHelp(StrId::STR_KH_SECTION_TOUCH_BOOK, TOUCH_BOOK);
 constexpr TouchHelp TOUCH_LISTS_HELP = makeTouchHelp(StrId::STR_KH_SECTION_TOUCH_LISTS, TOUCH_LISTS);
+constexpr TouchHelp TOUCH_SELECT_HELP = makeTouchHelp(StrId::STR_KH_SECTION_TOUCH_SELECT, TOUCH_SELECT);
 
 }  // namespace deckpoint

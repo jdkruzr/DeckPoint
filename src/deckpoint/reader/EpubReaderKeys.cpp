@@ -28,8 +28,9 @@ namespace {
 constexpr unsigned long MIN_KEY_TURN_GAP_MS = 200;
 }  // namespace
 
-bool EpubReaderActivity::wantsRawKeys() const {
-  if (!halKeyboard.present()) return false;
+bool EpubReaderActivity::wantsRawKeys() const { return halKeyboard.present() && readerOwnsPage(); }
+
+bool EpubReaderActivity::readerOwnsPage() const {
   // Anything that owns input through the button bridge keeps it: the load
   // failure dialog, the toolbar menu and its option picker, automatic page
   // turning (Enter / Esc stop it) and the end-of-book screen and menu.
@@ -45,7 +46,11 @@ void EpubReaderActivity::onKey(const freeink::KeyEvent& event) {
   if (keysSuspended || !wantsRawKeys()) return;
   if (searchKey(event)) return;  // a running search takes Esc, drops the rest
   if (hintsOpen) {
-    hintKey(event);
+    if (hintsSelect) {
+      selectionKey(event);
+    } else {
+      hintKey(event);
+    }
     return;
   }
   if (cmdLine.isOpen()) {
@@ -198,6 +203,9 @@ void EpubReaderActivity::runReaderCommand(const ReaderCommand& cmd) {
     case ReaderCmd::Dictionary:
       // Like the `:` line: a dropped prefix popup means a clean render first.
       openHints(hadPopup);
+      return;
+    case ReaderCmd::Highlight:
+      openHints(hadPopup, deckpoint::reader::HintPurpose::Select);
       return;
     case ReaderCmd::Search:
       // Like the `:` line: a dropped prefix popup means a clean render first.

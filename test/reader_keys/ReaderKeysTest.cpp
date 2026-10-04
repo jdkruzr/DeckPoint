@@ -214,6 +214,14 @@ TEST(ReaderKeys, AltVIsHelpPlainVIsNot) {
   EXPECT_NE(p.feed(ch('v')).type, ReaderCmd::Help);
 }
 
+TEST(ReaderKeys, VStartsHighlight) {
+  ReaderKeys p;
+  EXPECT_EQ(p.feed(ch('v')).type, ReaderCmd::Highlight);
+  // A half-typed prefix is dropped, not turned into a highlight.
+  EXPECT_EQ(p.feed(ch('g')).type, ReaderCmd::Pending);
+  EXPECT_EQ(p.feed(ch('v')).type, ReaderCmd::None);
+}
+
 TEST(ReaderKeys, SingleCommands) {
   ReaderKeys p;
   EXPECT_EQ(p.feed(ch('t')).type, ReaderCmd::Toc);

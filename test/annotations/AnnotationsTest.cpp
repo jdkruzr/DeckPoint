@@ -291,6 +291,30 @@ TEST(AnnotationList, CountCapAndReplace) {
   EXPECT_EQ(list[6].get(Field::Text), "edited");
 }
 
+TEST(AnnotationList, TombstoneStampsUpdateAndWrites) {
+  AnnotationList list;
+  ASSERT_EQ(list.add(makeHighlight(P1_0, P1_28, "words", "a note")), AddResult::Added);
+  const size_t before = list.blobBytes();
+  EXPECT_FALSE(list.tombstone(1, "2026-10-05 08:00:00"));  // out of range
+  ASSERT_TRUE(list.tombstone(0, "2026-10-05 08:00:00"));
+  EXPECT_TRUE(list[0].deleted);
+  EXPECT_EQ(list[0].get(Field::DatetimeUpdated), "2026-10-05 08:00:00");
+  EXPECT_EQ(list[0].get(Field::Note), "a note");  // the rest is kept for the merge
+  EXPECT_EQ(list.blobBytes(), before + strlen("2026-10-05 08:00:00"));
+  EXPECT_FALSE(list.hasHighlightsIn(9));
+  const std::string out = write(list);
+  EXPECT_NE(out.find("\"deleted\":true"), std::string::npos);
+  EXPECT_NE(out.find("\"datetime_updated\":\"2026-10-05 08:00:00\""), std::string::npos);
+}
+
+TEST(AnnotationList, TombstoneRefusedWhenReadOnly) {
+  AnnotationList list;
+  ASSERT_EQ(list.add(makeHighlight(P1_0, P1_28)), AddResult::Added);
+  list.markReadOnly();
+  EXPECT_FALSE(list.tombstone(0, "2026-10-05 08:00:00"));
+  EXPECT_FALSE(list[0].deleted);
+}
+
 TEST(AnnotationList, RamBudget) {
   AnnotationList list(400);
   EXPECT_EQ(list.add(makeHighlight(P1_0, P1_28, std::string(100, 'a'))), AddResult::Added);

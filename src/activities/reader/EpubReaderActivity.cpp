@@ -637,7 +637,7 @@ void EpubReaderActivity::loop() {
   // DECKPOINT: long-press a word -> dictionary, ahead of the tap handlers below
   // (it claims the contact, so its lift neither turns the page, skips a
   // chapter nor opens the menu).
-  if (!atEndOfBook && !endOfBookMenuOpen && touchLookUpTick()) return;
+  if (!atEndOfBook && !endOfBookMenuOpen && touchWordMenuTick()) return;
 
   // Link taps take priority over the reader-menu and page-turn zones.
   if (!atEndOfBook && !currentPageLinks.empty() && SETTINGS.touchReaderControls &&
@@ -653,6 +653,8 @@ void EpubReaderActivity::loop() {
       }
     }
   }
+  // DECKPOINT: a tap on a highlighted word opens its popup.
+  if (!atEndOfBook && !endOfBookMenuOpen && touchHighlightTapTick()) return;
 
   if (confirmReleased || ReaderUtils::isTouchMenuGesture(renderer, mappedInput)) {
     // Toolbar style: the page is on screen and in the framebuffer, so paint the
@@ -1737,7 +1739,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   const bool cleanImageBasePending = manualRefreshPending || pagesUntilFullRefresh <= 1;
   const bool needsTextGrayscale = SETTINGS.textAntiAliasing;
   const bool needsAnyGrayscale = needsTextGrayscale || pageHasImages;
-  pageHasGray = needsAnyGrayscale;  // DECKPOINT: overlays re-render instead of a B/W snapshot restore
+  pageHasGray = needsAnyGrayscale;                   // DECKPOINT: overlays re-render instead of a B/W snapshot restore
+  pageHasHighlightMarks = !annotationMarks.empty();  // DECKPOINT: taps on highlights open their popup
   const bool absoluteImageGrayscale = pageHasImages && !gpio.deviceIsX3() &&
                                       display.getController() == HalDisplay::Controller::UC8279 &&
                                       renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported();

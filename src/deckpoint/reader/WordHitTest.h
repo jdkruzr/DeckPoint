@@ -1,7 +1,7 @@
 #pragma once
 
 // DECKPOINT: which word a touch point lands on (pure, host-testable). Used by
-// the reader's long-press lookup over PageWords' boxes.
+// the reader's long-press popup and touch selection over PageWords' boxes.
 //
 // A box spans [x, x + width) by [y, y + lineHeight) (y = line top). A point
 // inside a box picks it; otherwise the nearest box within `slop` px on both
@@ -12,10 +12,14 @@
 
 namespace deckpoint::reader {
 
+// How far outside a word box a fingertip still picks it (logical px). Below
+// half the T-Deck's ~17 px line gap pitch, so a press between two lines goes
+// to the nearer one rather than skipping both.
+constexpr int WORD_TOUCH_SLOP_PX = 8;
+
 // Box: any type with integral x, y and width members (WordBox).
 template <typename Box>
-int findWordAt(const Box* boxes, const size_t count, const int x, const int y, const int lineHeight,
-               const int slop) {
+int findWordAt(const Box* boxes, const size_t count, const int x, const int y, const int lineHeight, const int slop) {
   int best = -1;
   long bestDist = 0;
   for (size_t i = 0; i < count; i++) {

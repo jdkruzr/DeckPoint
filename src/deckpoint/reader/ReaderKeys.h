@@ -16,25 +16,26 @@ enum class ReaderCmd : uint8_t {
   Cancel,   // Esc / Backspace dropped a half-typed prefix
   NextPage,
   PrevPage,
-  BookStart,    // gg
-  BookEnd,      // G
-  NextChapter,  // ]]  )
-  PrevChapter,  // [[  (  (first to the chapter start when not on its first page)
-  GoPercent,    // N%  NG   count = percent (0-100)
-  Toc,          // t
-  SetMark,      // m<a-z>   arg = letter
-  JumpMark,     // '<a-z>   arg = letter
-  JumpBack,     // ''
+  BookStart,       // gg
+  BookEnd,         // G
+  NextChapter,     // ]]  )
+  PrevChapter,     // [[  (  (first to the chapter start when not on its first page)
+  GoPercent,       // N%  NG   count = percent (0-100)
+  Toc,             // t
+  SetMark,         // m<a-z>   arg = letter
+  JumpMark,        // '<a-z>   arg = letter
+  JumpBack,        // ''
   ToggleBookmark,  // B
   Menu,            // Enter
   Back,            // Esc / Backspace with nothing pending
   Help,            // ?
-  Dictionary,  // d   hint labels on the page's words
-  LookupWord,  // D   `:dict ` prompt
-  Search,       // /
-  SearchNext,   // n
-  SearchPrev,   // N
-  CommandLine,  // :
+  Dictionary,      // d   hint labels on the page's words
+  Highlight,       // v   hint labels pick a highlight's start and end words
+  LookupWord,      // D   `:dict ` prompt
+  Search,          // /
+  SearchNext,      // n
+  SearchPrev,      // N
+  CommandLine,     // :
 };
 
 struct ReaderCommand {

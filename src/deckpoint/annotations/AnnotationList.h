@@ -49,6 +49,10 @@ class AnnotationList {
   // bounds every string). Replaces an entry with the same key.
   AddResult adopt(Annotation&& annotation);
 
+  // Marks entry i deleted (AnnotationSync tombstone) with datetime_updated =
+  // `now`. False when read-only, out of range or on OOM (entry unchanged).
+  bool tombstone(size_t i, std::string_view now);
+
   // Index of the entry with this AnnotationSync key, or -1.
   int find(std::string_view key) const;
   // True when some live highlight sits in this spine item.

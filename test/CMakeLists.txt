@@ -85,6 +85,7 @@ add_subdirectory(key_help)
 add_subdirectory(reader_keys)
 add_subdirectory(commands)
 add_subdirectory(hint_mode)
+add_subdirectory(selection)  # DECKPOINT
 add_subdirectory(search_match)
 add_subdirectory(protected_paths)
 add_subdirectory(touch_cst3xx)

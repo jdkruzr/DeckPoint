@@ -173,6 +173,46 @@ AddResult AnnotationStore::addAndSave(Annotation&& annotation) {
   return result;
 }
 
+AddResult AnnotationStore::addPlacedAndSave(Annotation&& annotation, const int spineIndex, const uint32_t startOffset,
+                                            const uint32_t endOffset) {
+  const std::string key = annotationKey(annotation);
+  const AddResult result = list.add(std::move(annotation));
+  if (result != AddResult::Added && result != AddResult::Replaced) {
+    LOG_ERR("ANN", "Annotation not added: %s", addResultName(result));
+    return result;
+  }
+  const int index = list.find(key);
+  if (index >= 0) {
+    Annotation& a = list[static_cast<size_t>(index)];
+    if (a.spineIndex == spineIndex && endOffset > startOffset) {
+      a.startOffset = startOffset;
+      a.endOffset = endOffset;
+      a.placement = Placement::Resolved;
+    }
+  }
+  save();
+  return result;
+}
+
+int AnnotationStore::highlightAt(const int spineIndex, const uint32_t offset) const {
+  for (size_t i = list.size(); i-- > 0;) {
+    const Annotation& a = list[i];
+    if (a.spineIndex != spineIndex || a.placement != Placement::Resolved || a.deleted) continue;
+    if (offset >= a.startOffset && offset < a.endOffset) return static_cast<int>(i);
+  }
+  return -1;
+}
+
+bool AnnotationStore::deleteAndSave(const size_t index) {
+  char stamp[20];
+  now(stamp);
+  if (!list.tombstone(index, stamp)) {
+    LOG_ERR("ANN", "Cannot delete annotation %u", static_cast<unsigned>(index));
+    return false;
+  }
+  return save();
+}
+
 void AnnotationStore::placeChapter(const std::shared_ptr<Epub>& epub, const int spineIndex) {
   if (!epub) return;
   const auto t0 = millis();

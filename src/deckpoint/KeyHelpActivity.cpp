@@ -1,4 +1,3 @@
-#include "deckpoint/KeyHelp.h"
 #include "KeyHelpActivity.h"
 
 #include <GfxRenderer.h>
@@ -13,10 +12,11 @@
 
 #include "CrossPointSettings.h"
 #include "KeyLegend.h"
-#include "icons/mic12.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
+#include "deckpoint/KeyHelp.h"
 #include "fontIds.h"
+#include "icons/mic12.h"
 
 namespace deckpoint {
 
@@ -34,6 +34,7 @@ constexpr ScreenTitle SCREEN_TITLES[] = {
     {"Settings", StrId::STR_SETTINGS_TITLE},
     {"TextSettings", StrId::STR_TEXT_SETTINGS},
     {"EpubReader", StrId::STR_KH_TITLE_READER},
+    {"Highlight", StrId::STR_KH_TITLE_HIGHLIGHT},
     {"EpubReaderMenu", StrId::STR_READER_MENU},
     {"EpubReaderBookmarks", StrId::STR_BOOKMARKS},
     {"DictionaryWordSelect", StrId::STR_KH_TITLE_WORD_SELECT},
@@ -164,7 +165,9 @@ void KeyHelpActivity::buildRows() {
   addRow(tr(STR_KH_KEY_POWER), tr(STR_KH_SLEEP_WAKE));
 
   if (mappedInput.hasTouchInput()) {
-    const TouchHelp& section = strcmp(ownerName, "EpubReader") == 0 ? TOUCH_BOOK_HELP : TOUCH_LISTS_HELP;
+    const TouchHelp& section = strcmp(ownerName, "EpubReader") == 0           ? TOUCH_BOOK_HELP
+                               : strcmp(ownerName, SELECTION_HELP_OWNER) == 0 ? TOUCH_SELECT_HELP
+                                                                              : TOUCH_LISTS_HELP;
     addRow(nullptr, I18N.get(section.title), true);
     for (uint8_t i = 0; i < section.count; i++) {
       const TouchHelpEntry& entry = section.entries[i];
@@ -251,8 +254,9 @@ void KeyHelpActivity::render(RenderLock&&) {
   int keyW = 0;
   for (int i = 0; i < rowCount; i++) {
     if (rows[i].heading) continue;
-    keyW = std::max(keyW, isMic(rows[i].keys) ? static_cast<int>(Mic12Icon.w)
-                                              : renderer.getTextWidth(UI_10_FONT_ID, rows[i].keys, EpdFontFamily::BOLD));
+    keyW =
+        std::max(keyW, isMic(rows[i].keys) ? static_cast<int>(Mic12Icon.w)
+                                           : renderer.getTextWidth(UI_10_FONT_ID, rows[i].keys, EpdFontFamily::BOLD));
   }
   keyW = std::min(keyW, contentW * 2 / 5);
   const int whatX = x + keyW + COLUMN_GAP;
@@ -271,15 +275,14 @@ void KeyHelpActivity::render(RenderLock&&) {
       continue;
     }
     const bool mic = isMic(row.keys);
-    const auto keyLines =
-        mic ? std::vector<std::string>{} : renderer.wrappedText(UI_10_FONT_ID, row.keys, keyW, KEY_MAX_LINES, EpdFontFamily::BOLD);
+    const auto keyLines = mic ? std::vector<std::string>{}
+                              : renderer.wrappedText(UI_10_FONT_ID, row.keys, keyW, KEY_MAX_LINES, EpdFontFamily::BOLD);
     const auto whatLines = renderer.wrappedText(UI_10_FONT_ID, row.what, whatW, WHAT_MAX_LINES);
     const int lines = static_cast<int>(std::max<size_t>(1, std::max(keyLines.size(), whatLines.size())));
     if (y + lines * lh > bottom && i > topRow) break;
     if (mic) drawIconLogical(renderer, Mic12Icon, x, y + (lh - static_cast<int>(Mic12Icon.h)) / 2);
     for (size_t l = 0; l < keyLines.size(); l++) {
-      renderer.drawText(UI_10_FONT_ID, x, y + static_cast<int>(l) * lh, keyLines[l].c_str(), true,
-                        EpdFontFamily::BOLD);
+      renderer.drawText(UI_10_FONT_ID, x, y + static_cast<int>(l) * lh, keyLines[l].c_str(), true, EpdFontFamily::BOLD);
     }
     for (size_t l = 0; l < whatLines.size(); l++) {
       renderer.drawText(UI_10_FONT_ID, whatX, y + static_cast<int>(l) * lh, whatLines[l].c_str());
@@ -307,8 +310,7 @@ void KeyHelpActivity::render(RenderLock&&) {
   renderer.displayBuffer();
 }
 
-void openKeyHelp(GfxRenderer& renderer, MappedInputManager& mappedInput, const char* ownerName,
-                 const KeyHelp* table) {
+void openKeyHelp(GfxRenderer& renderer, MappedInputManager& mappedInput, const char* ownerName, const KeyHelp* table) {
   auto help = makeUniqueNoThrow<KeyHelpActivity>(renderer, mappedInput, ownerName, table);
   if (!help) {
     LOG_ERR("KEYHELP", "OOM: key help activity");

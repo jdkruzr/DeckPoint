@@ -1,4 +1,5 @@
 #include "ReaderKeys.h"
+
 #include "deckpoint/HelpKey.h"
 
 namespace deckpoint::reader {
@@ -150,6 +151,8 @@ ReaderCommand ReaderKeys::feed(const freeink::KeyEvent& event) {
       return finish(ReaderCmd::Dictionary);
     case 'D':
       return finish(ReaderCmd::LookupWord);
+    case 'v':
+      return finish(ReaderCmd::Highlight);
     case '/':
       return finish(ReaderCmd::Search);
     case 'n':

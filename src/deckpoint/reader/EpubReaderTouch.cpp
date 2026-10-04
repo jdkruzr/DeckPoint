@@ -7,17 +7,18 @@
 //     nothing else.
 //  2. The toolbar overlay / end-of-book menu own their own touch.
 //  3. A long-press claims its contact, so its lift is never a page turn, a
-//     long-tap chapter skip or the menu tap; the word under the finger is
-//     looked up, blank space does nothing.
-//  4. Link taps, then the center menu tap / top-edge swipe, then the
-//     page-turn tap zones and swipes (CrossPoint).
+//     long-tap chapter skip or the menu tap; the word under the finger gets
+//     the Look up / Highlight / Note popup (a highlighted word: Edit note /
+//     Delete / Look up), blank space does nothing.
+//  4. Link taps, then a tap on a highlighted word (its popup), then the
+//     center menu tap / top-edge swipe, then the page-turn tap zones and
+//     swipes (CrossPoint).
+//  A selection opened by touch (EpubReaderSelection.cpp) takes the taps that
+//  follow: popup rows, the end word, the Cancel / Save bar.
 
 #include <GfxRenderer.h>
 #include <I18n.h>
 #include <Logging.h>
-
-#include <cstdio>
-#include <vector>
 
 #include "CrossPointSettings.h"
 #include "activities/RenderLock.h"
@@ -26,35 +27,46 @@
 #include "deckpoint/reader/WordHitTest.h"
 
 using deckpoint::CommandResult;
-using deckpoint::reader::WordBox;
 
 namespace {
 
-// How far outside a word box a fingertip still picks it (logical px). Below
-// half the T-Deck's ~17 px line gap pitch, so a press between two lines goes
-// to the nearer one rather than skipping both.
-constexpr int WORD_TOUCH_SLOP_PX = 8;
-// Longest word copied out for the lookup (bytes, incl. NUL).
-constexpr size_t MAX_LOOKUP_WORD = 64;
+// A plain tap only opens a highlight's popup when it lands (nearly) on one of
+// its words; anything looser would steal page-turn taps next to highlights.
+constexpr int HIGHLIGHT_TAP_SLOP_PX = 3;
 
 }  // namespace
 
 bool EpubReaderActivity::keyModeTouchTick() {
-  if (!mappedInput.hasTouchInput() || !wantsRawKeys()) return false;
+  if (!mappedInput.hasTouchInput()) return false;
+  const bool selecting = hintsOpen && hintsSelect;
+  if (selecting ? !readerOwnsPage() : !wantsRawKeys()) return false;
   const bool modeUp = search || hintsOpen || cmdLine.isOpen() || searchMark.active;
   if (!modeUp) return false;
 
   int x = 0;
   int y = 0;
-  bool touched = mappedInput.wasScreenTapped(x, y) || mappedInput.wasSwipe() != MappedInputManager::SwipeDir::None;
+  bool touched = mappedInput.wasScreenTapped(x, y);
+  if (!touched && mappedInput.wasSwipe() != MappedInputManager::SwipeDir::None) {
+    touched = true;
+    x = -1;
+    y = -1;
+  }
   // wasScreenLongPress() claims the rest of the contact: its lift must not act
   // on the restored page.
   if (!touched && mappedInput.wasScreenLongPress(x, y)) touched = true;
   if (!touched) return false;
 
-  LOG_DBG("ERS", "Touch cancels keyboard mode");
   readerKeys.reset();
   pendingManualTurn = 0;
+  if (selecting) {
+    // A selection takes taps itself (popup rows, end word); its keyboard
+    // label stages are cancelled like the other keyboard modes.
+    selectionTouch(x, y);
+    if (searchMark.active) clearSearchMark(true);
+    return true;
+  }
+
+  LOG_DBG("ERS", "Touch cancels keyboard mode");
   if (search) {
     finishSearch(SearchStep::Cancelled, nullptr);  // closes the `/` line with it
   } else if (hintsOpen) {
@@ -66,54 +78,60 @@ bool EpubReaderActivity::keyModeTouchTick() {
   return true;
 }
 
-bool EpubReaderActivity::touchLookUpTick() {
-  if (!SETTINGS.touchReaderControls ||
-      !mappedInput.touchGestureEnabled(deckpoint::touch::GESTURE_WORD_LOOKUP) || !section) {
+bool EpubReaderActivity::touchWordMenuTick() {
+  if (!SETTINGS.touchReaderControls || !mappedInput.touchGestureEnabled(deckpoint::touch::GESTURE_WORD_LOOKUP) ||
+      !section) {
     return false;
   }
   int x = 0;
   int y = 0;
   if (!mappedInput.wasScreenLongPress(x, y)) return false;  // claims the contact
   pendingManualTurn = 0;
-  if (SETTINGS.dictionaryName[0] == '\0') {
-    showKeyPopup(tr(STR_DICT_NO_DICT_SET), true);  // as `d`: no page read for nothing
-    return true;
-  }
-
-  char word[MAX_LOOKUP_WORD];
-  word[0] = '\0';
+  bool rerender = false;
   {
     RenderLock lock;
-    if (!section || !renderer.hasFrameBuffer()) return true;
-    // Page + word boxes (~2 KB for a full page; extractPageWords reserves the
-    // vector), freed after this hit test. The same transient footprint as the
-    // `d` hints; a long-press is rare enough that caching the boxes per page
-    // would only hold that RAM while reading.
-    const auto page = section->loadPage(section->currentPage);
-    if (!page) {
-      LOG_ERR("ERS", "Long-press: failed to load page %d", section->currentPage);
-      return true;
-    }
-    // Same origin renderBook() draws the page at.
-    int marginTop, marginRight, marginBottom, marginLeft;
-    renderer.getOrientedViewableTRBL(&marginTop, &marginRight, &marginBottom, &marginLeft);
-    marginTop += SETTINGS.screenMargin;
-    marginLeft += SETTINGS.screenMargin;
-    const int fontId = SETTINGS.getReaderFontId();
-    std::vector<WordBox> words;
-    deckpoint::reader::extractPageWords(renderer, *page, fontId, marginLeft, marginTop, words);
-    const int hit = deckpoint::reader::findWordAt(words.data(), words.size(), x, y, renderer.getLineHeight(fontId),
-                                                  WORD_TOUCH_SLOP_PX);
+    // Page + word boxes (~2 KB for a full page), held while the popup is up;
+    // freed right away when the press found no word.
+    auto session = loadHintSessionLocked();
+    if (!session) return true;
+    const int hit = deckpoint::reader::findWordAt(session->words.data(), session->words.size(), x, y,
+                                                  renderer.getLineHeight(SETTINGS.getReaderFontId()),
+                                                  deckpoint::reader::WORD_TOUCH_SLOP_PX);
     if (hit < 0) {
       LOG_DBG("ERS", "Long-press at %d,%d: no word", x, y);
       return true;
     }
-
-    snprintf(word, sizeof(word), "%s", words[hit].text);
-    LOG_DBG("ERS", "Long-press lookup '%s' at %d,%d", word, x, y);
-    settleOverlayRefresh();
-    markPickedWordLocked(words[hit]);
+    LOG_DBG("ERS", "Long-press '%s' at %d,%d", session->words[hit].text, x, y);
+    rerender = openTouchSelectionLocked(std::move(session), hit);
   }
-  lookUpPickedWord(word);
+  if (rerender) requestUpdate();
+  return true;
+}
+
+bool EpubReaderActivity::touchHighlightTapTick() {
+  if (!pageHasHighlightMarks || !annotationStore || !section || !SETTINGS.touchReaderControls ||
+      !mappedInput.hasTouchInput()) {
+    return false;
+  }
+  int x = 0;
+  int y = 0;
+  if (!mappedInput.wasScreenTapped(x, y)) return false;
+  bool rerender = false;
+  {
+    RenderLock lock;
+    // Transient on pages that show highlights only: a tap off the highlights
+    // frees it and falls through to the page-turn zones.
+    auto session = loadHintSessionLocked();
+    if (!session) return false;
+    const int hit =
+        deckpoint::reader::findWordAt(session->words.data(), session->words.size(), x, y,
+                                      renderer.getLineHeight(SETTINGS.getReaderFontId()), HIGHLIGHT_TAP_SLOP_PX);
+    if (hit < 0 || annotationStore->highlightAt(currentSpineIndex, session->words[hit].visibleOffset) < 0) {
+      return false;
+    }
+    LOG_DBG("ERS", "Tap on highlight at '%s'", session->words[hit].text);
+    rerender = openTouchSelectionLocked(std::move(session), hit);
+  }
+  if (rerender) requestUpdate();
   return true;
 }

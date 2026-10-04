@@ -261,13 +261,26 @@ class EpubReaderActivity final : public ReaderActivity {
   // DECKPOINT: `d` hint-mode dictionary (deckpoint/reader/EpubReaderHints.cpp).
   // `hints` and hintOpenPending are shared with the render task (RenderLock);
   // hintsOpen is the main loop's own view: while set the hints own every key.
+  // The same session carries the highlight selection (hintsSelect).
   std::unique_ptr<deckpoint::reader::HintSession> hints;
   bool hintOpenPending = false;  // labels go up after the clean page render
   bool hintsOpen = false;
-  void openHints(bool pageDirty);
+  bool hintsSelect = false;  // main loop's view: the open session is a selection
+  deckpoint::reader::HintPurpose hintPendingPurpose = deckpoint::reader::HintPurpose::Lookup;
+  // Message shown over the next page render (a selection that ended with one).
+  const char* pendingHintToast = nullptr;
+  void openHints(bool pageDirty, deckpoint::reader::HintPurpose purpose = deckpoint::reader::HintPurpose::Lookup);
   // Caller holds the RenderLock for the *Locked / begin / draw / render hooks.
   void beginHints();
+  // Current page + its word boxes in a fresh session (null: none / OOM).
+  std::unique_ptr<deckpoint::reader::HintSession> loadHintSessionLocked();
+  // Copies the clean page out of the framebuffer (false: re-render instead).
+  bool storeHintPageLocked();
+  void drawHintOverlay();
   void drawHintLabels() const;
+  // Puts the overlay back over the stored page after a change; true when the
+  // page must be re-rendered for it instead (caller then requestUpdate()s).
+  bool repaintHintsLocked();
   // Returns true when the page must be re-rendered (no stored copy to restore).
   bool closeHintsLocked(bool restorePage);
   void closeHints(bool restorePage);
@@ -289,9 +302,43 @@ class EpubReaderActivity final : public ReaderActivity {
   // From loop(): a touch while a keyboard mode is up (`:` / `/` line, running
   // search, hint labels, search mark) cancels that mode and is swallowed.
   bool keyModeTouchTick();
-  // From loop(): a long-press claims its contact and looks up the word under
-  // it (none: ignored); true when it fired.
-  bool touchLookUpTick();
+  // From loop(): a long-press claims its contact and opens the word popup
+  // (Look up / Highlight / Note) over the word under it, or the highlight
+  // popup over a highlighted word (none: ignored); true when it fired.
+  bool touchWordMenuTick();
+  // From loop(): a tap on a highlighted word opens its popup; true when it did.
+  bool touchHighlightTapTick();
+
+  // DECKPOINT: highlight selection (deckpoint/reader/EpubReaderSelection.cpp)
+  // on the hint session: `v` labels pick start / end, long-press popups.
+  // Same as wantsRawKeys() minus the keyboard: nothing else owns the page.
+  bool readerOwnsPage() const;
+  void selectionKey(const freeink::KeyEvent& event);
+  // A touch while a selection is up (tap / long-press at x,y; swipe: x < 0).
+  void selectionTouch(int x, int y);
+  // Caller holds the RenderLock for these.
+  void drawSelectionOverlay();
+  // Inverts words [from, to] on the framebuffer, one block per line.
+  void invertWordsLocked(int from, int to);
+  void drawSelectionLegend() const;
+  void drawSelectionMenu() const;
+  deckpoint::reader::MenuLayout selectionMenuLayout() const;
+  deckpoint::reader::BarLayout selectionBarLayout() const;
+  // Opens the popup over word `word` (a highlight's when it sits in one).
+  void openSelectionMenuLocked(int word);
+  // Installs a touch-opened selection with the popup over `word` and puts it
+  // on the glass. True when a page render must draw it (caller requestUpdate()s).
+  bool openTouchSelectionLocked(std::unique_ptr<deckpoint::reader::HintSession> session, int word);
+  // Runs the popup's chosen action; sets *rerender / *lookUp (word copied).
+  void runSelectionActionLocked(deckpoint::reader::SelectionAction action, bool* rerender, char* lookUp,
+                                size_t lookUpSize);
+  // Saves the selected range; ends the session. True when the page must render.
+  bool saveSelectionLocked();
+  // Ends the session; `pageChanged` re-renders the page (else the clean page
+  // is restored). `toast` (tr string) is shown afterwards. True: requestUpdate().
+  bool endSelectionLocked(bool pageChanged, const char* toast);
+  // Set while a page that shows highlights is on the glass (taps check it).
+  bool pageHasHighlightMarks = false;
 
   // DECKPOINT: `/` search with n / N (deckpoint/reader/EpubReaderSearch.cpp).
   // The session runs in slices from loop() and owns input while it exists;

@@ -16,7 +16,12 @@ Read `PROGRESS.md` first (dev loop, conventions). Current plan with rationale:
   shape), placement via the step-1 resolver, underline + note marker drawing, serial seeding
   (`CMD:ANNOTATE:<pos0>||<pos1>[||note]`, `CMD:ANNOTATE_TEST[:note]`). All six real KOReader
   highlights land on the same words on the T-Deck (incl. across paragraph and page breaks).
-- **Next: step 3** (selection: keyboard `v` + touch popup, save).
+- **Step 3 built, not yet checked on the glass**: `v` labels pick start / end (Enter = one word),
+  range shown inverted, Enter saves / `n` saves + "note editor: coming soon" / Bksp back / mic
+  cancels; long-press popup Look up / Highlight / Note; tap (or `v` start) on a highlight opens
+  Edit note / Delete / Look up (delete = tombstone). `?` help per stage (owner "Highlight").
+  Code: reader/SelectionSession (pure, test/selection), reader/EpubReaderSelection.cpp.
+- **Next: step 4** (note editor bottom sheet; wire `n` / Note / Edit note to it).
 - Before 2b ships: undated-highlight stamping (plan file, "Undated highlights").
 - Test rig: Boox Go 6 II over adb (KOReader F-Droid `org.koreader.launcher.fdroid`, AnnotationSync
   v2.0.0 → Nextcloud `/eBooks`, KOSync → this host). `adb shell input text` drops shifted chars;

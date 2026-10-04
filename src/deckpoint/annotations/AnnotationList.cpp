@@ -35,6 +35,16 @@ AddResult AnnotationList::adopt(Annotation&& annotation) {
   return AddResult::Added;
 }
 
+bool AnnotationList::tombstone(const size_t i, const std::string_view now) {
+  if (readOnlyFlag || i >= items.size()) return false;
+  Annotation& a = items[i];
+  const size_t before = a.heapBytes();
+  if (!a.set(Field::DatetimeUpdated, now)) return false;
+  blobTotal = blobTotal - before + a.heapBytes();
+  a.deleted = true;
+  return true;
+}
+
 int AnnotationList::find(const std::string_view key) const {
   const size_t sep = key.find("||");
   for (size_t i = 0; i < items.size(); i++) {
