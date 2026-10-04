@@ -30,7 +30,16 @@ void UITheme::reload() {
   setTheme(themeType);
 }
 
-bool UITheme::supportsCoverGrid() { return HalMemory::getPsramHeap().totalBytes > 0; }
+bool UITheme::supportsCoverGrid() {
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+  // DECKPOINT: the grid's cover tiles and tab band don't fit a ~240px panel.
+  // Hidden from both settings pickers; a stored Cover Grid fails the enum
+  // range clamp in CrossPointSettings::fromJson and loads as Lyra.
+  return false;
+#else
+  return HalMemory::getPsramHeap().totalBytes > 0;
+#endif
+}
 
 bool UITheme::hasCoverGridHome() { return SETTINGS.uiTheme == CrossPointSettings::COVER_GRID && supportsCoverGrid(); }
 
@@ -86,7 +95,7 @@ const ThemeMetrics& UITheme::getMetrics() const {
     // DECKPOINT: ...but they may show the key legend in its place; reserve
     // its band so lists stop above it (11px face, 13px line + margins).
     if (!touch && SETTINGS.keyLegend != 0 && FREEINK_CAP_KEYBOARD) {
-      adjustedMetrics.buttonHintsHeight = 16;
+      adjustedMetrics.buttonHintsHeight = 16 + currentMetrics->keyLegendGap;
     }
     metricsForTouch = touch;
     metricsValid = true;

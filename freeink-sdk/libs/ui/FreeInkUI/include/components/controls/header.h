@@ -155,10 +155,10 @@ void header(Frame<MaxInteractions>& frame, Rect rect, const HeaderProps& props) 
     if (maxWidth < content.width) content.width = maxWidth;
   }
 
-  const BitmapRef leading = props.leadingIcon ? props.leadingIcon : resolveBitmap(frame.assets(), props.leadingIconAsset);
+  const BitmapRef leading =
+      props.leadingIcon ? props.leadingIcon : resolveBitmap(frame.assets(), props.leadingIconAsset);
   if (leading && props.leadingAction != NO_ACTION) {
-    const int16_t btn =
-        props.leadingSize > 0 ? props.leadingSize : static_cast<int16_t>(rect.height - 8);
+    const int16_t btn = props.leadingSize > 0 ? props.leadingSize : static_cast<int16_t>(rect.height - 8);
     ButtonProps back;
     back.icon = leading;
     back.action = props.leadingAction;
@@ -187,9 +187,8 @@ void header(Frame<MaxInteractions>& frame, Rect rect, const HeaderProps& props) 
   const BitmapRef trailing =
       props.trailingIcon ? props.trailingIcon : resolveBitmap(frame.assets(), props.trailingIconAsset);
   if ((props.trailingLabel || trailing) && props.trailingAction != NO_ACTION) {
-    const int16_t btnH =
-        props.trailingSize > 0 ? props.trailingSize : static_cast<int16_t>(rect.height - 8);
-    int16_t btnW = btnH;   // icon-only: square, like the leading button
+    const int16_t btnH = props.trailingSize > 0 ? props.trailingSize : static_cast<int16_t>(rect.height - 8);
+    int16_t btnW = btnH;  // icon-only: square, like the leading button
     if (props.trailingLabel) {
       const Size labelSize =
           frame.target().measureText(props.trailingText.font, props.trailingLabel, props.trailingText);
@@ -238,19 +237,25 @@ void header(Frame<MaxInteractions>& frame, Rect rect, const HeaderProps& props) 
       // Bottom-aligned to the title's line (including its vertical offset):
       // a smaller label centered on the band would float above the title.
       const int16_t titleLh = frame.target().lineHeight(props.titleText.font);
-      const int16_t titleTop =
-          static_cast<int16_t>(content.y + props.titleOffsetY + (content.height - titleLh) / 2);
+      const int16_t titleTop = static_cast<int16_t>(content.y + props.titleOffsetY + (content.height - titleLh) / 2);
       Rect rightRect{static_cast<int16_t>(content.right() - rightSize.width),
                      static_cast<int16_t>(titleTop + titleLh - rightSize.height), rightSize.width, rightSize.height};
       frame.target().text(rightRect, props.rightLabel, props.subtitleText);
       // Reserve the label's width out of the title rect. A centered title
       // gives up the same width on both sides so it stays centered on the
-      // band; a left-aligned one only loses the right slice.
+      // band; a left-aligned one only loses the right slice. A centered title
+      // too wide for the symmetric slot (narrow panels) goes left-aligned in
+      // the remaining space instead of running into the label.
       const int16_t used = static_cast<int16_t>(rightSize.width + 6);
       titleRect.width = static_cast<int16_t>(titleRect.width - used);
-      if (centeredTitle) {
-        titleRect.x = static_cast<int16_t>(titleRect.x + used);
-        titleRect.width = static_cast<int16_t>(titleRect.width - used);
+      if (titleStyle.align == TextAlign::Center) {
+        const int16_t centeredWidth = static_cast<int16_t>(titleRect.width - used);
+        if (frame.target().measureText(titleStyle.font, props.title, titleStyle).width <= centeredWidth) {
+          titleRect.x = static_cast<int16_t>(titleRect.x + used);
+          titleRect.width = centeredWidth;
+        } else {
+          titleStyle.align = TextAlign::Left;
+        }
       }
     }
     frame.target().text(titleRect, props.title, titleStyle);
@@ -265,9 +270,8 @@ void header(Frame<MaxInteractions>& frame, Rect rect, const HeaderProps& props) 
   // the clock to its slot, and neither ever repositions for other header
   // content. Apps place action buttons below the strip via actionOffsetY.
   if (status.showBattery) {
-    const int16_t batteryX = status.batteryLeft
-                                 ? static_cast<int16_t>(rect.x + statusInset)
-                                 : static_cast<int16_t>(rect.right() - statusInset - batteryReserve);
+    const int16_t batteryX = status.batteryLeft ? static_cast<int16_t>(rect.x + statusInset)
+                                                : static_cast<int16_t>(rect.right() - statusInset - batteryReserve);
     batteryIndicator(frame, Rect{batteryX, rect.y, batteryReserve, statusStripH}, status.battery);
   }
   if (clockWidth > 0) {
@@ -277,11 +281,9 @@ void header(Frame<MaxInteractions>& frame, Rect rect, const HeaderProps& props) 
     const int16_t clockLineH = frame.target().lineHeight(status.battery.text.font);
     const Rect ink = frame.target().inkBounds(status.battery.text.font, status.clockText, status.battery.text);
     const int16_t clockY = static_cast<int16_t>(rect.y + (statusStripH - ink.height) / 2 - ink.y);
-    const int16_t clockX = status.clockCentered
-                               ? static_cast<int16_t>(rect.x + (rect.width - clockWidth) / 2)
-                           : status.batteryLeft
-                               ? static_cast<int16_t>(rect.right() - statusInset - clockWidth)
-                               : static_cast<int16_t>(rect.x + statusInset);
+    const int16_t clockX = status.clockCentered ? static_cast<int16_t>(rect.x + (rect.width - clockWidth) / 2)
+                           : status.batteryLeft ? static_cast<int16_t>(rect.right() - statusInset - clockWidth)
+                                                : static_cast<int16_t>(rect.x + statusInset);
     frame.target().text(Rect{clockX, clockY, clockWidth, clockLineH}, status.clockText, status.battery.text);
   }
 }

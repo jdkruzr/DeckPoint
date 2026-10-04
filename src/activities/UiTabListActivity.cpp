@@ -1,10 +1,9 @@
 #include "UiTabListActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalKeyboard.h>
 
 #include <cassert>
-
-#include <HalKeyboard.h>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -137,9 +136,17 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
   // label-width shrink.
   const bool tabsFocused = ringPos() == 0;
   if (metrics.tabPillFullSlot) {
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+    // DECKPOINT: ~56px slots: Lyra's small labels and tight insets so all four
+    // settings tabs read in full ("Controls" outgrows a slot at body size).
+    tabProps.text = screen.theme().smallText;
+    tabProps.tabInset = fui::Insets{2, 1, 4, 1};
+    tabProps.contentInset = fui::Insets{1, 0, 1, 0};
+#else
     tabProps.text = screen.theme().bodyText;
     tabProps.tabInset = fui::Insets{4, 4, 7, 4};
     tabProps.contentInset = fui::Insets{2, 0, 2, 0};
+#endif
   } else {
     tabProps.text = screen.theme().smallText;
     tabProps.gap = static_cast<int16_t>(metrics.tabSpacing);
@@ -185,8 +192,16 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
   } else if (metrics.tabPillFullSlot) {
     // Legacy RoundedRaff unfocused treatment: same pill, dimmed to dark gray,
     // text stays inverted; no underline.
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+    // DECKPOINT: 11px white labels dissolve into the dither; outline the pill.
+    tabStyles.selected.background = fui::Paint::none();
+    tabStyles.selected.foreground = fui::Paint::solid(fui::Color::Black);
+    tabStyles.selected.border = fui::Paint::solid(fui::Color::Black);
+    tabStyles.selected.borderWidth = 1;
+#else
     tabStyles.selected.background = fui::Paint::dither(fui::Color::DarkGray);
     tabStyles.selected.foreground = fui::Paint::solid(fui::Color::White);
+#endif
     tabStyles.selected.radius = screen.theme().listRowRadius;
   } else {
 #if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI

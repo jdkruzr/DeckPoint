@@ -15,7 +15,17 @@
 
 // Internal constants
 namespace {
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+// DECKPOINT: compact tiles are ~74px wide; captions stop at two lines and the
+// tile height in Lyra3CoversMetrics accounts for them.
+constexpr int hPaddingInSelection = 4;
+constexpr int captionGap = 4;
+constexpr int captionMaxLines = 2;
+#else
 constexpr int hPaddingInSelection = 8;
+constexpr int captionGap = 5;
+constexpr int captionMaxLines = 3;
+#endif
 constexpr int cornerRadius = 6;
 }  // namespace
 
@@ -69,6 +79,13 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
                           Lyra3CoversMetrics::values.homeCoverHeight, true);
 
         if (!hasCover) {
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+          // DECKPOINT: the fixed 24px icon offset lands in the fill on a 110px slot.
+          drawCoverPlaceholder(renderer,
+                               Rect{tileX + hPaddingInSelection, tileY + hPaddingInSelection,
+                                    tileWidth - 2 * hPaddingInSelection, Lyra3CoversMetrics::values.homeCoverHeight});
+          continue;
+#endif
           // Render empty cover
           renderer.fillRect(tileX + hPaddingInSelection,
                             tileY + hPaddingInSelection + (Lyra3CoversMetrics::values.homeCoverHeight / 3),
@@ -90,13 +107,23 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
 
       const int maxLineWidth = tileWidth - 2 * hPaddingInSelection;
 
-      auto titleLines = renderer.wrappedText(SMALL_FONT_ID, recentBooks[i].title.c_str(), maxLineWidth, 3);
+      auto titleLines =
+          renderer.wrappedText(SMALL_FONT_ID, recentBooks[i].title.c_str(), maxLineWidth, captionMaxLines);
 
       const int titleLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
       const int dynamicBlockHeight = static_cast<int>(titleLines.size()) * titleLineHeight;
       // Add a little padding below the text inside the selection box just like the top padding (5 + hPaddingSelection)
-      const int dynamicTitleBoxHeight = dynamicBlockHeight + hPaddingInSelection + 5;
+      const int dynamicTitleBoxHeight = dynamicBlockHeight + hPaddingInSelection + captionGap;
 
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+      // DECKPOINT: outline the selected tile, as Lyra's compact card does; the
+      // light-gray dither frame swallows the 1-bit caption.
+      if (bookSelected) {
+        renderer.drawRect(tileX, tileY, tileWidth,
+                          Lyra3CoversMetrics::values.homeCoverHeight + hPaddingInSelection + dynamicTitleBoxHeight, 2,
+                          true);
+      }
+#else
       if (bookSelected) {
         // Draw selection box
         renderer.fillRoundedRect(tileX, tileY, tileWidth, hPaddingInSelection, cornerRadius, true, true, false, false,
@@ -109,8 +136,9 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
                                  tileWidth, dynamicTitleBoxHeight, cornerRadius, false, false, true, true,
                                  Color::LightGray);
       }
+#endif
 
-      int currentY = tileY + Lyra3CoversMetrics::values.homeCoverHeight + hPaddingInSelection + 5;
+      int currentY = tileY + Lyra3CoversMetrics::values.homeCoverHeight + hPaddingInSelection + captionGap;
       for (const auto& line : titleLines) {
         renderer.drawText(SMALL_FONT_ID, tileX + hPaddingInSelection, currentY, line.c_str(), true);
         currentY += titleLineHeight;

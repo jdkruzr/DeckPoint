@@ -3,14 +3,15 @@
 Read `PROGRESS.md` first (dev loop, conventions). Current plan with rationale:
 `/home/jtd/.claude/plans/abstract-weaving-pike.md` (Phase T hybrid touch UX, then round 2).
 
-## 0. In progress — Theme pass (end of session 5, before compaction)
-- **In flight:** an agent is fixing themes for 240x320 (user decisions: hide Cover Grid on
-  small screens with fallback to Lyra; fix Classic home cover/title + Settings header vs version
-  collision; fix Lyra Extended home cover overlapping the menu; scale RoundedRaff for compact
-  screens so home menu fits and tab labels read in full; keep X4 480x800 looks unchanged).
-  Uncommitted edits in src/components/themes/*, UITheme.cpp, FreeInkUI header.h if it didn't
-  finish — check `git status`, host tests, build, then flash and re-run the survey
-  (`themes/survey.sh N tag`, sheets in scratchpad `themes/`; before-shots `sheet_<tag>.png`).
+## 0. Status (end of session 5)
+- **Theme pass DONE** (verified on the glass with `themes/survey.sh`): theme changes gated on
+  `DECKPOINT_COMPACT_UI` (X4 looks unchanged; the FreeInkUI header fix is generic but only fires
+  on overflow). Cover Grid hidden on compact builds (a stored 4 loads as Lyra). Classic and
+  RoundedRaff get a full-width home card (cover left, title beside it); Classic Settings title no
+  longer hits the version; Lyra Extended shows three covers with two-line captions above the
+  menu; RoundedRaff has compact pills, readable small-font tabs, and `keyLegendGap` = 4 so list
+  rows stop clear of the key legend. Not checked: the no-recent-book home state per theme, and
+  long translated tab labels.
 - Round 2a + 2b + cleanup batch are DONE and pushed (see PROGRESS session 5).
 - Release is the near-term goal (user, 2026-10-05).
 
@@ -90,9 +91,8 @@ Read `PROGRESS.md` first (dev loop, conventions). Current plan with rationale:
 - **USB Drive mode** (2026-10-04): while the host has the SD card mounted the mode ignores the
   mic key with no explanation (user thought it froze). Show "Eject on your computer to exit" on
   screen (and as the response to mic). Ejecting on the host releases it.
-- **Theme pass** (user, 2026-10-05): Classic, Lyra Extended, RoundedRaff, Cover Grid look bad on
-  240x320 (our tuning went into Lyra only). Screenshot every theme on each top-level screen via
-  the bridge, list breakages, then fix or hide per theme with the user.
+- **Theme pass** (user, 2026-10-05): Classic, Lyra Extended, RoundedRaff, Cover Grid looked bad
+  on 240x320 (our tuning went into Lyra only). Done (see section 0).
 - **2b part B done** (WebDAV client + settings, untested on the glass): `deckpoint/sync/WebDavClient`
   (GET to SD / PUT from SD with If-Match or If-None-Match: * / PROPFIND Depth 0 / MKCOL; returns
   status, ETag and the `Date:` header), `dav::` URL/status/PROPFIND helpers (test/webdav),

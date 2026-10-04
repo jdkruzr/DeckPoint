@@ -483,11 +483,111 @@ void BaseTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char
   }
 }
 
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+namespace {
+int compactCardCoverWidth = 0;
+
+// DECKPOINT: compact Classic card. The stock card is centered and as wide as
+// the cover (~64px on a 104px tile), too narrow for its title; here the frame
+// spans the content width, the cover sits at its left and the title, author
+// and "Continue Reading" read beside it.
+void drawCompactRecentBookCard(GfxRenderer& renderer, const Rect rect, const std::vector<RecentBook>& recentBooks,
+                               const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
+                               const std::function<bool()>& storeCoverBuffer) {
+  constexpr int inset = 4;
+  constexpr int textGap = 8;
+  const int cardX = rect.x + BaseMetrics::values.contentSidePadding;
+  const int cardW = rect.width - 2 * BaseMetrics::values.contentSidePadding;
+  const int cardY = rect.y;
+  const int cardH = rect.height;
+  const int line12 = renderer.getLineHeight(UI_12_FONT_ID);
+  const int line10 = renderer.getLineHeight(UI_10_FONT_ID);
+
+  if (recentBooks.empty()) {
+    renderer.drawRect(cardX, cardY, cardW, cardH);
+    const int y = cardY + (cardH - line12 - line10) / 2;
+    renderer.drawCenteredText(UI_12_FONT_ID, y, tr(STR_NO_OPEN_BOOK));
+    renderer.drawCenteredText(UI_10_FONT_ID, y + line12, tr(STR_START_READING));
+    return;
+  }
+
+  const RecentBook& book = recentBooks[0];
+  const int coverH = std::min(BaseMetrics::values.homeCoverHeight, cardH - 2 * inset);
+  if (compactCardCoverWidth == 0) compactCardCoverWidth = coverH * 3 / 5;
+  const int coverX = cardX + inset;
+  const int coverY = cardY + (cardH - coverH) / 2;
+
+  if (!coverRendered) {
+    bool hasCover = false;
+    if (!book.coverBmpPath.empty()) {
+      const std::string coverBmpPath =
+          UITheme::getCoverThumbPath(book.coverBmpPath, BaseMetrics::values.homeCoverHeight);
+      HalFile file;
+      if (Storage.openFileForRead("HOME", coverBmpPath, file)) {
+        Bitmap bitmap(file);
+        if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+          compactCardCoverWidth = std::min(bitmap.getWidth(), cardW / 2);
+          hasCover =
+              BaseTheme::drawCoverThumbFill(renderer, bitmap, Rect{coverX, coverY, compactCardCoverWidth, coverH});
+        }
+      }
+    }
+    if (hasCover) {
+      renderer.drawRect(coverX, coverY, compactCardCoverWidth, coverH);
+    } else {
+      BaseTheme::drawCoverPlaceholder(renderer, Rect{coverX, coverY, compactCardCoverWidth, coverH});
+    }
+    renderer.drawRect(cardX, cardY, cardW, cardH);
+    coverBufferStored = storeCoverBuffer();
+    coverRendered = coverBufferStored;
+  }
+
+  const bool bookSelected = selectorIndex == 0;
+  if (bookSelected) {
+    renderer.drawRect(cardX + 1, cardY + 1, cardW - 2, cardH - 2);
+    renderer.drawRect(cardX + 2, cardY + 2, cardW - 4, cardH - 4);
+  }
+
+  const int textX = coverX + compactCardCoverWidth + textGap;
+  const int textW = cardX + cardW - inset - 2 - textX;
+  if (textW <= 0) return;
+
+  // "Continue Reading" anchors the bottom; title and author fill from the top.
+  const char* continueText = tr(STR_CONTINUE_READING);
+  const int continueY = cardY + cardH - inset - 2 - line10;
+  if (bookSelected) {
+    const int boxW = std::min(textW, renderer.getTextWidth(UI_10_FONT_ID, continueText) + 6);
+    renderer.fillRect(textX - 3, continueY - 1, boxW, line10 + 2);
+  }
+  const auto continueLabel = renderer.truncatedText(UI_10_FONT_ID, continueText, textW);
+  renderer.drawText(UI_10_FONT_ID, textX, continueY, continueLabel.c_str(), !bookSelected);
+
+  int y = cardY + inset + 2;
+  const int authorH = book.author.empty() ? 0 : line10;
+  const int titleLines = std::clamp((continueY - 4 - y - authorH) / std::max(1, line12), 1, 3);
+  for (const auto& line : renderer.wrappedText(UI_12_FONT_ID, book.title.c_str(), textW, titleLines)) {
+    renderer.drawText(UI_12_FONT_ID, textX, y, line.c_str());
+    y += line12;
+  }
+  if (!book.author.empty()) {
+    const auto author = renderer.truncatedText(UI_10_FONT_ID, book.author.c_str(), textW);
+    renderer.drawText(UI_10_FONT_ID, textX, y, author.c_str());
+  }
+}
+}  // namespace
+#endif
+
 // Draw the "Recent Book" cover card on the home screen
 // TODO: Refactor method to make it cleaner, split into smaller methods
 void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                     const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
                                     bool& bufferRestored, std::function<bool()> storeCoverBuffer) const {
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+  (void)bufferRestored;
+  drawCompactRecentBookCard(renderer, rect, recentBooks, selectorIndex, coverRendered, coverBufferStored,
+                            storeCoverBuffer);
+  return;
+#endif
   const bool hasContinueReading = !recentBooks.empty();
   const bool bookSelected = hasContinueReading && selectorIndex == 0;
 

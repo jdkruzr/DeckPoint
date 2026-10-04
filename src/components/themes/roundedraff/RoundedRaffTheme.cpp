@@ -16,12 +16,19 @@
 #include "fontIds.h"
 
 namespace {
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+// DECKPOINT: compact pills and card (15px bold labels on ~25px rows).
+constexpr int kCoverRadius = 8;
+constexpr int kInteractiveInsetX = 12;
+constexpr int kMenuRowPaddingY = 4;
+#else
 constexpr int kCoverRadius = 18;
+constexpr int kInteractiveInsetX = 20;
+constexpr int kMenuRowPaddingY = 10;
+#endif
 constexpr int kMenuRadius = 30;
 constexpr int kBottomRadius = 15;
 constexpr int kRowRadius = 20;
-constexpr int kInteractiveInsetX = 20;
-constexpr int kSelectableRowGap = 6;
 constexpr int kTitleFontId = UI_12_FONT_ID;  // Requested main title size: 12px
 constexpr int kGuideFontId = SMALL_FONT_ID;  // Closest available to requested 6px
 
@@ -44,11 +51,91 @@ void drawScrollBar(const GfxRenderer& renderer, Rect rect, int itemCount, int pa
   renderer.fillRect(barX, thumbY, barW, thumbH);
 }
 
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+// DECKPOINT: compact home card. The stock layout centers a 300px cover in a
+// dithered tile and puts the title in the header band; at 240x320 that
+// truncated the title and pushed the menu off-screen. Here a white rounded
+// card holds the cover at its left with the title and author beside it
+// (Continue Reading stays the first menu pill, so the card has no selection).
+void drawCompactHomeCard(GfxRenderer& renderer, const Rect rect, const std::vector<RecentBook>& recentBooks,
+                         bool& coverRendered, bool& coverBufferStored, const std::function<bool()>& storeCoverBuffer) {
+  constexpr int inset = 4;
+  constexpr int textGap = 8;
+  constexpr int cardRadius = 12;
+  static int cardCoverWidth = 0;
+  const int cardX = rect.x + RoundedRaffMetrics::values.contentSidePadding;
+  const int cardW = rect.width - 2 * RoundedRaffMetrics::values.contentSidePadding;
+  const int cardY = rect.y;
+  const int cardH = rect.height;
+
+  if (recentBooks.empty()) {
+    renderer.drawRoundedRect(cardX, cardY, cardW, cardH, 1, cardRadius, true);
+    renderer.drawCenteredText(kTitleFontId, cardY + (cardH - renderer.getLineHeight(kTitleFontId)) / 2,
+                              tr(STR_NO_OPEN_BOOK), true, EpdFontFamily::BOLD);
+    return;
+  }
+
+  const RecentBook& book = recentBooks[0];
+  const int coverH = std::min(RoundedRaffMetrics::values.homeCoverHeight, cardH - 2 * inset);
+  if (cardCoverWidth == 0) cardCoverWidth = coverH * 3 / 5;
+  const int coverX = cardX + inset;
+  const int coverY = cardY + (cardH - coverH) / 2;
+
+  if (!coverRendered) {
+    bool hasCover = false;
+    if (!book.coverBmpPath.empty()) {
+      const std::string coverBmpPath =
+          UITheme::getCoverThumbPath(book.coverBmpPath, RoundedRaffMetrics::values.homeCoverHeight);
+      HalFile file;
+      if (Storage.openFileForRead("HOME", coverBmpPath, file)) {
+        Bitmap bitmap(file);
+        if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+          cardCoverWidth = std::min(bitmap.getWidth(), cardW / 2);
+          hasCover = BaseTheme::drawCoverThumbFill(renderer, bitmap, Rect{coverX, coverY, cardCoverWidth, coverH});
+        }
+      }
+    }
+    if (!hasCover) BaseTheme::drawCoverPlaceholder(renderer, Rect{coverX, coverY, cardCoverWidth, coverH});
+    renderer.maskRoundedRectOutsideCorners(coverX, coverY, cardCoverWidth, coverH, kCoverRadius, Color::White);
+    renderer.drawRoundedRect(coverX, coverY, cardCoverWidth, coverH, 1, kCoverRadius, true);
+    renderer.drawRoundedRect(cardX, cardY, cardW, cardH, 1, cardRadius, true);
+    coverBufferStored = storeCoverBuffer();
+    coverRendered = coverBufferStored;
+  }
+
+  const int textX = coverX + cardCoverWidth + textGap;
+  const int textW = cardX + cardW - inset - 2 - textX;
+  if (textW <= 0) return;
+  const int titleLineHeight = renderer.getLineHeight(kTitleFontId);
+  const int authorLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  const int authorH = book.author.empty() ? 0 : authorLineHeight + 2;
+  const int titleLines = std::clamp((cardH - 2 * inset - authorH) / std::max(1, titleLineHeight), 1, 4);
+  const auto lines = renderer.wrappedText(kTitleFontId, book.title.c_str(), textW, titleLines, EpdFontFamily::BOLD);
+  int y = cardY + (cardH - static_cast<int>(lines.size()) * titleLineHeight - authorH) / 2;
+  for (const auto& line : lines) {
+    renderer.drawText(kTitleFontId, textX, y, line.c_str(), true, EpdFontFamily::BOLD);
+    y += titleLineHeight;
+  }
+  if (!book.author.empty()) {
+    const auto author = renderer.truncatedText(UI_10_FONT_ID, book.author.c_str(), textW);
+    renderer.drawText(UI_10_FONT_ID, textX, y + 2, author.c_str(), true);
+  }
+}
+#endif
+
 }  // namespace
 int coverWidth = 0;
 
 void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle,
                                   const bool backButton) const {
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+  // DECKPOINT: the home band (shorter than a full header) keeps only the
+  // battery; the compact home card shows the book title in full instead.
+  if (rect.height < UITheme::getInstance().getMetrics().headerHeight) {
+    BaseTheme::drawHeader(renderer, rect, nullptr, nullptr, backButton);
+    return;
+  }
+#endif
   // Home screen header is custom-rendered in drawRecentBookCover.
   if (title == nullptr) {
     return;
@@ -59,6 +146,12 @@ void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const 
 void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                            const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
                                            bool& bufferRestored, std::function<bool()> storeCoverBuffer) const {
+#if defined(DECKPOINT_COMPACT_UI) && DECKPOINT_COMPACT_UI
+  (void)selectorIndex;
+  (void)bufferRestored;
+  drawCompactHomeCard(renderer, rect, recentBooks, coverRendered, coverBufferStored, storeCoverBuffer);
+  return;
+#endif
   const int tileWidth = rect.width - 2 * RoundedRaffMetrics::values.contentSidePadding;
   const int tileHeight = rect.height;
   const int tileY = rect.y;
@@ -139,7 +232,7 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
 }
 
 int RoundedRaffTheme::getMenuRowHeight(const GfxRenderer& renderer) const {
-  return renderer.getLineHeight(kTitleFontId) + 20;  // 10px top + 10px bottom
+  return renderer.getLineHeight(kTitleFontId) + 2 * kMenuRowPaddingY;
 }
 
 void RoundedRaffTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
@@ -148,8 +241,8 @@ void RoundedRaffTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int butt
   (void)rowIcon;
   const int sidePadding = RoundedRaffMetrics::values.contentSidePadding;
   const int rowX = rect.x + sidePadding;
-  const int rowHeight = getMenuRowHeight(renderer);  // shared with HomeActivity's touch grid
-  const int rowGap = kSelectableRowGap;
+  const int rowHeight = getMenuRowHeight(renderer);           // shared with HomeActivity's touch grid
+  const int rowGap = RoundedRaffMetrics::values.menuSpacing;  // HomeActivity's touch grid steps by the same gap
   const int rowStep = rowHeight + rowGap;
   const int pageItems = std::max(1, rect.height / rowStep);
   const int safeSelectedIndex = std::max(0, selectedIndex);
@@ -161,7 +254,7 @@ void RoundedRaffTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int butt
   for (int i = pageStartIndex; i < buttonCount && i < pageStartIndex + pageItems; ++i) {
     const std::string label = buttonLabel(i);
     const int rowY = menuTop + (i - pageStartIndex) * rowStep;
-    constexpr int kRowPaddingX = 40;  // 20px L/R
+    constexpr int kRowPaddingX = 2 * kInteractiveInsetX;
     const int maxLabelWidth = std::max(0, menuMaxWidth - kRowPaddingX);
     const std::string truncatedLabel =
         renderer.truncatedText(kTitleFontId, label.c_str(), maxLabelWidth, EpdFontFamily::BOLD);
