@@ -6,7 +6,7 @@ for the **LilyGo T-Deck Pro** (ESP32-S3, 16MB flash, 8MB quad PSRAM, GoodDisplay
 Branch `deckpoint`, base upstream commit `f331030f`. Inspirations and code sources:
 CrossPoint Reader and CrossInk (credit both prominently in user-facing docs).
 
-Last updated: 2026-10-03 (session 3, afternoon).
+Last updated: 2026-10-04 (session 4).
 
 ## Repo layout & conventions
 - Monorepo: `freeink-sdk/` is **vendored** (was a submodule), base `bbd528c`
@@ -117,3 +117,16 @@ Last updated: 2026-10-03 (session 3, afternoon).
   gesture mask + small-screen thresholds (2fea3c0f).
 - Tooling: glass photos stream in via an ntfy listener (memory `glass-photos-ntfy`); LAN exempt from
   ntfy rate limits; keyboard charset rule saved (memory `tdeck-keyboard-charset`).
+
+## Session 4 (2026-10-04)
+- Phase T touch complete: reader tap zones + swipes (T-Deck defaults Tap+Swipe, center-tap menu,
+  one-time settings migration), long-press word = lookup, keyboard modes win over touch, full-pitch
+  list tap targets, Touch section in ? help, hint tags above words (cd799413). Overlays re-render
+  gray pages on close so AA survives (82c07441). Hotspot hints wrap.
+- Legends: mic glyph, " | " separators, "?: Help" always kept; Alt+v also opens help; help pages
+  show the mic icon and page back correctly; Controls hides button-only settings (cd799413,
+  a4a34d0e, 53829855). Side buttons confirmed: UPPER = BOOT/GPIO0 sleep+wake, LOWER = reset.
+- OPDS verified: Gutenberg (read the Odyssey) and a throwaway Kavita (podman `kavita-test`,
+  OPDS at http://192.168.8.95:5000/api/opds/<key>, added via the web UI OPDS page).
+- Round 2 (highlights/notes/annotation sync) planned and approved: see the plan file
+  `/home/jtd/.claude/plans/abstract-weaving-pike.md` (design, AnnotationSync + KOReader spec).

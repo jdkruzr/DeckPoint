@@ -3,13 +3,21 @@
 Read `PROGRESS.md` first (dev loop, conventions). Current plan with rationale:
 `/home/jtd/.claude/plans/abstract-weaving-pike.md` (Phase T hybrid touch UX, then round 2).
 
-## 0. In progress — Phase T steps 3-4 (touch in the reader, lists, help, hint tags)
-- Steps 1-2 done (2fea3c0f). Steps 3-4 were being implemented by an agent at the end of session 3:
-  T-Deck defaults TAP_AND_SWIPE + center-tap menu (with a one-time migration if needed), long-press
-  word = instant lookup, keyboard modes take priority over touch, full-pitch list hit areas, touch
-  checks on every screen, a Touch section in `?` help, hint tags moved above words. If a
-  `wip/touch-reader` branch exists, resume from it; otherwise check `git status` for its edits.
-- Then: on-glass round 3 (real use) and commit.
+## 0. In progress — Round 2a step 1 (position foundations)
+- Plan + research: `/home/jtd/.claude/plans/abstract-weaving-pike.md` (Round 2). User decisions:
+  select by keyboard (`v` + hint labels) AND touch (long-press popup Look up/Highlight/Note);
+  underline style; note editor = bottom sheet (~40% screen, page visible, Shift+Enter newline);
+  2a on-device + export, then 2b WebDAV sync with user's Nextcloud in AnnotationSync format.
+- Step 1 was being implemented by an agent at the end of session 4 (uncommitted edits in the
+  working tree if it didn't finish): fix XPointer counting mismatch (ChapterXPathResolver counts
+  only p/li text and skips whitespace vs layout counting all body text → drift; affects KOSync
+  too) + persist per-word visible offsets in TextBlock (section v55). Check `git status`/diff
+  and the host suite before continuing.
+- Verification plan: user installs KOReader on a Boox Go 6 II, opens the SAME Red Rising EPUB,
+  highlights a few phrases (plain paragraph, Contents div, across a line break), sends
+  `<book>.sdr/metadata.epub.lua` via ntfy (listener saves non-image files too); compare pos0/pos1
+  with DeckPoint's XPointers for the same phrases. AnnotationSync plugin later for 2b.
+- Kavita test server may still be running (`podman stop kavita-test`; ufw rule for port 5000).
 
 ## 1. Done this round (upstream candidates)
 - Stylesheet scoping per document (5f80f808), hanging-indent clamp (bef53e2d), book center/right
