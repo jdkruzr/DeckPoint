@@ -1,5 +1,4 @@
 #include "ActivityManager.h"
-#include "deckpoint/HelpKey.h"  // DECKPOINT
 
 #include <BoardConfig.h>
 #include <FontCacheManager.h>
@@ -18,6 +17,7 @@
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
 #include "components/HeaderBackTapTarget.h"
+#include "deckpoint/HelpKey.h"          // DECKPOINT
 #include "deckpoint/KeyHelpActivity.h"  // DECKPOINT
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
@@ -140,7 +140,10 @@ void ActivityManager::loop() {
       halKeyboard.setRawMode(raw);
       if (raw) {
         freeink::KeyEvent event;
-        while (halKeyboard.pop(event)) currentActivity->onKey(event);
+        // DECKPOINT: a key that navigates (e.g. `:sync` replacing the reader) ends this pass:
+        // later keys belong to the next activity, and the old one's loop() must not
+        // run on its torn-down state and override the navigation.
+        while (pendingAction == PendingAction::None && halKeyboard.pop(event)) currentActivity->onKey(event);
       } else {
         // DECKPOINT: '?' (Sym+v, never bridged to a button) opens key help
         // over any screen; the rest of the queue is dropped.
@@ -155,7 +158,7 @@ void ActivityManager::loop() {
     }
 
     // Note: do not hold a lock here, the loop() method must be responsible for acquire one if needed
-    currentActivity->loop();
+    if (pendingAction == PendingAction::None) currentActivity->loop();
   }
 
   while (pendingAction != PendingAction::None) {
