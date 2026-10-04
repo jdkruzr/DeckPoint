@@ -19,7 +19,11 @@ AddResult AnnotationList::adopt(Annotation&& annotation) {
   const std::string key = annotationKey(annotation);
   if (key.empty()) return AddResult::NotPlaceable;
   annotation.spineIndex = static_cast<int16_t>(spineFromXPointer(annotation.get(Field::Pos0)));
+  annotation.endSpineIndex = static_cast<int16_t>(spineFromXPointer(annotation.get(Field::Pos1)));
   annotation.placement = Placement::Unresolved;
+  if (annotation.isHighlight() && (annotation.spineIndex < 0 || annotation.endSpineIndex < annotation.spineIndex)) {
+    annotation.placement = Placement::Failed;  // not an EPUB range, or ends before it starts: kept, never drawn
+  }
 
   const int existing = find(key);
   const size_t freed = existing >= 0 ? items[static_cast<size_t>(existing)].heapBytes() : 0;
@@ -82,9 +86,51 @@ int AnnotationList::find(const std::string_view key) const {
 
 bool AnnotationList::hasHighlightsIn(const int spineIndex) const {
   for (const auto& a : items) {
-    if (a.spineIndex == spineIndex && !a.deleted && a.isHighlight() && a.placement != Placement::Failed) return true;
+    if (a.spans(spineIndex) && a.isHighlight() && a.placement != Placement::Failed) return true;
   }
   return false;
+}
+
+AnnotationList::PlaceCount AnnotationList::placeChapter(const int spineIndex, const ResolveXPointer resolve,
+                                                        void* ctx) {
+  PlaceCount count;
+  for (auto& a : items) {
+    if (a.placement != Placement::Unresolved || !a.isHighlight() || !a.spans(spineIndex)) continue;
+    // Copies: the resolver takes std::string.
+    const std::string pos0(a.get(Field::Pos0));
+    const std::string pos1(a.get(Field::Pos1));
+    uint32_t start = 0;
+    uint32_t end = 0;
+    bool ok = resolve(ctx, a.spineIndex, pos0, start) && resolve(ctx, a.endSpineIndex, pos1, end);
+    if (ok && a.spineIndex == a.endSpineIndex) ok = end > start;
+    if (ok) {
+      a.startOffset = start;
+      a.endOffset = end;
+      a.placement = Placement::Resolved;
+      count.placed++;
+    } else {
+      a.placement = Placement::Failed;
+      count.failed++;
+    }
+  }
+  return count;
+}
+
+void AnnotationList::rangesFor(const int spineIndex, std::vector<HighlightRange>& out) const {
+  out.clear();
+  for (const auto& a : items) {
+    HighlightRange r{};
+    if (!a.rangeIn(spineIndex, r.start, r.end) || r.end <= r.start) continue;
+    r.hasNote = spineIndex == a.endSpineIndex && a.has(Field::Note);
+    out.push_back(r);
+  }
+}
+
+int AnnotationList::highlightAt(const int spineIndex, const uint32_t offset) const {
+  for (size_t i = items.size(); i-- > 0;) {
+    if (items[i].covers(spineIndex, offset)) return static_cast<int>(i);
+  }
+  return -1;
 }
 
 void AnnotationList::clear() {

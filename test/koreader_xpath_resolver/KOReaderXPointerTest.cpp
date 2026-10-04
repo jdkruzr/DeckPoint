@@ -401,3 +401,35 @@ TEST(KOReaderXPointer, MatchesRealKOReaderAnnotations) {
   std::cout << "  checked " << checked << " KOReader annotations\n";
   EXPECT_GT(checked, 0u);
 }
+
+TEST(KOReaderXPointer, RealCrossChapterRange) {
+  // A highlight from the last sentence of Red Rising ch. 1 (DocFragment[12])
+  // into the first sentence of ch. 2 (DocFragment[13]), as KOReader stores it.
+  // DECKPOINT_XHTML_DIR=<extracted Red Rising 3-Book Bundle>.
+  const char* dir = std::getenv("DECKPOINT_XHTML_DIR");
+  if (!dir || !*dir) GTEST_SKIP() << "set DECKPOINT_XHTML_DIR";
+  const auto ch1 = std::filesystem::path(dir) / "OEBPS/xhtml/01_Brow_9780345539793_epub_c01_r1.xhtml";
+  const auto ch2 = std::filesystem::path(dir) / "OEBPS/xhtml/01_Brow_9780345539793_epub_c02_r1.xhtml";
+  if (!std::filesystem::exists(ch1) || !std::filesystem::exists(ch2)) GTEST_SKIP() << "not the Red Rising bundle";
+  const std::string pos0 = "/body/DocFragment[12]/body/p[39]/text()[2].256";
+  const std::string pos1 = "/body/DocFragment[13]/body/p[1]/text().40";
+
+  std::vector<std::string> spine(11);
+  spine.push_back(readFile(ch1));
+  spine.push_back(readFile(ch2));
+  credomref::Dom dom1;
+  credomref::Dom dom2;
+  ASSERT_TRUE(dom1.build(spine[11]));
+  ASSERT_TRUE(dom2.build(spine[12]));
+  const auto epub = std::make_shared<Epub>(std::move(spine));
+
+  const auto start = ChapterXPathResolver::findVisibleTextOffsetForXPath(epub, 11, pos0);
+  const auto end = ChapterXPathResolver::findVisibleTextOffsetForXPath(epub, 12, pos1);
+  ASSERT_TRUE(start.has_value());
+  ASSERT_TRUE(end.has_value());
+  EXPECT_EQ(collapsed(dom1.rawText.substr(*start)), collapsed(toU32("To a Helldiver, it is the smell of death.")));
+  EXPECT_EQ(collapsed(dom2.rawText.substr(0, *end)),
+            collapsed(toU32("2 THE TOWNSHIP My suit can\xE2\x80\x99t handle the heat down here.")));
+  EXPECT_EQ(ChapterXPathResolver::findXPathForVisibleTextOffset(epub, 11, *start, Bias::Start, Style::Legacy), pos0);
+  EXPECT_EQ(ChapterXPathResolver::findXPathForVisibleTextOffset(epub, 12, *end, Bias::End, Style::Legacy), pos1);
+}

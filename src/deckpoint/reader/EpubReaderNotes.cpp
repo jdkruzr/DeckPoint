@@ -89,7 +89,7 @@ bool EpubReaderActivity::openPendingNoteLocked(std::unique_ptr<deckpoint::reader
   const Annotation& a = (*list)[static_cast<size_t>(index)];
   bool onPage = false;
   for (const auto& w : session->words) {
-    if (w.visibleOffset >= a.startOffset && w.visibleOffset < a.endOffset) {
+    if (a.covers(currentSpineIndex, w.visibleOffset)) {
       onPage = true;
       break;
     }

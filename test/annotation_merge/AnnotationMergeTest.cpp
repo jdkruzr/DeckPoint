@@ -304,6 +304,42 @@ TEST(AnnotationMerge, ChaptersOrderNumerically) {
   EXPECT_EQ(run.report.added, 1);
 }
 
+TEST(AnnotationMerge, RangeAcrossChaptersOverlapsWhatItCovers) {
+  // KOReader's DocFragment[9] p[40] .. DocFragment[11] p[1]: covers all of [10].
+  const Spec across{xp(40, 100, 9), xp(1, 30, 11), "across", "", NEWER};
+  AnnotationList local, remote, snapshot;
+  put(local, {xp(3, 0, 10), xp(3, 8, 10), "inside"});
+  put(remote, across);
+  MergeRun run;
+  merge(local, remote, snapshot, run);
+  ASSERT_EQ(run.merged.size(), 1u);
+  EXPECT_NE(find(run.merged, keyOf(across)), nullptr);
+  EXPECT_EQ(run.report.conflicts, 1);
+}
+
+TEST(AnnotationMerge, RangeAcrossChaptersTouchesAtItsEndChapter) {
+  // Ends inclusive in the end chapter; one character later is disjoint.
+  const Spec across{xp(40, 100, 9), xp(1, 30, 11), "across", "", NEWER};
+  {
+    AnnotationList local, remote, snapshot;
+    put(local, {xp(1, 30, 11), xp(1, 40, 11), "touching"});
+    put(remote, across);
+    MergeRun run;
+    merge(local, remote, snapshot, run);
+    EXPECT_EQ(run.merged.size(), 1u);
+  }
+  {
+    AnnotationList local, remote, snapshot;
+    put(local, {xp(1, 31, 11), xp(1, 40, 11), "after"});
+    put(local, {xp(40, 0, 9), xp(40, 99, 9), "before"});
+    put(remote, across);
+    MergeRun run;
+    merge(local, remote, snapshot, run);
+    EXPECT_EQ(run.merged.size(), 3u);
+    EXPECT_EQ(run.report.conflicts, 0);
+  }
+}
+
 // --- tombstones (rule 5) --------------------------------------------------------
 
 TEST(AnnotationMerge, OurTombstoneDeletesAnUploadedRemoteEntry) {

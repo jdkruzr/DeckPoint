@@ -503,3 +503,159 @@ TEST(AnnotationGeometry, TimestampFormat) {
   EXPECT_STREQ(out, "2026-10-04 02:05:09");
   EXPECT_EQ(strlen(UNSET_TIMESTAMP), MAX_DATETIME_BYTES);
 }
+
+// --- placement across chapters -------------------------------------------------
+
+namespace {
+// Fake resolver: "/body/DocFragment[N]/body/p/text().O" -> O in spine N-1, recording calls.
+struct FakeResolver {
+  std::vector<std::pair<int, std::string>> calls;
+  std::string failOn;
+};
+bool fakeResolve(void* ctx, const int spine, const std::string& xpointer, uint32_t& out) {
+  auto* r = static_cast<FakeResolver*>(ctx);
+  r->calls.emplace_back(spine, xpointer);
+  if (xpointer == r->failOn || spineFromXPointer(xpointer) != spine) return false;
+  out = static_cast<uint32_t>(std::stoul(xpointer.substr(xpointer.rfind('.') + 1)));
+  return true;
+}
+std::string at(const int fragment, const int offset) {
+  return "/body/DocFragment[" + std::to_string(fragment) + "]/body/p/text()." + std::to_string(offset);
+}
+}  // namespace
+
+TEST(AnnotationPlacement, SameChapterRange) {
+  AnnotationList list;
+  ASSERT_EQ(list.adopt(makeHighlight(at(5, 10), at(5, 20), "w", "n")), AddResult::Added);
+  EXPECT_EQ(list[0].spineIndex, 4);
+  EXPECT_EQ(list[0].endSpineIndex, 4);
+  FakeResolver r;
+  EXPECT_EQ(list.placeChapter(4, &fakeResolve, &r).placed, 1u);
+  std::vector<HighlightRange> ranges;
+  list.rangesFor(4, ranges);
+  ASSERT_EQ(ranges.size(), 1u);
+  EXPECT_EQ(ranges[0].start, 10u);
+  EXPECT_EQ(ranges[0].end, 20u);
+  EXPECT_TRUE(ranges[0].hasNote);
+  EXPECT_EQ(list.highlightAt(4, 19), 0);
+  EXPECT_EQ(list.highlightAt(4, 20), -1);  // pos1 exclusive
+}
+
+TEST(AnnotationPlacement, RangeAcrossChaptersCoversEveryChapterItTouches) {
+  // DocFragment[12] offset 300 .. DocFragment[14] offset 40: spines 11, 12, 13.
+  AnnotationList list;
+  ASSERT_EQ(list.adopt(makeHighlight(at(12, 300), at(14, 40), "w", "a note")), AddResult::Added);
+  const Annotation& a = list[0];
+  EXPECT_EQ(a.spineIndex, 11);
+  EXPECT_EQ(a.endSpineIndex, 13);
+  EXPECT_FALSE(list.hasHighlightsIn(10));
+  EXPECT_TRUE(list.hasHighlightsIn(11));
+  EXPECT_TRUE(list.hasHighlightsIn(12));
+  EXPECT_TRUE(list.hasHighlightsIn(13));
+  EXPECT_FALSE(list.hasHighlightsIn(14));
+
+  // Opening the middle chapter first resolves both ends, each in its own chapter.
+  FakeResolver r;
+  EXPECT_EQ(list.placeChapter(12, &fakeResolve, &r).placed, 1u);
+  ASSERT_EQ(r.calls.size(), 2u);
+  EXPECT_EQ(r.calls[0].first, 11);
+  EXPECT_EQ(r.calls[1].first, 13);
+  EXPECT_EQ(a.placement, Placement::Resolved);
+  EXPECT_EQ(a.startOffset, 300u);
+  EXPECT_EQ(a.endOffset, 40u);
+  // Once: the other chapters do not resolve it again.
+  list.placeChapter(11, &fakeResolve, &r);
+  list.placeChapter(13, &fakeResolve, &r);
+  EXPECT_EQ(r.calls.size(), 2u);
+
+  std::vector<HighlightRange> ranges;
+  ranges.reserve(2);
+  list.rangesFor(11, ranges);  // pos0 to the chapter's end
+  ASSERT_EQ(ranges.size(), 1u);
+  EXPECT_EQ(ranges[0].start, 300u);
+  EXPECT_EQ(ranges[0].end, UINT32_MAX);
+  EXPECT_FALSE(ranges[0].hasNote);
+  list.rangesFor(12, ranges);  // the whole chapter
+  ASSERT_EQ(ranges.size(), 1u);
+  EXPECT_EQ(ranges[0].start, 0u);
+  EXPECT_EQ(ranges[0].end, UINT32_MAX);
+  EXPECT_FALSE(ranges[0].hasNote);
+  list.rangesFor(13, ranges);  // the chapter's start to pos1; the note marker belongs here
+  ASSERT_EQ(ranges.size(), 1u);
+  EXPECT_EQ(ranges[0].start, 0u);
+  EXPECT_EQ(ranges[0].end, 40u);
+  EXPECT_TRUE(ranges[0].hasNote);
+  list.rangesFor(10, ranges);
+  EXPECT_TRUE(ranges.empty());
+  list.rangesFor(14, ranges);
+  EXPECT_TRUE(ranges.empty());
+
+  // Any part finds the one entry.
+  EXPECT_EQ(list.highlightAt(11, 299), -1);
+  EXPECT_EQ(list.highlightAt(11, 300), 0);
+  EXPECT_EQ(list.highlightAt(11, 100000), 0);
+  EXPECT_EQ(list.highlightAt(12, 0), 0);
+  EXPECT_EQ(list.highlightAt(13, 39), 0);
+  EXPECT_EQ(list.highlightAt(13, 40), -1);
+
+  // One delete removes it everywhere.
+  ASSERT_TRUE(list.tombstone(0, "2026-10-05 12:00:00"));
+  for (int spine = 11; spine <= 13; spine++) {
+    EXPECT_FALSE(list.hasHighlightsIn(spine));
+    EXPECT_EQ(list.highlightAt(spine, 30), -1);
+    list.rangesFor(spine, ranges);
+    EXPECT_TRUE(ranges.empty());
+  }
+}
+
+TEST(AnnotationPlacement, CrossChapterNoteMarkerOnlyWhereItEnds) {
+  AnnotationList list;
+  ASSERT_EQ(list.adopt(makeHighlight(at(12, 5), at(13, 9), "w", "note")), AddResult::Added);
+  FakeResolver r;
+  list.placeChapter(11, &fakeResolve, &r);
+  const PageWord words[] = {{0, 4, 0, 0, 0}, {5, 9, 20, 0, 0}, {10, 14, 40, 0, 0}};
+  MeasureLog log;
+  std::vector<MarkRect> out;
+  std::vector<HighlightRange> ranges;
+
+  // Last page of spine 11: words 2-3 underlined, no marker.
+  list.rangesFor(11, ranges);
+  planPageMarks(words, 3, ranges.data(), ranges.size(), STYLE, &measureFixed, &log, out);
+  ASSERT_EQ(out.size(), 1u);
+  EXPECT_EQ(out[0].x, 20);
+  EXPECT_EQ(out[0].w, 30);
+
+  // First page of spine 12: words 1-2 underlined, marker after word 2.
+  list.rangesFor(12, ranges);
+  planPageMarks(words, 3, ranges.data(), ranges.size(), STYLE, &measureFixed, &log, out);
+  ASSERT_EQ(out.size(), 2u);
+  EXPECT_EQ(out[0].x, 0);
+  EXPECT_EQ(out[0].w, 30);
+  EXPECT_EQ(out[1].x, 20 + 10 + 1);
+}
+
+TEST(AnnotationPlacement, UnresolvableEndFailsTheWholeRange) {
+  AnnotationList list;
+  ASSERT_EQ(list.adopt(makeHighlight(at(12, 5), at(14, 9))), AddResult::Added);
+  FakeResolver r;
+  r.failOn = at(14, 9);
+  EXPECT_EQ(list.placeChapter(12, &fakeResolve, &r).failed, 1u);
+  EXPECT_EQ(list[0].placement, Placement::Failed);
+  EXPECT_FALSE(list.hasHighlightsIn(11));
+  EXPECT_FALSE(list.hasHighlightsIn(12));
+  EXPECT_EQ(list.highlightAt(12, 0), -1);
+}
+
+TEST(AnnotationPlacement, BackwardsOrNonEpubRangesAreNeverPlaced) {
+  AnnotationList list;
+  ASSERT_EQ(list.adopt(makeHighlight(at(14, 5), at(12, 9))), AddResult::Added);
+  ASSERT_EQ(list.adopt(makeHighlight("/body/DocFragment[3]/body/p/text().1", "page 7")), AddResult::Added);
+  EXPECT_EQ(list[0].placement, Placement::Failed);
+  EXPECT_EQ(list[1].placement, Placement::Failed);
+  FakeResolver r;
+  for (int spine = 0; spine < 16; spine++) {
+    EXPECT_FALSE(list.hasHighlightsIn(spine));
+    list.placeChapter(spine, &fakeResolve, &r);
+  }
+  EXPECT_TRUE(r.calls.empty());
+}
