@@ -42,26 +42,40 @@ Read `PROGRESS.md` first (dev loop, conventions). Current plan with rationale:
   seeds never upload, remote backup). Wipe the T-Deck's `/.crosspoint/annotations/` (test data)
   before the first real sync.
 - **2b follow-ups** (2026-10-05):
-  - Overlap rule (copied from AnnotationSync): touching/overlapping highlights collapse to the
-    newer one. Make it lossless where it matters: when a merge drops the loser of an overlap and
-    the loser has a note, append that note to the winner's note (marked as merged) — Boox sees an
-    edited note, nothing written is lost. Plus: creating a T-Deck highlight that touches/overlaps
-    an existing one offers "extend existing highlight" instead of making a second one.
+  - Overlap rule made lossless for notes (done, host-tested, untested on the glass): when two
+    *different* highlights collapse in a merge, the loser's note is appended to the winner's
+    (`\n\n[merged] `, `mergeNoteText`; idempotent, cut at MAX_NOTE_BYTES with a log, both
+    entries kept when nothing fits) and the winner gets datetime_updated = now so the Boox sees
+    the edit. Same-key pairs stay plain edits (newer wins). A tombstone no longer takes a
+    different, noted live highlight down (both kept). MAX_NOTE_BYTES is now 2047 (2048-byte
+    notes did not read back: StreamingJsonParser::TOKEN_BUF_SIZE). Creating a highlight that
+    touches/overlaps existing ones (ends inclusive) asks Extend highlight / Cancel (Enter =
+    Extend): one union entry, notes joined in order, old keys tombstoned; only when all of them
+    are on the page (else saved alongside as before). Code: AnnotationMerge, planExtend
+    (SelectionSession), AnnotationStore::replacePlacedAndSave, EpubReaderSelection.cpp.
+    Known: keeping both entries (no room / tombstone) is unstable on the AnnotationSync side,
+    which re-collapses them there by its own rule.
   - Verified 2026-10-04: T-Deck -> Nextcloud -> desktop KOReader (v2026.07.1 + AnnotationSync
     v2.0.0, run headless on Xvfb :77 from the scratchpad, KO_HOME=scratchpad/kohome) draws the
     T-Deck highlight as an underline on the exact words; Boox -> Nextcloud -> T-Deck pulled 6.
   - Timestamps are local time without a zone (AnnotationSync format): the T-Deck's timezone was
-    unset (UTC) so its edits looked ~4 h newer. Warn when annotation sync is on and no timezone
-    is set; all devices must share one timezone.
-  - Clock settings (Time Zone, DST, format) are hidden on boards without an RTC chip
-    (SettingsActivity.cpp:105 `halClock.isAvailable()`), so the T-Deck can only set its zone via
-    the web settings page. Show Clock settings whenever the device keeps time (TrustedTime /
-    network sync), and point the no-timezone warning there.
+    unset (UTC) so its edits looked ~4 h newer. Built (not verified): warning line in Annotation
+    Sync settings and under a successful sync result while no zone is chosen
+    (`timezones::isChosen()`); all devices must share one timezone.
+  - Clock settings now listed on every board (built, not verified). Without an RTC: Time Zone,
+    DST and Sync Clock Now (shows the time once `trustedtime::isCurrent()`); format / show-in-
+    header hidden (nothing draws a clock). HalClock reads the system clock and NTP-syncs it when
+    there is no RTC; header/status-bar clocks stay RTC-gated.
   - SecureHttpClient treated unframed 204 as body-until-close (20 s stall, PUT reported failed
     though it succeeded): fixed (no-body statuses / HEAD). Watch other servers for similar quirks.
-- **Modifier keys** (user got stuck with Alt locked): Alt never locks (double tap = one-shot);
-  status-bar badge whenever Shift/Sym/Alt is latched or locked (state at BoardTDeckPro.cpp:450);
-  also covers the note editor's Caps-Lock-makes-Enter-a-newline trap.
+- **Modifier keys — built, not verified on the glass** (2026-10-04): Alt never locks (second
+  tap cancels the one-shot; `StickyModifier` in BoardTDeckPro/src, test/modifier_badge). Badge
+  ("SHIFT"/"CAPS"/"SYM"/"SYM LOCK"/"ALT", deckpoint/ModifierBadge) in every GUI.drawHeader header
+  (clock slot), the `:` command band, the note sheet (Caps Lock: "CAPS: Enter = new line") and the
+  reader status bar (locks only, and only when its text lane is on). New bits show after 300 ms
+  stable (Sym+':' never flashes), removals at once. `Activity::onModifiersChanged()` defaults to
+  requestUpdate(); the reader re-renders the page only on lock changes. Left: screens without a
+  GUI header (KeyHelp, full-screen readers other than EPUB, the reader with its status bar off).
 - **Theme pass** (user, 2026-10-05): Classic, Lyra Extended, RoundedRaff, Cover Grid look bad on
   240x320 (our tuning went into Lyra only). Screenshot every theme on each top-level screen via
   the bridge, list breakages, then fix or hide per theme with the user.
@@ -98,12 +112,18 @@ Read `PROGRESS.md` first (dev loop, conventions). Current plan with rationale:
   `deckpoint` after restarts; creds in the session scratchpad only). Kavita may still run
   (`podman stop kavita-test`).
 - Nits found 2026-10-04:
-  - KOSync "Document Matching" defaulted to Filename on the T-Deck; default to Binary and
-    probably hide Filename (user: filename matching is "a recipe for utter disaster").
-  - Our KOSync percentage (0.75727) is lower than KOReader's (0.7582) for a position slightly
-    *ahead* of it; KOReader may treat ours as behind. Align the percentage formula.
-  - Wi-Fi Networks header: title and "N networks found" overtype at 240 px.
-  - KOReader Sync settings: "Sync Server URL" label truncates to "Sync Server ...".
+  - Done (built): KOSync Document Matching defaults to Binary, row hidden on the device (web
+    settings still offer it); koreader.json cfgVersion 3 migrates a stored Filename to Binary once.
+  - KOSync percentage (was 0.75727 vs KOReader's 0.7582 slightly behind us): KOReader pushes
+    current_page / page_count (1-based, i.e. the END of its page, floored to 4 decimals); we
+    pushed spine-bytes x page/(pages-1). Now pushed (and compared) as `koreaderPercentage`
+    (end of our page, 4 decimals); bookmarks/rich position keep the old value. Residual: up
+    to one KOReader page (~0.1% in a 1000-page layout) plus byte-vs-layout weighting; it only
+    matters for KOReader's "already synchronized" equality and the prompt text: with a server
+    that returns `timestamp` (koreader/kosync does) KOReader picks ahead/behind by timestamp,
+    not percentage (kosync.koplugin main.lua getProgress).
+  - Done (built): Wi-Fi Networks header folds the count into the title ("Wi-Fi Networks (5)")
+    when title + count do not fit; KOReader Sync row label is "Server".
   - Reader page showed a leading space before a paragraph (" A new river…", Red Rising ch. 1);
     check whether it's text-indent rendering or a v55 regression.
   - Highlight ends are whole-word: "prisoners…we" (no space) underlines "we" too; KOReader stops

@@ -27,6 +27,10 @@ size_t count();
 // UTC. 255 in the setting means "never chosen".
 uint8_t activeIndex();
 
+// DECKPOINT: true when the user picked a zone (or set the legacy offset);
+// false while activeIndex() is only the UTC default.
+bool isChosen();
+
 // Format an entry's standard offset as "UTC+HH:MM" / "UTC-H:MM" / "UTC".
 void formatOffset(uint8_t index, char* buf, size_t bufSize);
 

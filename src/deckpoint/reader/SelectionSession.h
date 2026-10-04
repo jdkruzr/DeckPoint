@@ -100,15 +100,48 @@ class SelectionText {
   bool full = false;
 };
 
-enum class SelectionAction : uint8_t { None, LookUp, Highlight, Note, EditNote, Delete };
+// An existing live highlight placed in the current chapter: its visible
+// offsets and its AnnotationList index.
+struct PlacedHighlight {
+  uint32_t start;
+  uint32_t end;
+  int index;
+};
 
-// The popup over a word: Look up / Highlight / Note, or over an existing
-// highlight: Edit note / Delete / Look up. j / k (and the arrows) move the
+// Touching or overlapping, ends inclusive: [0,5) and [5,9) touch, as in
+// annotation_sweep.positions_intersect (which the sync merge collapses).
+constexpr bool rangesTouch(const OffsetRange a, const OffsetRange b) { return a.start <= b.end && b.start <= a.end; }
+
+// What a new selection does to the highlights it touches.
+struct ExtendPlan {
+  static constexpr uint8_t MAX_JOINED = 8;
+  enum class Kind : uint8_t {
+    None,     // touches nothing: a new highlight
+    Extend,   // union with `count` highlights (indices, in position order)
+    Covered,  // inside one highlight already: nothing to extend
+    OffPage,  // a touched highlight leaves the page: not offered (page-local)
+    TooMany,  // more than MAX_JOINED touched: not offered
+  };
+  Kind kind = Kind::None;
+  OffsetRange range;  // the union (Extend / Covered)
+  uint8_t count = 0;
+  int indices[MAX_JOINED] = {};
+};
+
+// Joins every highlight that touches the selection, and transitively those
+// touching the growing union. `page` bounds the page's words.
+ExtendPlan planExtend(OffsetRange selection, const PlacedHighlight* highlights, size_t count, OffsetRange page);
+
+enum class SelectionAction : uint8_t { None, LookUp, Highlight, Note, EditNote, Delete, Extend, Cancel };
+
+// The popup over a word: Look up / Highlight / Note, over an existing
+// highlight: Edit note / Delete / Look up, or after a selection touching
+// existing highlights: Extend highlight / Cancel. j / k (and the arrows) move the
 // cursor, Enter chooses it, a row's letter chooses that row, Esc / Backspace
 // cancel.
 class ActionMenu {
  public:
-  enum class Kind : uint8_t { Word, Highlight };
+  enum class Kind : uint8_t { Word, Highlight, Extend };
   enum class Result : uint8_t { Ignored, Moved, Chosen, Cancelled };
   static constexpr uint8_t MAX_ITEMS = 3;
 

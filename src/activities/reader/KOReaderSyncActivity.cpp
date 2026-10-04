@@ -40,12 +40,14 @@ std::string calculateDocumentHashForMethod(const std::string& path, const Docume
                                                  : KOReaderDocumentId::calculate(path);
 }
 
-DocumentMatchMethod alternateMatchMethod(const DocumentMatchMethod method) {
-  return method == DocumentMatchMethod::FILENAME ? DocumentMatchMethod::BINARY : DocumentMatchMethod::FILENAME;
-}
-
 const char* matchMethodName(const DocumentMatchMethod method) {
   return method == DocumentMatchMethod::FILENAME ? "filename" : "binary";
+}
+
+// DECKPOINT: the percentage in KOReader's semantics (end of the current page),
+// for what we push and compare against KOReader's own pushes.
+float kosyncPercent(const SavedProgressPosition& p) {
+  return p.kosyncPercentage >= 0.0f ? p.kosyncPercentage : p.percentage;
 }
 
 }  // namespace
@@ -218,37 +220,11 @@ void KOReaderSyncActivity::performSync() {
   }
   requestUpdateAndWait();
 
-  // Fetch remote progress. In smart mode, retain the alternate document-id
-  // record until both records can be mapped after the Epub is reloaded.
+  // Fetch remote progress (binary document id only: filename matching pairs unrelated books).
   auto result = KOReaderSyncClient::getProgress(documentHash, remoteProgress);
   LOG_DBG("KOSync", "Primary remote (%s): result=%d http=%d doc=%s local=%.6f remote=%.6f xpath=%s",
           matchMethodName(primaryMethod), result, KOReaderSyncClient::lastHttpCode, documentHash.c_str(),
           localProgress.percentage, remoteProgress.percentage, remoteProgress.progress.c_str());
-
-  KOReaderProgress alternateProgress;
-  bool hasAlternateProgress = false;
-  if (smartSyncEnabled()) {
-    const DocumentMatchMethod altMethod = alternateMatchMethod(primaryMethod);
-    const std::string altHash = calculateDocumentHashForMethod(epubPath, altMethod);
-    if (!altHash.empty() && altHash != documentHash) {
-      KOReaderProgress altProgress;
-      const auto altResult = KOReaderSyncClient::getProgress(altHash, altProgress);
-      LOG_DBG("KOSync", "Alternate remote (%s): result=%d http=%d doc=%s local=%.6f remote=%.6f xpath=%s",
-              matchMethodName(altMethod), altResult, KOReaderSyncClient::lastHttpCode, altHash.c_str(),
-              localProgress.percentage, altProgress.percentage, altProgress.progress.c_str());
-
-      if (altResult == KOReaderSyncClient::OK) {
-        alternateProgress = std::move(altProgress);
-        hasAlternateProgress = true;
-      }
-    }
-  }
-
-  if (result == KOReaderSyncClient::NOT_FOUND && hasAlternateProgress) {
-    remoteProgress = std::move(alternateProgress);
-    hasAlternateProgress = false;
-    result = KOReaderSyncClient::OK;
-  }
 
   if (result == KOReaderSyncClient::NOT_FOUND) {
     if (smartSyncEnabled()) {
@@ -313,24 +289,13 @@ void KOReaderSyncActivity::performSync() {
     };
 
     remotePosition = mapRemoteProgress(remoteProgress);
-    if (hasAlternateProgress) {
-      const CrossPointPosition alternatePosition = mapRemoteProgress(alternateProgress);
-      if (selectRemoteRecord(remotePosition, remoteProgress.percentage, alternatePosition,
-                             alternateProgress.percentage) == RemoteRecordChoice::Alternate) {
-        remoteProgress = std::move(alternateProgress);
-        remotePosition = alternatePosition;
-        LOG_DBG("KOSync", "Selected alternate remote record after mapped-position comparison");
-      } else {
-        LOG_DBG("KOSync", "Kept primary remote record after mapped-position comparison");
-      }
-    }
   }
 
   const ProgressComparison comparison =
-      compareProgress(localPosition, localProgress.percentage, remotePosition, remoteProgress.percentage);
+      compareProgress(localPosition, kosyncPercent(localProgress), remotePosition, remoteProgress.percentage);
   if (smartSyncEnabled()) {
     LOG_DBG("KOSync", "Smart decision: doc=%s result=%d local=%.6f remote=%.6f remoteXpath=%s mapped=%d/%d",
-            primaryHash.c_str(), static_cast<int>(comparison), localProgress.percentage, remoteProgress.percentage,
+            primaryHash.c_str(), static_cast<int>(comparison), kosyncPercent(localProgress), remoteProgress.percentage,
             remoteProgress.progress.c_str(), remotePosition.spineIndex, remotePosition.pageNumber);
     switch (comparison) {
       case ProgressComparison::Synchronized:
@@ -370,7 +335,7 @@ void KOReaderSyncActivity::performUpload() {
   KOReaderProgress progress;
   progress.document = documentHash;
   progress.progress = localProgress.xpath;
-  progress.percentage = localProgress.percentage;
+  progress.percentage = kosyncPercent(localProgress);
 
   // Rich CrossPoint position for the default CrossPoint sync server (lossless
   // CrossPoint<->CrossPoint sync). The HTTP client also enforces this boundary
@@ -552,7 +517,7 @@ void KOReaderSyncActivity::buildResultScreen(UiScreen& screen) {
              remoteProgress.percentage * 100);
     char localVal[64];
     snprintf(localVal, sizeof(localVal), tr(STR_PAGE_TOTAL_OVERALL_FORMAT), localPosition.pageNumber + 1,
-             localPosition.totalPages, localProgress.percentage * 100);
+             localPosition.totalPages, kosyncPercent(localProgress) * 100);
     char deviceStr[80];
     deviceStr[0] = '\0';
     if (!remoteProgress.device.empty()) {

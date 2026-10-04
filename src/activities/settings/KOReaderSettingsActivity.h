@@ -25,5 +25,7 @@ class KOReaderSettingsActivity final : public UiListActivity {
   // in the constructor; buildScreen() only refreshes the live value text
   // (rowValues_) by assigning into the existing strings (no array growth).
   std::string rowValues_[MENU_ITEMS];
+  // Visible rows (Document Matching is hidden); actionValue is the menu item.
   freeink::ui::ListItem rowItems_[MENU_ITEMS]{};
+  int rowCount_ = 0;
 };

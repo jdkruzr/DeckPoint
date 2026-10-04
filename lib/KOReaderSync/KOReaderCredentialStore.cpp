@@ -15,7 +15,8 @@ constexpr char DEFAULT_SERVER_URL[] = "https://sync.crosspointreader.com";
 constexpr char LEGACY_DEFAULT_SERVER_URL[] = "https://sync.koreader.rocks:443";
 
 // Bumped when a change to defaults would alter behavior for existing configs.
-constexpr uint8_t CONFIG_VERSION = 2;
+// v3 (DECKPOINT): matchMethod defaults to Binary; older Filename is migrated.
+constexpr uint8_t CONFIG_VERSION = kosync::MATCH_METHOD_BINARY_DEFAULT_VERSION;
 }  // namespace
 
 void KOReaderCredentialStore::toJson(JsonDocument& doc) const {
@@ -43,20 +44,20 @@ bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
   // out from under the user. Fresh setups get the new default.
   const uint8_t cfgVersion = doc["cfgVersion"] | (uint8_t)1;
   if (cfgVersion < CONFIG_VERSION) {
-    if (getServerUrl().empty() && hasCredentials()) {
+    if (cfgVersion < 2 && getServerUrl().empty() && hasCredentials()) {
       LOG_DBG("KRS", "Pre-v2 config used the old default server; pinning %s", LEGACY_DEFAULT_SERVER_URL);
       setServerUrl(LEGACY_DEFAULT_SERVER_URL);
     }
     needsResave = true;  // stamp cfgVersion so this migration runs once
   }
 
-  uint8_t method = doc["matchMethod"] | (uint8_t)0;
-  if (method <= static_cast<uint8_t>(DocumentMatchMethod::BINARY)) {
-    setMatchMethod(static_cast<DocumentMatchMethod>(method));
-  } else {
-    LOG_DBG("KRS", "Invalid matchMethod %u in JSON, resetting to FILENAME", method);
-    setMatchMethod(DocumentMatchMethod::FILENAME);
+  const int storedMethod = doc["matchMethod"] | static_cast<int>(DocumentMatchMethod::BINARY);
+  const DocumentMatchMethod method = kosync::loadMatchMethod(storedMethod, cfgVersion);
+  if (static_cast<int>(method) != storedMethod) {
+    LOG_INF("KRS", "matchMethod %d (config v%u) -> Binary", storedMethod, cfgVersion);
+    needsResave = true;
   }
+  setMatchMethod(method);
   setSendMetadata(doc["sendMetadata"] | false);
 
   const JsonVariantConst behaviorValue = doc["syncBehavior"];

@@ -110,8 +110,16 @@ bool closeInTime(const std::string_view a, const std::string_view b) {
 struct Emit {
   uint16_t index;
   bool remote;
-  bool stamp;  // write `now` into its effective stamp (undated or clamped)
+  bool stamp;             // write `now` into its effective stamp (undated or clamped)
+  int16_t combined = -1;  // index into the combined notes: replace the note, stamp updated
 };
+
+// Start of the last (possibly partial) UTF-8 character that ends within `max`.
+size_t utf8Cut(const std::string_view s, size_t max) {
+  if (max >= s.size()) return s.size();
+  while (max > 0 && (static_cast<uint8_t>(s[max]) & 0xC0) == 0x80) max--;
+  return max;
+}
 
 void sortedFingerprints(const AnnotationList& list, const bool includeLocalOnly, std::vector<uint64_t>& out) {
   out.clear();
@@ -123,6 +131,29 @@ void sortedFingerprints(const AnnotationList& list, const bool includeLocalOnly,
 }
 
 }  // namespace
+
+bool noteAlreadyMerged(const std::string_view note, const std::string_view other) {
+  if (other.empty() || note.find(other) != std::string_view::npos) return true;
+  const size_t marker = note.rfind(MERGED_NOTE_MARKER);
+  if (marker == std::string_view::npos) return false;
+  const std::string_view tail = note.substr(marker + MERGED_NOTE_MARKER.size());
+  return !tail.empty() && other.substr(0, tail.size()) == tail;
+}
+
+NoteMerge mergeNoteText(std::string& note, const std::string_view other, const size_t maxBytes) {
+  if (noteAlreadyMerged(note, other)) return NoteMerge::Unchanged;
+  if (note.empty()) {
+    note.assign(other.data(), other.size());
+    return NoteMerge::Appended;
+  }
+  const size_t used = note.size() + MERGED_NOTE_MARKER.size();
+  const size_t room = used < maxBytes ? maxBytes - used : 0;
+  const size_t take = utf8Cut(other, room);
+  if (take == 0) return NoteMerge::NoRoom;
+  note.append(MERGED_NOTE_MARKER.data(), MERGED_NOTE_MARKER.size());
+  note.append(other.data(), take);
+  return take < other.size() ? NoteMerge::Truncated : NoteMerge::Appended;
+}
 
 void snapshotKeys(const AnnotationList& snapshot, std::vector<uint64_t>& out) {
   out.clear();
@@ -159,6 +190,8 @@ MergeReport mergeAnnotations(AnnotationList& local, AnnotationList& remote, cons
 
   std::vector<Emit> emits;
   emits.reserve(local.size() + remote.size());
+  // Rare (overlaps with notes on both devices), so no reserve: usually empty.
+  std::vector<std::string> combinedNotes;
   const auto emitLocal = [&](const uint16_t i) { emits.push_back({i, false, L.restamp[i] != 0}); };
   const auto emitRemote = [&](const uint16_t i) { emits.push_back({i, true, R.restamp[i] != 0}); };
 
@@ -201,9 +234,40 @@ MergeReport mergeAnnotations(AnnotationList& local, AnnotationList& remote, cons
     }
     const bool same = contentHash(la) == contentHash(ra) && !L.restamp[l] && !R.restamp[r];
     if (!same) report.conflicts++;
+    bool keepLoser = false;
+    int16_t combined = -1;
+    // A tombstone never takes a different, noted live highlight down with it:
+    // the delete propagates and the other highlight stays.
+    if (L.key[l] != R.key[r] && (localWins ? la.deleted && !ra.deleted && ra.has(Field::Note)
+                                           : ra.deleted && !la.deleted && la.has(Field::Note))) {
+      keepLoser = true;
+      report.notesRescued++;
+    }
+    // Two different live highlights collapse: the loser's note goes on.
+    if (L.key[l] != R.key[r] && !la.deleted && !ra.deleted) {
+      const Annotation& winner = localWins ? la : ra;
+      const Annotation& loser = localWins ? ra : la;
+      const std::string_view loserNote = loser.get(Field::Note);
+      if (!loserNote.empty() && !noteAlreadyMerged(winner.get(Field::Note), loserNote)) {
+        std::string note(winner.get(Field::Note));
+        // Only a long winner note can leave no room, so the cap is its own.
+        const NoteMerge m = mergeNoteText(note, loserNote, std::max(MAX_NOTE_BYTES, note.size()));
+        if (m == NoteMerge::NoRoom) {
+          keepLoser = true;
+          report.notesKeptApart++;
+        } else {
+          combined = static_cast<int16_t>(combinedNotes.size());
+          combinedNotes.push_back(std::move(note));
+          report.notesMerged++;
+          if (m == NoteMerge::Truncated) report.notesTruncated++;
+        }
+      }
+    }
     if (localWins) {
       emitLocal(l);
-      if (!same && !ra.deleted) {
+      emits.back().combined = combined;
+      if (keepLoser) emitRemote(r);
+      if (!same && !ra.deleted && !keepLoser) {
         if (la.deleted) report.deletedRemotely++;
         if (la.deleted || (ra.has(Field::Text) && !la.has(Field::Text)) ||
             (ra.has(Field::Note) && !la.has(Field::Note))) {
@@ -212,7 +276,9 @@ MergeReport mergeAnnotations(AnnotationList& local, AnnotationList& remote, cons
       }
     } else {
       emitRemote(r);
-      if (!same) {
+      emits.back().combined = combined;
+      if (keepLoser) emitLocal(l);
+      if (!same && !keepLoser) {
         if (ra.deleted && !la.deleted) {
           report.deletedLocally++;
         } else if (!ra.deleted) {
@@ -261,6 +327,9 @@ MergeReport mergeAnnotations(AnnotationList& local, AnnotationList& remote, cons
     const Annotation& a = e.remote ? remote[e.index] : local[e.index];
     bytes += a.heapBytes();
     if (e.stamp) bytes += now.size() > effectiveStamp(a).size() ? now.size() - effectiveStamp(a).size() : 0;
+    if (e.combined >= 0) {
+      bytes += combinedNotes[e.combined].size() - a.get(Field::Note).size() + now.size();
+    }
   }
   if (emits.size() > AnnotationList::MAX_ANNOTATIONS || bytes > merged.blobBudgetBytes()) {
     report = MergeReport{};
@@ -285,6 +354,22 @@ MergeReport mergeAnnotations(AnnotationList& local, AnnotationList& remote, cons
       }
       if (a.undated) report.stamped++;
       a.undated = false;
+    }
+    if (e.combined >= 0) {
+      if (!a.set(Field::Note, combinedNotes[e.combined])) {
+        report.status = MergeStatus::OutOfMemory;
+        return report;
+      }
+      // The combined note is a new edit. Without a current clock the next
+      // sync stamps it (rule 3).
+      if (clockOk) {
+        if (!a.set(Field::DatetimeUpdated, now)) {
+          report.status = MergeStatus::OutOfMemory;
+          return report;
+        }
+      } else {
+        a.undated = true;
+      }
     }
     // A seed never displaces a real entry with the same key.
     if (a.localOnly && merged.find(annotationKey(a)) >= 0) {

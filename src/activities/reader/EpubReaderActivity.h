@@ -457,6 +457,8 @@ class EpubReaderActivity final : public ReaderActivity {
   // DECKPOINT: raw keyboard keys while reading (see wantsRawKeys gating).
   bool wantsRawKeys() const override;
   void onKey(const freeink::KeyEvent& event) override;
+  // DECKPOINT: badge in the note sheet / command line / status bar (locks only).
+  void onModifiersChanged(uint8_t before, uint8_t after) override;
   void loop() override;
   void render(RenderLock&& lock) override;
 

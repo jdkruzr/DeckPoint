@@ -82,3 +82,35 @@ TEST(ProgressComparison, AlternateRecordMustBeStrictlyAhead) {
                                std::numeric_limits<float>::infinity()),
             RemoteRecordChoice::Primary);
 }
+
+// DECKPOINT: KOReader's percentage semantics (current_page / page_count,
+// 1-based, Math.roundPercent).
+TEST(KOReaderPercentage, EndOfTheCurrentPage) {
+  // A one-chapter book of 4 pages: KOReader says 0.25 on the first page.
+  EXPECT_FLOAT_EQ(koreaderPercentage(0.0f, 1.0f, 0, 4), 0.25f);
+  EXPECT_FLOAT_EQ(koreaderPercentage(0.0f, 1.0f, 3, 4), 1.0f);
+  // Chapter spanning 0.5..0.75 of the book, page 2 of 10 (0-based 1).
+  EXPECT_FLOAT_EQ(koreaderPercentage(0.5f, 0.75f, 1, 10), 0.55f);
+}
+
+TEST(KOReaderPercentage, FlooredToFourDecimals) {
+  EXPECT_FLOAT_EQ(koreaderPercentage(0.0f, 1.0f, 0, 3), 0.3333f);
+  EXPECT_FLOAT_EQ(koreaderPercentage(0.0f, 1.0f, 1, 3), 0.6666f);
+  // Exact values survive float noise (0.7582 is not 0.7581).
+  EXPECT_FLOAT_EQ(koreaderPercentage(0.7f, 0.8f, 581, 1000), 0.7582f);
+}
+
+TEST(KOReaderPercentage, NeverBehindThePageStart) {
+  // The pushed value is at or past where the page starts, so a position a
+  // little ahead of KOReader's page start no longer reads as "behind" it.
+  for (int page = 0; page < 50; page++) {
+    const float start = 0.2f + 0.1f * static_cast<float>(page) / 50.0f;
+    EXPECT_GE(koreaderPercentage(0.2f, 0.3f, page, 50) + 1e-4f, start);
+  }
+}
+
+TEST(KOReaderPercentage, DegenerateInputsStayInRange) {
+  EXPECT_FLOAT_EQ(koreaderPercentage(0.4f, 0.6f, 0, 0), 0.4f);
+  EXPECT_FLOAT_EQ(koreaderPercentage(0.9f, 1.2f, 9, 1), 1.0f);
+  EXPECT_FLOAT_EQ(koreaderPercentage(0.0f, 0.1f, -3, 5), 0.0f);
+}

@@ -73,6 +73,10 @@ class Activity {
   // DECKPOINT: hand-written key help for the global '?' screen; screens
   // without one fall back to their last drawn key legend.
   virtual const deckpoint::KeyHelp* keyHelp() const { return nullptr; }
+  // DECKPOINT: the sticky-modifier badge (deckpoint/ModifierBadge) changed from
+  // `before` to `after` (keymods:: bits). Headers draw it, so the default
+  // re-renders; screens without a header or with a cheaper path override.
+  virtual void onModifiersChanged(uint8_t /*before*/, uint8_t /*after*/) { requestUpdate(); }
 
   // Start a new activity without destroying the current one
   // Note: requestUpdate() will be invoked automatically once resultHandler finishes

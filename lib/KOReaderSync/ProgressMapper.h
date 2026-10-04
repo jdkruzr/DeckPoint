@@ -15,6 +15,9 @@
 struct SavedProgressPosition {
   std::string xpath;  // XPath-like progress string
   float percentage;   // Progress percentage (0.0 to 1.0)
+  // DECKPOINT: what KOSync pushes, in KOReader's semantics (koreaderPercentage:
+  // end of the current page, 4 decimals). Negative when not computed.
+  float kosyncPercentage = -1.0f;
 };
 
 /**

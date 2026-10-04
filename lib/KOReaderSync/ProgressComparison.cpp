@@ -1,5 +1,6 @@
 #include "ProgressComparison.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace {
@@ -48,4 +49,13 @@ RemoteRecordChoice selectRemoteRecord(const CrossPointPosition& primary, const f
   return compareProgress(primary, primaryPercentage, alternate, alternatePercentage) == ProgressComparison::RemoteAhead
              ? RemoteRecordChoice::Alternate
              : RemoteRecordChoice::Primary;
+}
+
+float koreaderPercentage(const float chapterStart, const float chapterEnd, const int page, const int totalPages) {
+  double within = totalPages > 0 ? static_cast<double>(page + 1) / static_cast<double>(totalPages) : 0.0;
+  within = std::min(1.0, std::max(0.0, within));
+  double pct = chapterStart + (static_cast<double>(chapterEnd) - chapterStart) * within;
+  pct = std::min(1.0, std::max(0.0, pct));
+  // Math.roundPercent; the epsilon keeps 0.7582 from flooring to 0.7581.
+  return static_cast<float>(std::floor(pct * 10000.0 + 1e-6) / 10000.0);
 }

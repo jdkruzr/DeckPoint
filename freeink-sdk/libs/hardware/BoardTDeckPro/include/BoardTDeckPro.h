@@ -47,8 +47,10 @@ void flushKeys();
 void setRawKeyMode(bool raw);
 bool rawKeyMode();
 
-// Modifier state for a status-bar indicator. Latched = one-shot (next key),
-// locked = sticky until tapped again.
+// Sticky modifier state for a status-bar indicator: shift / sym / alt are true
+// while one is latched (one-shot for the next key) or locked (until tapped
+// again); a modifier merely held down for a chord is not reported. Alt never
+// locks (altLocked stays false).
 struct ModifierState {
   bool shift, shiftLocked;
   bool sym, symLocked;

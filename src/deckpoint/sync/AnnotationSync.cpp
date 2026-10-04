@@ -10,6 +10,7 @@
 #include "AnnotationSyncStore.h"
 #include "WebDavClient.h"
 #include "deckpoint/annotations/AnnotationStore.h"
+#include "util/Timezones.h"
 
 using deckpoint::annotations::AnnotationList;
 using deckpoint::annotations::AnnotationStore;
@@ -260,6 +261,8 @@ void describe(const BookResult& result, char* line1, const size_t line1Size, cha
   if (result.ok()) {
     const SummaryText text{tr(STR_HL_UP_TO_DATE), tr(STR_HL_UPLOADED), tr(STR_HL_CHANGES), tr(STR_HL_CHANGES_UPLOADED)};
     formatSummary(result.summary, text, line1, line1Size);
+    // Stamps are zone-less local time; a UTC device skews newer-wins merges.
+    if (!timezones::isChosen()) snprintf(line2, line2Size, "%s", tr(STR_HL_SET_TIMEZONE));
     return;
   }
   snprintf(line1, line1Size, "%s", tr(STR_HL_SYNC_FAILED));

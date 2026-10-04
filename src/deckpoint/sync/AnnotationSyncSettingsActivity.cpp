@@ -15,8 +15,10 @@
 #include "WebDavClient.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
+#include "components/UIScale.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/Timezones.h"
 
 namespace fui = freeink::ui;
 
@@ -142,6 +144,16 @@ void AnnotationSyncSettingsActivity::buildScreen(UiScreen& screen) {
   rowValues[ROW_TEST] = store.isConfigured() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
   for (int i = 0; i < MENU_ITEMS; i++) rowItems[i].value = rowValues[i].empty() ? nullptr : rowValues[i].c_str();
   GUI.setCheckboxRow(rowItems[ROW_ENABLED], store.isEnabled());
+
+  // Annotation timestamps are local time without a zone: a device left on
+  // UTC looks hours newer or older than the others in newer-wins merges.
+  if (store.isEnabled() && !timezones::isChosen()) {
+    fui::TextAreaProps warning;
+    warning.text = tr(STR_SET_TIMEZONE_WARNING);
+    warning.showCaret = false;
+    warning.style = screen.theme().smallText;
+    screen.textArea(warning, static_cast<int16_t>(2 * renderer.getLineHeight(uiScaleSpec().smallFontId) + 4));
+  }
 
   fui::ListProps props;
   props.items = rowItems;

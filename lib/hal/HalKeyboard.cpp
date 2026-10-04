@@ -14,6 +14,14 @@ bool HalKeyboard::pop(freeink::KeyEvent& out) { return BoardTDeckPro::popKey(out
 void HalKeyboard::flush() { BoardTDeckPro::flushKeys(); }
 void HalKeyboard::setRawMode(const bool raw) { BoardTDeckPro::setRawKeyMode(raw); }
 bool HalKeyboard::rawMode() const { return BoardTDeckPro::rawKeyMode(); }
+uint8_t HalKeyboard::stickyModifiers() const {
+  const BoardTDeckPro::ModifierState m = BoardTDeckPro::modifiers();
+  uint8_t bits = 0;
+  if (m.shift) bits |= m.shiftLocked ? keymods::SHIFT_LOCK : keymods::SHIFT;
+  if (m.sym) bits |= m.symLocked ? keymods::SYM_LOCK : keymods::SYM;
+  if (m.alt) bits |= keymods::ALT;
+  return bits;
+}
 
 #else
 
@@ -22,5 +30,6 @@ bool HalKeyboard::pop(freeink::KeyEvent&) { return false; }
 void HalKeyboard::flush() {}
 void HalKeyboard::setRawMode(bool) {}
 bool HalKeyboard::rawMode() const { return false; }
+uint8_t HalKeyboard::stickyModifiers() const { return 0; }
 
 #endif

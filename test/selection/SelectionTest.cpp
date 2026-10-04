@@ -304,3 +304,91 @@ TEST(BarLayout, AwayFromTheAnchor) {
   EXPECT_EQ(high.hit(200, 10), BarLayout::NONE);
   EXPECT_EQ(high.cancel.w + high.confirm.w, 240);
 }
+
+// --- extending an existing highlight ---------------------------------------------
+
+namespace {
+constexpr deckpoint::reader::OffsetRange PAGE{100, 900};
+}  // namespace
+
+TEST(ExtendPlan, TouchingIsInclusiveLikeKOReader) {
+  using deckpoint::reader::rangesTouch;
+  EXPECT_TRUE(rangesTouch({0, 5}, {5, 9}));
+  EXPECT_TRUE(rangesTouch({5, 9}, {0, 5}));
+  EXPECT_TRUE(rangesTouch({0, 9}, {3, 4}));
+  EXPECT_FALSE(rangesTouch({0, 5}, {6, 9}));  // a space between: separate
+}
+
+TEST(ExtendPlan, NothingTouchedIsANewHighlight) {
+  const deckpoint::reader::PlacedHighlight hs[] = {{120, 130, 4}, {300, 320, 7}};
+  const auto plan = deckpoint::reader::planExtend({200, 250}, hs, 2, PAGE);
+  EXPECT_EQ(plan.kind, deckpoint::reader::ExtendPlan::Kind::None);
+  EXPECT_EQ(plan.count, 0);
+}
+
+TEST(ExtendPlan, OverlapAndTouchJoinInPositionOrder) {
+  using deckpoint::reader::ExtendPlan;
+  // The selection overlaps 7 and touches 4 at its start.
+  const deckpoint::reader::PlacedHighlight hs[] = {{240, 300, 7}, {150, 200, 4}, {500, 510, 9}};
+  const auto plan = deckpoint::reader::planExtend({200, 260}, hs, 3, PAGE);
+  ASSERT_EQ(plan.kind, ExtendPlan::Kind::Extend);
+  ASSERT_EQ(plan.count, 2);
+  EXPECT_EQ(plan.indices[0], 4);
+  EXPECT_EQ(plan.indices[1], 7);
+  EXPECT_EQ(plan.range.start, 150u);
+  EXPECT_EQ(plan.range.end, 300u);
+}
+
+TEST(ExtendPlan, JoinsTransitively) {
+  // The selection touches 1 only; the grown union then touches 2.
+  const deckpoint::reader::PlacedHighlight hs[] = {{400, 450, 2}, {300, 400, 1}};
+  const auto plan = deckpoint::reader::planExtend({250, 310}, hs, 2, PAGE);
+  ASSERT_EQ(plan.kind, deckpoint::reader::ExtendPlan::Kind::Extend);
+  EXPECT_EQ(plan.count, 2);
+  EXPECT_EQ(plan.range.start, 250u);
+  EXPECT_EQ(plan.range.end, 450u);
+}
+
+TEST(ExtendPlan, SelectionInsideAHighlightIsCovered) {
+  const deckpoint::reader::PlacedHighlight hs[] = {{50, 400, 3}};  // starts on an earlier page
+  const auto plan = deckpoint::reader::planExtend({200, 250}, hs, 1, PAGE);
+  ASSERT_EQ(plan.kind, deckpoint::reader::ExtendPlan::Kind::Covered);
+  EXPECT_EQ(plan.indices[0], 3);
+  const deckpoint::reader::PlacedHighlight same[] = {{200, 250, 5}};
+  EXPECT_EQ(deckpoint::reader::planExtend({200, 250}, same, 1, PAGE).kind,
+            deckpoint::reader::ExtendPlan::Kind::Covered);
+}
+
+TEST(ExtendPlan, HighlightLeavingThePageIsNotOffered) {
+  const deckpoint::reader::PlacedHighlight hs[] = {{850, 950, 3}};
+  const auto plan = deckpoint::reader::planExtend({800, 860}, hs, 1, PAGE);
+  EXPECT_EQ(plan.kind, deckpoint::reader::ExtendPlan::Kind::OffPage);
+  EXPECT_EQ(plan.count, 0);
+}
+
+TEST(ExtendPlan, TooManyIsNotOffered) {
+  using deckpoint::reader::ExtendPlan;
+  deckpoint::reader::PlacedHighlight hs[ExtendPlan::MAX_JOINED + 1];
+  for (int i = 0; i <= ExtendPlan::MAX_JOINED; i++) {
+    hs[i] = {static_cast<uint32_t>(200 + 10 * i), static_cast<uint32_t>(205 + 10 * i), i};
+  }
+  EXPECT_EQ(deckpoint::reader::planExtend({200, 300}, hs, ExtendPlan::MAX_JOINED + 1, PAGE).kind,
+            ExtendPlan::Kind::TooMany);
+}
+
+TEST(ActionMenu, ExtendMenuDefaultsToExtend) {
+  ActionMenu m;
+  m.open(ActionMenu::Kind::Extend);
+  ASSERT_EQ(m.count(), 2);
+  EXPECT_EQ(m.item(0), SelectionAction::Extend);
+  EXPECT_EQ(m.item(1), SelectionAction::Cancel);
+  freeink::KeyEvent enter{};
+  enter.special = freeink::SpecialKey::Enter;
+  ASSERT_EQ(m.feed(enter), ActionMenu::Result::Chosen);
+  EXPECT_EQ(m.chosen(), SelectionAction::Extend);
+  m.open(ActionMenu::Kind::Extend);
+  freeink::KeyEvent c{};
+  c.ch = 'c';
+  ASSERT_EQ(m.feed(c), ActionMenu::Result::Chosen);
+  EXPECT_EQ(m.chosen(), SelectionAction::Cancel);
+}

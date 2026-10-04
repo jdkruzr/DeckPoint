@@ -5,11 +5,7 @@
 #include <cstdint>
 #include <string>
 
-// Document matching method for KOReader sync
-enum class DocumentMatchMethod : uint8_t {
-  FILENAME = 0,  // Match by filename (simpler, works across different file sources)
-  BINARY = 1,    // Match by partial MD5 of file content (more accurate, but files must be identical)
-};
+#include "KOReaderMatchMethod.h"
 
 // How manual "Sync Progress" resolves differences after fetching remote progress.
 enum class KOReaderSyncBehavior : uint8_t {
@@ -28,9 +24,9 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
  private:
   std::string username;
   std::string password;
-  std::string serverUrl;                                            // Custom sync server URL (empty = default)
-  DocumentMatchMethod matchMethod = DocumentMatchMethod::FILENAME;  // Default to filename for compatibility
-  bool sendMetadata = false;                                        // Send document metadata with progress sync
+  std::string serverUrl;                                          // Custom sync server URL (empty = default)
+  DocumentMatchMethod matchMethod = DocumentMatchMethod::BINARY;  // DECKPOINT: KOReader's default
+  bool sendMetadata = false;                                      // Send document metadata with progress sync
   KOReaderSyncBehavior syncBehavior = KOReaderSyncBehavior::SMART;
 
   // Private constructor for singleton

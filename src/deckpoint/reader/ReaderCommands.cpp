@@ -27,6 +27,7 @@
 #include "activities/reader/ReaderUtils.h"
 #include "deckpoint/KeyHelp.h"
 #include "deckpoint/KeyHelpActivity.h"
+#include "deckpoint/ModifierBadge.h"
 #include "deckpoint/SleepRequest.h"
 #include "deckpoint/sync/AnnotationSync.h"
 #include "fontIds.h"
@@ -376,7 +377,14 @@ void EpubReaderActivity::drawCommandLine() const {
 
   const int x = marginLeft + BAND_PAD;
   const int y = top + BAND_BORDER + BAND_PAD;
-  const int maxW = screenW - marginLeft - marginRight - 2 * BAND_PAD;
+  int maxW = screenW - marginLeft - marginRight - 2 * BAND_PAD;
+  // Sticky-modifier badge at the right end of the band.
+  const char* badge = deckpoint::modifierBadgeText();
+  if (badge[0] != '\0') {
+    const int badgeW = renderer.getTextWidth(UI_10_FONT_ID, badge, EpdFontFamily::BOLD);
+    renderer.drawText(UI_10_FONT_ID, x + maxW - badgeW, y, badge, true, EpdFontFamily::BOLD);
+    maxW -= badgeW + BAND_PAD;
+  }
 
   if (cmdMessage[0] != '\0') {
     const std::string shown = renderer.truncatedText(UI_10_FONT_ID, cmdMessage, maxW, EpdFontFamily::BOLD);

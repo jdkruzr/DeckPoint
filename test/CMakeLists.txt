@@ -96,6 +96,8 @@ add_subdirectory(touch_policy)
 add_subdirectory(http_date)  # DECKPOINT
 add_subdirectory(annotation_merge)  # DECKPOINT
 add_subdirectory(annotation_sync)  # DECKPOINT
+add_subdirectory(modifier_badge)  # DECKPOINT
+add_subdirectory(kosync_match_method)  # DECKPOINT
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME TrustedTimeTimezone COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_trusted_time.py)

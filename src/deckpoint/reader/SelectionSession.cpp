@@ -1,5 +1,7 @@
 #include "SelectionSession.h"
 
+#include <algorithm>
+
 #include "deckpoint/annotations/AnnotationGeometry.h"
 
 namespace deckpoint::reader {
@@ -138,14 +140,78 @@ void ActionMenu::open(const Kind kind) {
     items[0] = SelectionAction::LookUp;
     items[1] = SelectionAction::Highlight;
     items[2] = SelectionAction::Note;
-  } else {
+  } else if (kind == Kind::Highlight) {
     items[0] = SelectionAction::EditNote;
     items[1] = SelectionAction::Delete;
     items[2] = SelectionAction::LookUp;
+  } else {
+    items[0] = SelectionAction::Extend;
+    items[1] = SelectionAction::Cancel;
+    items[2] = SelectionAction::None;
   }
-  itemCount = 3;
+  itemCount = kind == Kind::Extend ? 2 : 3;
   cursorRow = 0;
   chosenAction = SelectionAction::None;
+}
+
+ExtendPlan planExtend(const OffsetRange selection, const PlacedHighlight* highlights, const size_t count,
+                      const OffsetRange page) {
+  ExtendPlan plan;
+  plan.range = selection;
+  if (selection.empty() || highlights == nullptr) return plan;
+  // Fixpoint: a highlight joins when it touches the union so far. At most
+  // count passes; pages hold a handful of highlights.
+  uint64_t joined = 0;  // bit i: highlights[i] (first 64 considered)
+  size_t total = 0;
+  for (bool grew = true; grew;) {
+    grew = false;
+    for (size_t i = 0; i < count && i < 64; i++) {
+      if ((joined >> i) & 1) continue;
+      const OffsetRange h{highlights[i].start, highlights[i].end};
+      if (h.empty() || !rangesTouch(plan.range, h)) continue;
+      joined |= uint64_t{1} << i;
+      total++;
+      plan.range.start = std::min(plan.range.start, h.start);
+      plan.range.end = std::max(plan.range.end, h.end);
+      grew = true;
+    }
+  }
+  if (total == 0) return plan;
+  if (total == 1) {
+    // One highlight that already spans the whole selection: nothing grows
+    // (wherever it ends).
+    for (size_t i = 0; i < count && i < 64; i++) {
+      if (((joined >> i) & 1) && highlights[i].start <= selection.start && selection.end <= highlights[i].end) {
+        plan.kind = ExtendPlan::Kind::Covered;
+        plan.count = 1;
+        plan.indices[0] = highlights[i].index;
+        return plan;
+      }
+    }
+  }
+  if (total > ExtendPlan::MAX_JOINED) {
+    plan.kind = ExtendPlan::Kind::TooMany;
+    return plan;
+  }
+  for (size_t i = 0; i < count && i < 64; i++) {
+    if (!((joined >> i) & 1)) continue;
+    if (highlights[i].start < page.start || highlights[i].end > page.end) {
+      plan.kind = ExtendPlan::Kind::OffPage;
+      plan.count = 0;
+      return plan;
+    }
+    // Insertion in position order.
+    uint8_t j = plan.count++;
+    while (j > 0 && highlights[i].start < highlights[plan.indices[j - 1]].start) {
+      plan.indices[j] = plan.indices[j - 1];
+      j--;
+    }
+    plan.indices[j] = static_cast<int>(i);
+  }
+  plan.kind = ExtendPlan::Kind::Extend;
+  // indices hold positions in `highlights` so far: map to list indices.
+  for (uint8_t j = 0; j < plan.count; j++) plan.indices[j] = highlights[plan.indices[j]].index;
+  return plan;
 }
 
 char ActionMenu::shortcut(const SelectionAction action) {
@@ -159,6 +225,10 @@ char ActionMenu::shortcut(const SelectionAction action) {
       return 'n';
     case SelectionAction::Delete:
       return 'x';
+    case SelectionAction::Extend:
+      return 'e';
+    case SelectionAction::Cancel:
+      return 'c';
     case SelectionAction::None:
     default:
       return 0;

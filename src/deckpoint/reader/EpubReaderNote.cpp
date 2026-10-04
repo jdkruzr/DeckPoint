@@ -17,6 +17,7 @@
 // the next one. Closing restores the stored page (gray pages re-render).
 
 #include <GfxRenderer.h>
+#include <HalKeyboard.h>
 #include <I18n.h>
 #include <Logging.h>
 
@@ -29,6 +30,7 @@
 #include "activities/reader/EpubReaderActivity.h"
 #include "components/UITheme.h"
 #include "deckpoint/KeyLegend.h"
+#include "deckpoint/ModifierBadge.h"
 #include "deckpoint/annotations/Annotation.h"
 #include "fontIds.h"
 
@@ -237,7 +239,12 @@ void EpubReaderActivity::drawNoteSheet() const {
   button(g.save, tr(STR_SEL_SAVE), true);
   const int midX = g.cancel.x + g.cancel.w + PAD;
   const int midW = g.save.x - PAD - midX;
-  const char* mid = s.sheetMessage ? s.sheetMessage : tr(STR_NOTE_HINT_NEWLINE);
+  // Sticky modifiers replace the hint: Caps Lock turns Enter into a newline.
+  const uint8_t mods = deckpoint::shownModifiers();
+  const char* mid = s.sheetMessage                      ? s.sheetMessage
+                    : (mods & keymods::SHIFT_LOCK) != 0 ? tr(STR_NOTE_HINT_CAPS)
+                    : mods != 0                         ? deckpoint::modifierBadgeText()
+                                                        : tr(STR_NOTE_HINT_NEWLINE);
   if (midW > 0) {
     const int hintLineH = renderer.getLineHeight(HINT_FONT_ID);
     const auto lines = renderer.wrappedText(HINT_FONT_ID, mid, midW, 2);

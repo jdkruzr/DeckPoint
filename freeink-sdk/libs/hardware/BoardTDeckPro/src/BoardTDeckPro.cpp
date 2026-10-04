@@ -7,6 +7,8 @@
 #include <Tca8418.h>
 #include <Wire.h>
 
+#include "StickyModifier.h"
+
 using freeink::KeyEvent;
 using freeink::SpecialKey;
 namespace KeyMod = freeink::KeyMod;
@@ -20,15 +22,15 @@ constexpr int8_t PIN_I2C_SCL = 14;
 constexpr int8_t PIN_KB_INT = 15;
 constexpr int8_t PIN_KB_LED = 42;
 constexpr int8_t PIN_LORA_CS = 3;
-constexpr int8_t PIN_LORA_EN = 46;    // load switch for LORA_VDD (whole radio supply)
+constexpr int8_t PIN_LORA_EN = 46;  // load switch for LORA_VDD (whole radio supply)
 constexpr int8_t PIN_LORA_BUSY = 6;
 constexpr int8_t PIN_SPI_SCK = 36;
 constexpr int8_t PIN_SPI_MISO = 47;
 constexpr int8_t PIN_SPI_MOSI = 33;
 constexpr int8_t PIN_GPS_EN = 39;
 constexpr int8_t PIN_MODEM_EN = 41;
-constexpr int8_t PIN_MOTOR = 2;          // v1.0 vibration motor / v1.1 DRV2605 enable
-constexpr int8_t PIN_GYRO_1V8_EN = 38;   // v1.0 only (v1.1 reuses 38 as touch RST)
+constexpr int8_t PIN_MOTOR = 2;           // v1.0 vibration motor / v1.1 DRV2605 enable
+constexpr int8_t PIN_GYRO_1V8_EN = 38;    // v1.0 only (v1.1 reuses 38 as touch RST)
 constexpr int8_t PIN_TOUCH_RST_V10 = 45;  // v1.1 reuses 45 for the front-light PWM
 constexpr int8_t PIN_TOUCH_RST_V11 = 38;
 constexpr int8_t PIN_EPD_RST_V11 = 16;
@@ -64,16 +66,44 @@ constexpr KeyDef R(KeyRole r, char y = 0) { return {r, 0, 0, y}; }
 
 constexpr KeyDef KEYMAP[35] = {
     // row 0 (codes 1..10): p o i u y t r e w q
-    C('p', 'P', '@'), C('o', 'O', '+'), C('i', 'I', '-'), C('u', 'U', '_'), C('y', 'Y', ')'),
-    C('t', 'T', '('), C('r', 'R', '3'), C('e', 'E', '2'), C('w', 'W', '1'), C('q', 'Q', '#'),
+    C('p', 'P', '@'),
+    C('o', 'O', '+'),
+    C('i', 'I', '-'),
+    C('u', 'U', '_'),
+    C('y', 'Y', ')'),
+    C('t', 'T', '('),
+    C('r', 'R', '3'),
+    C('e', 'E', '2'),
+    C('w', 'W', '1'),
+    C('q', 'Q', '#'),
     // row 1 (11..20): ⌫ l k j h g f d s a
-    R(KeyRole::Backspace), C('l', 'L', '"'), C('k', 'K', '\''), C('j', 'J', ';'), C('h', 'H', ':'),
-    C('g', 'G', '/'), C('f', 'F', '6'), C('d', 'D', '5'), C('s', 'S', '4'), C('a', 'A', '*'),
+    R(KeyRole::Backspace),
+    C('l', 'L', '"'),
+    C('k', 'K', '\''),
+    C('j', 'J', ';'),
+    C('h', 'H', ':'),
+    C('g', 'G', '/'),
+    C('f', 'F', '6'),
+    C('d', 'D', '5'),
+    C('s', 'S', '4'),
+    C('a', 'A', '*'),
     // row 2 (21..30): ⏎ $ m n b v c x z Alt
-    R(KeyRole::Enter), C('$', '$', '$'), C('m', 'M', '.'), C('n', 'N', ','), C('b', 'B', '!'),
-    C('v', 'V', '?'), C('c', 'C', '9'), C('x', 'X', '8'), C('z', 'Z', '7'), R(KeyRole::Alt),
+    R(KeyRole::Enter),
+    C('$', '$', '$'),
+    C('m', 'M', '.'),
+    C('n', 'N', ','),
+    C('b', 'B', '!'),
+    C('v', 'V', '?'),
+    C('c', 'C', '9'),
+    C('x', 'X', '8'),
+    C('z', 'Z', '7'),
+    R(KeyRole::Alt),
     // row 3 (31..35): R⇧ Sym Space 🎤 L⇧ — the mic key is Esc (Sym: '0')
-    R(KeyRole::Shift), R(KeyRole::Sym), R(KeyRole::Space), R(KeyRole::Escape, '0'), R(KeyRole::Shift),
+    R(KeyRole::Shift),
+    R(KeyRole::Sym),
+    R(KeyRole::Space),
+    R(KeyRole::Escape, '0'),
+    R(KeyRole::Shift),
 };
 
 const KeyDef* lookup(uint8_t code) {
@@ -82,38 +112,10 @@ const KeyDef* lookup(uint8_t code) {
 }
 
 // --- modifiers -------------------------------------------------------------------
-// Each modifier works two ways: chorded (held while another key is pressed) or
-// sticky (tapped alone: one-shot for the next key; tapped twice: locked; tapped
-// once more: off).
-struct Modifier {
-  uint8_t heldCount = 0;  // two Shift keys can be down at once
-  bool usedWhileHeld = false;
-  bool latched = false;
-  bool locked = false;
-
-  bool active() const { return heldCount > 0 || latched || locked; }
-  void press() {
-    heldCount++;
-    usedWhileHeld = false;
-  }
-  void release() {
-    if (heldCount > 0) heldCount--;
-    if (heldCount > 0 || usedWhileHeld) return;
-    if (locked) {
-      locked = false;
-    } else if (latched) {
-      latched = false;
-      locked = true;
-    } else {
-      latched = true;
-    }
-  }
-  void consume() {
-    if (heldCount > 0) usedWhileHeld = true;
-    latched = false;
-  }
-};
-Modifier s_shift, s_sym, s_alt;
+// See StickyModifier. Alt never locks: a locked Alt silently turns every key
+// into a command, and nothing on the keycaps says so. Its second tap cancels.
+using Modifier = StickyModifier;
+Modifier s_shift, s_sym, s_alt{false};
 
 Modifier* modifierFor(KeyRole role) {
   switch (role) {
@@ -235,8 +237,8 @@ void handlePress(uint8_t code) {
   enqueue(e);
 #ifdef DECKPOINT_KEY_DEBUG
   if (Serial) {
-    Serial.printf("[%lu] [KEY] code=%u ch=%c special=%u mods=0x%02x bridge=0x%02x\n", millis(), code,
-                  e.ch ? e.ch : '-', static_cast<unsigned>(e.special), e.mods, s_raw ? 0 : s_buttonForCode[code]);
+    Serial.printf("[%lu] [KEY] code=%u ch=%c special=%u mods=0x%02x bridge=0x%02x\n", millis(), code, e.ch ? e.ch : '-',
+                  static_cast<unsigned>(e.special), e.mods, s_raw ? 0 : s_buttonForCode[code]);
   }
 #endif
 
@@ -447,7 +449,7 @@ void setRawKeyMode(bool raw) {
 bool rawKeyMode() { return s_raw; }
 
 ModifierState modifiers() {
-  return {s_shift.active(), s_shift.locked, s_sym.active(), s_sym.locked, s_alt.active(), s_alt.locked};
+  return {s_shift.sticky(), s_shift.locked, s_sym.sticky(), s_sym.locked, s_alt.sticky(), s_alt.locked};
 }
 
 void setKeyboardBacklight(bool on) {

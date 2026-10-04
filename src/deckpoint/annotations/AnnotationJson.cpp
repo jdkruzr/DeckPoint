@@ -7,6 +7,10 @@
 #include <cstring>
 #include <new>
 
+static_assert(deckpoint::annotations::MAX_NOTE_BYTES < StreamingJsonParser::TOKEN_BUF_SIZE &&
+                  deckpoint::annotations::MAX_TEXT_BYTES < StreamingJsonParser::TOKEN_BUF_SIZE,
+              "our own notes and texts must fit the JSON reader's token buffer");
+
 namespace deckpoint::annotations {
 
 namespace {

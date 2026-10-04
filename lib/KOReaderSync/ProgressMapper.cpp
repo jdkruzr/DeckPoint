@@ -11,6 +11,7 @@
 #include "Epub/Section.h"
 #include "Epub/VisibleTextUtils.h"
 #include "Epub/htmlEntities.h"
+#include "ProgressComparison.h"
 #include "Utf8.h"
 
 namespace {
@@ -789,6 +790,9 @@ SavedProgressPosition ProgressMapper::toSavedProgress(const std::shared_ptr<Epub
   float intra =
       (pos.totalPages > 1) ? static_cast<float>(pos.pageNumber) / static_cast<float>(pos.totalPages - 1) : 0.0f;
   result.percentage = epub->calculateProgress(pos.spineIndex, intra);
+  result.kosyncPercentage = koreaderPercentage(epub->calculateProgress(pos.spineIndex, 0.0f),
+                                               epub->calculateProgress(pos.spineIndex, 1.0f), pos.pageNumber,
+                                               pos.totalPages);  // DECKPOINT
   if (pos.hasVisibleTextOffset) {
     result.xpath = ChapterXPathResolver::findXPathForVisibleTextOffset(epub, pos.spineIndex, pos.visibleTextOffset);
   }

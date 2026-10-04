@@ -35,7 +35,14 @@ void HalClock::setTimezone(const char* posixTz) {
 }
 
 bool HalClock::localTime(struct tm& out) const {
-  if (!_available) return false;
+  if (!_available) {
+    // DECKPOINT: RTC-less boards read the system clock (SNTP / TrustedTime),
+    // once it holds a plausible date (2025-01-01 or later).
+    const time_t now = time(nullptr);
+    if (now < static_cast<time_t>(1735689600)) return false;
+    localtime_r(&now, &out);
+    return true;
+  }
 
   const unsigned long now = millis();
   if (_lastPollMs == 0 || (now - _lastPollMs) >= CLOCK_POLL_MS) {
@@ -77,8 +84,6 @@ bool HalClock::formatTime(char* buf, size_t bufSize, bool use12Hour) const {
 }
 
 bool HalClock::syncFromNTP() {
-  if (!_available) return false;
-
   if (WiFi.status() != WL_CONNECTED) {
     LOG_ERR("CLK", "WiFi not connected, cannot sync NTP");
     return false;
@@ -108,8 +113,9 @@ bool HalClock::syncFromNTP() {
       dt.minute = static_cast<uint8_t>(timeinfo.tm_min);
       dt.second = static_cast<uint8_t>(timeinfo.tm_sec);
       dt.weekday = static_cast<uint8_t>(timeinfo.tm_wday);
-      const bool ok = _sdkRtc.set(dt);
-      if (ok) {
+      // Without an RTC the system clock SNTP just set is the clock.
+      const bool ok = !_available || _sdkRtc.set(dt);
+      if (ok && _available) {
         _cachedUtc = epochFromUtc(dt);
         _hasCachedTime = true;
         _lastPollMs = 0;

@@ -5,6 +5,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <TrustedTime.h>
 
 #include <memory>
 
@@ -40,18 +41,26 @@ ClockSettingsActivity::ClockSettingsActivity(GfxRenderer& renderer, MappedInputM
 
 void ClockSettingsActivity::onEnter() {
   UiListActivity::onEnter();
+  // Without an RTC nothing shows a clock (header and status bar need one), so
+  // only the zone, DST and the sync row (which previews the time) remain; the
+  // zone still matters for annotation and progress timestamps.
+  const bool rtc = halClock.isAvailable();
+  rowCount_ = 0;
   for (int i = 0; i < ITEM_COUNT; i++) {
-    rowItems_[i].label = I18N.get(menuNames[i]);
-    rowItems_[i].actionValue = static_cast<int16_t>(i);
+    if (!rtc && (i == ITEM_FORMAT || i == ITEM_SHOW_ON_HOME)) continue;
+    rowItems_[rowCount_].label = I18N.get(menuNames[i]);
+    rowItems_[rowCount_].actionValue = static_cast<int16_t>(i);
+    rowCount_++;
   }
 }
 
 const char* ClockSettingsActivity::headerTitle() const { return tr(STR_CLOCK); }
 
 void ClockSettingsActivity::activateIndex(const int index) {
+  if (index < 0 || index >= rowCount_) return;
   nav.selected = index;
   app.clearTapFlash();
-  switch (index) {
+  switch (rowItems_[index].actionValue) {
     case ITEM_TIMEZONE:
       if (auto activity = makeUniqueNoThrow<TimezonePickerActivity>(renderer, mappedInput)) {
         startActivityForResult(std::move(activity), nullptr);
@@ -91,21 +100,39 @@ void ClockSettingsActivity::buildScreen(UiScreen& screen) {
 
   // Every value is a flash/translation string or the member time buffer, so
   // the render pass allocates nothing.
-  rowItems_[ITEM_TIMEZONE].value = timezones::table()[timezones::activeIndex()].name;
-  const uint8_t dst = SETTINGS.clockDst < CrossPointSettings::CLOCK_DST_MODE_COUNT ? SETTINGS.clockDst : uint8_t{0};
-  rowItems_[ITEM_DST].value = I18N.get(dstNames[dst]);
-  rowItems_[ITEM_FORMAT].value = SETTINGS.clockFormat == 1 ? tr(STR_CLOCK_FORMAT_12H) : tr(STR_CLOCK_FORMAT_24H);
-  GUI.setCheckboxRow(rowItems_[ITEM_SHOW_ON_HOME], SETTINGS.clockShowInHeader);
   // The sync row's value is the current time itself: it confirms the sync,
-  // previews format/zone changes, and reads "Not Set" until the first sync.
-  rowItems_[ITEM_SYNC].value =
-      SETTINGS.clockHasBeenSynced && halClock.formatTime(syncTime_, sizeof(syncTime_), SETTINGS.clockFormat == 1)
-          ? syncTime_
-          : tr(STR_NOT_SET);
+  // previews format/zone changes, and reads "Not Set" until the first sync
+  // (without an RTC: until the clock was synced this boot or recently).
+  const bool timeKnown = halClock.isAvailable() ? SETTINGS.clockHasBeenSynced != 0 : trustedtime::isCurrent();
+  const uint8_t dst = SETTINGS.clockDst < CrossPointSettings::CLOCK_DST_MODE_COUNT ? SETTINGS.clockDst : uint8_t{0};
+  for (int row = 0; row < rowCount_; row++) {
+    fui::ListItem& item = rowItems_[row];
+    switch (item.actionValue) {
+      case ITEM_TIMEZONE:
+        item.value = timezones::table()[timezones::activeIndex()].name;
+        break;
+      case ITEM_DST:
+        item.value = I18N.get(dstNames[dst]);
+        break;
+      case ITEM_FORMAT:
+        item.value = SETTINGS.clockFormat == 1 ? tr(STR_CLOCK_FORMAT_12H) : tr(STR_CLOCK_FORMAT_24H);
+        break;
+      case ITEM_SHOW_ON_HOME:
+        GUI.setCheckboxRow(item, SETTINGS.clockShowInHeader);
+        break;
+      case ITEM_SYNC:
+        item.value = timeKnown && halClock.formatTime(syncTime_, sizeof(syncTime_), SETTINGS.clockFormat == 1)
+                         ? syncTime_
+                         : tr(STR_NOT_SET);
+        break;
+      default:
+        break;
+    }
+  }
 
   fui::ListProps props;
   props.items = rowItems_;
-  props.count = ITEM_COUNT;
+  props.count = static_cast<uint16_t>(rowCount_);
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
   props.valueInset = 8;

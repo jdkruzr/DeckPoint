@@ -789,6 +789,242 @@ TEST(AnnotationMerge, MergeIsIdempotent) {
   EXPECT_EQ(writeMap(second.merged), writeMap(first.merged));
 }
 
+// --- notes never die in an overlap ------------------------------------------------
+
+TEST(NoteText, MergeAndContainment) {
+  std::string note = "mine";
+  EXPECT_EQ(mergeNoteText(note, ""), NoteMerge::Unchanged);
+  EXPECT_EQ(mergeNoteText(note, "in"), NoteMerge::Unchanged);  // contained
+  EXPECT_EQ(mergeNoteText(note, "theirs"), NoteMerge::Appended);
+  EXPECT_EQ(note, std::string("mine") + std::string(MERGED_NOTE_MARKER) + "theirs");
+  EXPECT_EQ(mergeNoteText(note, "theirs"), NoteMerge::Unchanged);
+  std::string empty;
+  EXPECT_EQ(mergeNoteText(empty, "only theirs"), NoteMerge::Appended);
+  EXPECT_EQ(empty, "only theirs");
+}
+
+TEST(NoteText, TruncatesAtUtf8BoundaryAndStaysIdempotent) {
+  std::string note(20, 'a');
+  const std::string other = "\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9";  // 4 x U+00E9, 8 bytes
+  const size_t cap = note.size() + MERGED_NOTE_MARKER.size() + 5;
+  ASSERT_EQ(mergeNoteText(note, other, cap), NoteMerge::Truncated);
+  EXPECT_LE(note.size(), cap);
+  EXPECT_EQ(note.substr(note.size() - 4), "\xC3\xA9\xC3\xA9");  // whole characters only
+  EXPECT_TRUE(noteAlreadyMerged(note, other));
+  EXPECT_EQ(mergeNoteText(note, other, cap), NoteMerge::Unchanged);
+  std::string full(30, 'b');
+  EXPECT_EQ(mergeNoteText(full, "x", full.size() + MERGED_NOTE_MARKER.size()), NoteMerge::NoRoom);
+  EXPECT_EQ(full, std::string(30, 'b'));
+}
+
+TEST(AnnotationMerge, LoserNoteIsAppendedWhenRemoteWins) {
+  AnnotationList local, remote, snapshot;
+  put(local, {xp(1, 0), xp(1, 28), "ours", "T-Deck thought"});
+  const Spec theirs{xp(1, 10), xp(1, 40), "theirs", "Boox thought", NEWER};
+  put(remote, theirs);
+  MergeRun run;
+  merge(local, remote, snapshot, run);
+  ASSERT_EQ(run.report.status, MergeStatus::Ok);
+  ASSERT_EQ(run.merged.size(), 1u);
+  const Annotation* w = find(run.merged, keyOf(theirs));
+  ASSERT_NE(w, nullptr);
+  EXPECT_EQ(w->get(Field::Note), std::string("Boox thought") + std::string(MERGED_NOTE_MARKER) + "T-Deck thought");
+  EXPECT_EQ(w->get(Field::DatetimeUpdated), NOW);
+  EXPECT_EQ(run.report.notesMerged, 1);
+  EXPECT_TRUE(run.report.remoteChanged);
+  EXPECT_TRUE(run.report.localChanged);
+}
+
+TEST(AnnotationMerge, LoserNoteIsAppendedWhenLocalWins) {
+  AnnotationList local, remote, snapshot;
+  const Spec ours{xp(1, 0), xp(1, 28), "ours", "T-Deck thought", NEWER};
+  put(local, ours);
+  put(remote, {xp(1, 10), xp(1, 40), "theirs", "Boox thought"});
+  MergeRun run;
+  merge(local, remote, snapshot, run);
+  ASSERT_EQ(run.merged.size(), 1u);
+  const Annotation* w = find(run.merged, keyOf(ours));
+  ASSERT_NE(w, nullptr);
+  EXPECT_EQ(w->get(Field::Note), std::string("T-Deck thought") + std::string(MERGED_NOTE_MARKER) + "Boox thought");
+  EXPECT_EQ(w->get(Field::DatetimeUpdated), NOW);
+  EXPECT_TRUE(run.report.remoteChanged);
+}
+
+TEST(AnnotationMerge, OnlyLoserHasNote) {
+  AnnotationList local, remote, snapshot;
+  put(local, {xp(1, 0), xp(1, 28), "ours", "keep me"});
+  const Spec theirs{xp(1, 10), xp(1, 40), "theirs", "", NEWER};
+  put(remote, theirs);
+  MergeRun run;
+  merge(local, remote, snapshot, run);
+  ASSERT_EQ(run.merged.size(), 1u);
+  EXPECT_EQ(find(run.merged, keyOf(theirs))->get(Field::Note), "keep me");
+  EXPECT_EQ(run.report.notesMerged, 1);
+}
+
+TEST(AnnotationMerge, OnlyWinnerHasNoteNothingChanges) {
+  AnnotationList local, remote, snapshot;
+  put(local, {xp(1, 0), xp(1, 28), "ours"});
+  const Spec theirs{xp(1, 10), xp(1, 40), "theirs", "winner note", NEWER};
+  put(remote, theirs);
+  MergeRun run;
+  merge(local, remote, snapshot, run);
+  ASSERT_EQ(run.merged.size(), 1u);
+  EXPECT_EQ(find(run.merged, keyOf(theirs))->get(Field::Note), "winner note");
+  EXPECT_FALSE(find(run.merged, keyOf(theirs))->has(Field::DatetimeUpdated));
+  EXPECT_EQ(run.report.notesMerged, 0);
+  EXPECT_FALSE(run.report.remoteChanged);
+}
+
+TEST(AnnotationMerge, SameHighlightNoteEditIsNotMerged) {
+  // Same key: the older note is a previous version, not a second thought.
+  AnnotationList local, remote, snapshot;
+  put(local, {xp(1, 0), xp(1, 28), "words", "first draft"});
+  put(remote, {xp(1, 0), xp(1, 28), "words", "rewritten", OLD, NEWER});
+  MergeRun run;
+  merge(local, remote, snapshot, run);
+  ASSERT_EQ(run.merged.size(), 1u);
+  EXPECT_EQ(run.merged[0].get(Field::Note), "rewritten");
+  EXPECT_EQ(run.report.notesMerged, 0);
+}
+
+TEST(AnnotationMerge, MergedNoteIsCutAtTheCap) {
+  AnnotationList local, remote, snapshot;
+  const std::string longNote(MAX_NOTE_BYTES - 100, 'w');
+  const Spec theirs{xp(1, 10), xp(1, 40), "theirs", longNote, NEWER};
+  put(remote, theirs);
+  put(local, {xp(1, 0), xp(1, 28), "ours", std::string(300, 'l')});
+  MergeRun run;
+  merge(local, remote, snapshot, run);
+  ASSERT_EQ(run.merged.size(), 1u);
+  const std::string_view note = find(run.merged, keyOf(theirs))->get(Field::Note);
+  EXPECT_EQ(note.size(), MAX_NOTE_BYTES);
+  EXPECT_EQ(note.substr(0, longNote.size()), longNote);
+  EXPECT_EQ(run.report.notesTruncated, 1);
+}
+
+TEST(AnnotationMerge, NoRoomKeepsBothEntries) {
+  AnnotationList local, remote, snapshot;
+  const Spec theirs{xp(1, 10), xp(1, 40), "theirs", std::string(MAX_NOTE_BYTES, 'w'), NEWER};
+  const Spec ours{xp(1, 0), xp(1, 28), "ours", "do not lose me"};
+  put(remote, theirs);
+  put(local, ours);
+  MergeRun run;
+  merge(local, remote, snapshot, run);
+  ASSERT_EQ(run.report.status, MergeStatus::Ok);
+  EXPECT_EQ(run.merged.size(), 2u);
+  EXPECT_EQ(find(run.merged, keyOf(ours))->get(Field::Note), "do not lose me");
+  EXPECT_EQ(find(run.merged, keyOf(theirs))->get(Field::Note).size(), MAX_NOTE_BYTES);
+  EXPECT_EQ(run.report.notesKeptApart, 1);
+  EXPECT_EQ(run.report.conflicts, 1);
+  EXPECT_TRUE(run.report.remoteChanged);
+}
+
+TEST(AnnotationMerge, TombstoneDoesNotTakeANotedNeighbourDown) {
+  AnnotationList local, remote, snapshot;
+  const Spec ours{xp(1, 0), xp(1, 28), "ours", "my note"};
+  const Spec gone{xp(1, 10), xp(1, 40), "theirs", "", OLD, NEWER, true};
+  put(local, ours);
+  put(remote, gone);
+  MergeRun run;
+  merge(local, remote, snapshot, run);
+  ASSERT_EQ(run.merged.size(), 2u);
+  EXPECT_FALSE(find(run.merged, keyOf(ours))->deleted);
+  EXPECT_TRUE(find(run.merged, keyOf(gone))->deleted);
+  EXPECT_EQ(run.report.notesRescued, 1);
+  EXPECT_EQ(run.report.deletedLocally, 0);
+}
+
+TEST(AnnotationMerge, MergedNoteIsNotAppendedTwice) {
+  AnnotationList local, remote, snapshot;
+  const Spec ours{xp(1, 0), xp(1, 28), "ours", "T-Deck thought"};
+  const Spec theirs{xp(1, 10), xp(1, 40), "theirs", "Boox thought", NEWER};
+  put(local, ours);
+  put(remote, theirs);
+  MergeRun first;
+  merge(local, remote, snapshot, first);
+  ASSERT_EQ(first.report.notesMerged, 1);
+
+  // The loser shows up again (e.g. another device still had it): no re-append.
+  AnnotationList local2, remote2, snapshot2;
+  put(local2, ours);
+  ASSERT_FALSE(loadMap(remote2, first.upload).lossy);
+  ASSERT_FALSE(loadMap(snapshot2, first.upload).lossy);
+  MergeRun second;
+  merge(local2, remote2, snapshot2, second, true, "2026-10-05 12:30:00");
+  ASSERT_EQ(second.merged.size(), 1u);
+  EXPECT_EQ(second.report.notesMerged, 0);
+  EXPECT_EQ(find(second.merged, keyOf(theirs))->get(Field::Note), find(first.merged, keyOf(theirs))->get(Field::Note));
+  EXPECT_FALSE(second.report.remoteChanged);
+
+  // And a plain resync of the result is a no-op.
+  AnnotationList local3, remote3, snapshot3;
+  copyLocal(first.merged, local3);
+  ASSERT_FALSE(loadMap(remote3, first.upload).lossy);
+  ASSERT_FALSE(loadMap(snapshot3, first.upload).lossy);
+  MergeRun third;
+  merge(local3, remote3, snapshot3, third, true, "2026-10-05 12:30:00");
+  EXPECT_FALSE(third.report.remoteChanged);
+  EXPECT_FALSE(third.report.localChanged);
+}
+
+TEST(AnnotationMerge, TruncatedMergeIsNotAppendedTwice) {
+  AnnotationList local, remote, snapshot;
+  const Spec theirs{xp(1, 10), xp(1, 40), "theirs", std::string(MAX_NOTE_BYTES - 50, 'w'), NEWER};
+  const Spec ours{xp(1, 0), xp(1, 28), "ours", std::string(200, 'l')};
+  put(local, ours);
+  put(remote, theirs);
+  MergeRun first;
+  merge(local, remote, snapshot, first);
+  ASSERT_EQ(first.report.notesTruncated, 1);
+  AnnotationList local2, remote2, snapshot2;
+  put(local2, ours);
+  ASSERT_FALSE(loadMap(remote2, first.upload).lossy);
+  MergeRun second;
+  merge(local2, remote2, snapshot2, second, true, "2026-10-05 12:30:00");
+  EXPECT_EQ(second.report.notesMerged, 0);
+  EXPECT_EQ(second.report.notesKeptApart, 0);
+  EXPECT_FALSE(second.report.remoteChanged);
+}
+
+TEST(AnnotationMerge, KOReaderEntryKeepsItsShapeWhenANoteMergesIn) {
+  // A KOReader-made remote entry (pageno, lighten, no datetime_updated) wins
+  // and takes our note; everything else of it is untouched.
+  const std::string json =
+      R"({"/body/DocFragment[10]/body/div/p[1]/text().10||/body/DocFragment[10]/body/div/p[1]/text().40":)"
+      R"({"datetime":"2026-10-04 11:00:00","page":"/body/DocFragment[10]/body/div/p[1]/text().10","color":"gray",)"
+      R"("text":"theirs","pageno":15,"pos0":"/body/DocFragment[10]/body/div/p[1]/text().10",)"
+      R"("pos1":"/body/DocFragment[10]/body/div/p[1]/text().40","chapter":"Prologue","drawer":"lighten",)"
+      R"("note":"from KOReader"}})";
+  AnnotationList local, remote, snapshot;
+  ASSERT_FALSE(loadMap(remote, json).lossy);
+  put(local, {xp(1, 0), xp(1, 28), "ours", "from the T-Deck"});
+  MergeRun run;
+  merge(local, remote, snapshot, run);
+  ASSERT_EQ(run.merged.size(), 1u);
+  const Annotation& w = run.merged[0];
+  EXPECT_EQ(w.get(Field::Note), std::string("from KOReader") + std::string(MERGED_NOTE_MARKER) + "from the T-Deck");
+  EXPECT_EQ(w.get(Field::Datetime), "2026-10-04 11:00:00");
+  EXPECT_EQ(w.get(Field::DatetimeUpdated), NOW);
+  EXPECT_EQ(w.get(Field::Drawer), "lighten");
+  EXPECT_TRUE(w.hasPageno);
+  EXPECT_EQ(w.pageno, 15);
+  EXPECT_NE(run.upload.find(R"("datetime_updated":"2026-10-05 12:00:00")"), std::string::npos);
+}
+
+TEST(AnnotationMerge, MergedNoteWithoutCurrentClockIsUndated) {
+  AnnotationList local, remote, snapshot;
+  put(local, {xp(1, 0), xp(1, 28), "ours", "T-Deck thought"});
+  const Spec theirs{xp(1, 10), xp(1, 40), "theirs", "Boox thought", NEWER};
+  put(remote, theirs);
+  MergeRun run;
+  merge(local, remote, snapshot, run, false);
+  const Annotation* w = find(run.merged, keyOf(theirs));
+  ASSERT_NE(w, nullptr);
+  EXPECT_TRUE(w->undated);
+  EXPECT_NE(w->get(Field::Note).find("T-Deck thought"), std::string_view::npos);
+}
+
 // --- local flags sidecar --------------------------------------------------------
 
 TEST(LocalFlags, RoundTripAndShape) {

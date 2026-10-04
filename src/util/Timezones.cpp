@@ -150,6 +150,10 @@ uint8_t activeIndex() {
   return UTC_INDEX;
 }
 
+bool isChosen() {
+  return SETTINGS.clockTimezone < TABLE_COUNT || (SETTINGS.clockUtcOffsetQ <= 104 && SETTINGS.clockUtcOffsetQ != 48);
+}
+
 void formatOffset(const uint8_t index, char* buf, const size_t bufSize) {
   if (index >= TABLE_COUNT) {
     snprintf(buf, bufSize, "UTC");

@@ -14,6 +14,8 @@
 
 #include <KeyEvent.h>
 
+#include "KeyboardModifiers.h"
+
 class HalKeyboard {
  public:
   bool present() const;
@@ -21,6 +23,8 @@ class HalKeyboard {
   void flush();
   void setRawMode(bool raw);
   bool rawMode() const;
+  // keymods:: bits of the modifiers latched or locked right now (0 without a keyboard).
+  uint8_t stickyModifiers() const;
 };
 
 extern HalKeyboard halKeyboard;

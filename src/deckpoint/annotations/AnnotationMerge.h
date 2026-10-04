@@ -16,10 +16,16 @@
 //    to empty text (rule 6);
 //  - bookmarks (BOOKMARK|<page>) pass through: remote ones as they are, local
 //    ones only where the remote has no entry for that page;
-//  - local-only entries (dev seeds) skip the merge and stay local.
+//  - local-only entries (dev seeds) skip the merge and stay local;
+//  - notes never die in an overlap: when two different highlights collapse,
+//    the loser's note is appended to the winner's (mergeNoteText), the winner
+//    is stamped `now` so the combined note propagates; a tombstone never takes
+//    a different, noted live highlight down with it. Same-key pairs are edits
+//    of one highlight: newer wins as is.
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -52,6 +58,10 @@ struct MergeReport {
   uint16_t tombstonesIgnored = 0;  // rule 5: our tombstone vs a remote entry never uploaded by us
   uint16_t tombstonesDropped = 0;  // never-uploaded tombstones with nothing to delete
   uint16_t localOnly = 0;          // seeds kept out of the upload
+  uint16_t notesMerged = 0;        // loser notes appended to the winner's note
+  uint16_t notesTruncated = 0;     // ...of which cut at MAX_NOTE_BYTES
+  uint16_t notesKeptApart = 0;     // no room in the winner's note: both entries kept
+  uint16_t notesRescued = 0;       // noted live entries kept against a different tombstone
   // Upload differs from what the remote holds: PUT it.
   bool remoteChanged = false;
   // Result differs from the local list: save it.
@@ -60,6 +70,24 @@ struct MergeReport {
   // back the remote file up first (rule 7).
   bool removesOrBlanks = false;
 };
+
+// Separator between a note and a note merged into it.
+constexpr std::string_view MERGED_NOTE_MARKER = "\n\n[merged] ";
+
+enum class NoteMerge : uint8_t {
+  Unchanged,  // `other` empty or already in `note`
+  Appended,   // note + MERGED_NOTE_MARKER + other (or just other when note was empty)
+  Truncated,  // appended, `other` cut at a UTF-8 boundary to fit maxBytes
+  NoRoom,     // not even one character of `other` fits; `note` unchanged
+};
+
+// True when `other` already went into `note`: contained whole, or as the
+// truncated tail after the last MERGED_NOTE_MARKER. Keeps merges idempotent.
+bool noteAlreadyMerged(std::string_view note, std::string_view other);
+// Appends `other` to `note` (see NoteMerge) within maxBytes. A note longer than
+// maxBytes is never produced by appending, but an empty `note` takes `other`
+// whole (nothing is lost that was not already held).
+NoteMerge mergeNoteText(std::string& note, std::string_view other, size_t maxBytes = MAX_NOTE_BYTES);
 
 // Sorted canonical key hashes (canonicalKeyHash) of a map: the snapshot of
 // what was last uploaded, as mergeAnnotations takes it.

@@ -1,5 +1,6 @@
 #include "WifiSelectionActivity.h"
 
+#include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <I18n.h>
@@ -14,6 +15,7 @@
 #include "MappedInputManager.h"
 #include "WifiCredentialStore.h"
 #include "activities/util/KeyboardEntryActivity.h"
+#include "components/UIScale.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/PluginEvents.h"
@@ -480,8 +482,8 @@ void WifiSelectionActivity::attemptConnection() {
   const esp_err_t macResult = esp_read_mac(mac, ESP_MAC_WIFI_STA);
   if (macResult == ESP_OK) {
     char hostname[sizeof("DeckPoint-") + 12];
-    snprintf(hostname, sizeof(hostname), "DeckPoint-%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3],
-             mac[4], mac[5]);
+    snprintf(hostname, sizeof(hostname), "DeckPoint-%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4],
+             mac[5]);
     WiFi.setHostname(hostname);
   } else {
     LOG_ERR("WIFI", "Failed to read station MAC for hostname (err=%d)", static_cast<int>(macResult));
@@ -855,8 +857,23 @@ void WifiSelectionActivity::render(RenderLock&&) {
   // so 32 truncated it. See ClockSyncActivity for the same class of bug.
   char countStr[64];
   snprintf(countStr, sizeof(countStr), tr(STR_NETWORKS_FOUND), realNetworkCount);
+  // DECKPOINT: the header's right label does not push the title aside; where
+  // both do not fit (narrow screens) the count folds into the title as "(N)".
+  const char* headerTitle = tr(STR_WIFI_NETWORKS);
+  const char* headerRight = countStr;
+  char compactTitle[64];
+  const int backButton =
+      BoardConfig::hasTouch() ? std::min(48, static_cast<int>(metrics.headerHeight - metrics.batteryBarHeight)) : 0;
+  const int titleRoom = screen.width - 2 * metrics.headerSidePadding - backButton - 8;
+  if (renderer.getTextWidth(uiScaleSpec().titleFontId, headerTitle, EpdFontFamily::BOLD) +
+          renderer.getTextWidth(SMALL_FONT_ID, countStr) >
+      titleRoom) {
+    snprintf(compactTitle, sizeof(compactTitle), "%s (%zu)", headerTitle, static_cast<size_t>(realNetworkCount));
+    headerTitle = compactTitle;
+    headerRight = nullptr;
+  }
   GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
-                 tr(STR_WIFI_NETWORKS), countStr);
+                 headerTitle, headerRight);
   GUI.drawSubHeader(
       renderer,
       Rect{screen.x, screen.y + metrics.topPadding + metrics.headerHeight, screen.width, metrics.tabBarHeight},

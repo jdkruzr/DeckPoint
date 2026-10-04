@@ -60,6 +60,11 @@ class AnnotationStore {
   // As addAndSave, for a highlight made on a laid-out page: its placement in
   // spineIndex is already known, so it is drawn without resolving its XPointers.
   AddResult addPlacedAndSave(Annotation&& annotation, int spineIndex, uint32_t startOffset, uint32_t endOffset);
+  // Extending: adds `annotation` placed as addPlacedAndSave does, tombstones
+  // the `count` entries at `replaced` it absorbs (an explicit user action;
+  // one with the same key is replaced in place instead) and saves once.
+  AddResult replacePlacedAndSave(Annotation&& annotation, int spineIndex, uint32_t startOffset, uint32_t endOffset,
+                                 const int* replaced, size_t count);
   // List index of the placed, live highlight of this chapter that covers
   // `offset` (the most recent one when several do), or -1.
   int highlightAt(int spineIndex, uint32_t offset) const;

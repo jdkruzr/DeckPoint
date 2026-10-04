@@ -13,6 +13,12 @@
 // word again: just that one), then Save on the bar (Note: then the sheet).
 // Edit note opens the sheet on the highlight's note.
 //
+// A saved range that touches or overlaps existing highlights (ends inclusive,
+// as the sync merge sees it) asks Extend highlight / Cancel first: Extend
+// joins them into one entry (union range, notes joined in order, the old keys
+// tombstoned). Only offered when every joined highlight lies on the page; a
+// range inside one highlight just opens its note (`n`) or says so.
+//
 // Every stage draws over the clean page stored out of the framebuffer, like
 // the `d` labels (EpubReaderHints.cpp): one FAST refresh per change, and
 // cancelling on a gray page re-renders it so anti-aliasing comes back. A save
@@ -27,6 +33,8 @@
 #include <Logging.h>
 
 #include <algorithm>
+#include <climits>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -41,6 +49,8 @@
 #include "deckpoint/KeyHelpActivity.h"
 #include "deckpoint/KeyLegend.h"
 #include "deckpoint/annotations/Annotation.h"
+#include "deckpoint/annotations/AnnotationGeometry.h"
+#include "deckpoint/annotations/AnnotationMerge.h"
 #include "deckpoint/reader/WordHitTest.h"
 #include "fontIds.h"
 
@@ -49,13 +59,17 @@ using deckpoint::annotations::Annotation;
 using deckpoint::annotations::AnnotationStore;
 using deckpoint::annotations::Field;
 using deckpoint::annotations::FIELD_COUNT;
+using deckpoint::annotations::NoteMerge;
+using deckpoint::annotations::Placement;
 using deckpoint::reader::ActionMenu;
 using deckpoint::reader::BarLayout;
+using deckpoint::reader::ExtendPlan;
 using deckpoint::reader::HintMatcher;
 using deckpoint::reader::HintPurpose;
 using deckpoint::reader::HintSession;
 using deckpoint::reader::MenuLayout;
 using deckpoint::reader::OffsetRange;
+using deckpoint::reader::PlacedHighlight;
 using deckpoint::reader::SelectionAction;
 using deckpoint::reader::SelectionSession;
 using deckpoint::reader::SelectionText;
@@ -94,6 +108,10 @@ const char* actionLabel(const SelectionAction action) {
       return tr(STR_SEL_EDIT_NOTE);
     case SelectionAction::Delete:
       return tr(STR_DELETE);
+    case SelectionAction::Extend:
+      return tr(STR_SEL_EXTEND);
+    case SelectionAction::Cancel:
+      return tr(STR_CANCEL);
     case SelectionAction::None:
     default:
       return "";
@@ -291,6 +309,7 @@ void EpubReaderActivity::drawSelectionLegend() const {
       break;
     case SelectMode::WordMenu:
     case SelectMode::HighlightMenu:
+    case SelectMode::ExtendMenu:
       confirm = tr(STR_KH_CHOOSE);
       previous = tr(STR_DIR_UP);
       next = tr(STR_DIR_DOWN);
@@ -344,6 +363,10 @@ void EpubReaderActivity::drawSelectionOverlay() {
       invertWordsLocked(s.menuWord, s.menuWord);
       drawSelectionMenu();
       break;
+    case SelectMode::ExtendMenu:
+      invertWordsLocked(s.selection.first(), s.selection.last());
+      drawSelectionMenu();
+      break;
     case SelectMode::Note:
       drawNoteSheet();
       s.noteDirty = false;
@@ -381,8 +404,85 @@ bool EpubReaderActivity::saveSelectionLocked() {
   const int a = s.selection.first();
   const int b = s.selection.last();
   if (a < 0 || static_cast<size_t>(b) >= s.words.size()) return endSelectionLocked(false, nullptr);
-  const OffsetRange range = SelectionSession::span(extentOf(s.words[a]), extentOf(s.words[b]));
+  OffsetRange range = SelectionSession::span(extentOf(s.words[a]), extentOf(s.words[b]));
   if (range.empty()) return endSelectionLocked(false, tr(STR_SEL_SAVE_FAILED));
+
+  // Existing highlights the range touches (KOReader's rule: the sync would
+  // collapse them): offer to extend instead of stacking a second one.
+  ExtendPlan plan;
+  {
+    const auto& list = annotationStore->annotations();
+    std::vector<PlacedHighlight> placed;
+    size_t inChapter = 0;
+    for (size_t i = 0; i < list.size(); i++) inChapter += list[i].spineIndex == currentSpineIndex ? 1 : 0;
+    placed.reserve(inChapter);
+    for (size_t i = 0; i < list.size(); i++) {
+      const Annotation& h = list[i];
+      if (h.spineIndex != currentSpineIndex || h.deleted || h.placement != Placement::Resolved) continue;
+      placed.push_back({h.startOffset, h.endOffset, static_cast<int>(i)});
+    }
+    OffsetRange page{UINT32_MAX, 0};
+    for (const WordBox& w : s.words) {
+      const WordExtent e = extentOf(w);
+      page.start = std::min(page.start, e.start);
+      page.end = std::max(page.end, e.end);
+    }
+    plan = deckpoint::reader::planExtend(range, placed.data(), placed.size(), page);
+  }
+  switch (plan.kind) {
+    case ExtendPlan::Kind::Covered:
+      if (withNote) return openNoteEditorLocked(plan.indices[0], false);
+      return endSelectionLocked(false, tr(STR_SEL_ALREADY));
+    case ExtendPlan::Kind::Extend:
+      if (!s.extendChosen) {
+        s.mode = SelectMode::ExtendMenu;
+        s.menuWord = a;
+        s.menu.open(ActionMenu::Kind::Extend);
+        return repaintHintsLocked();
+      }
+      range = plan.range;
+      break;
+    case ExtendPlan::Kind::OffPage:
+    case ExtendPlan::Kind::TooMany:
+      // Saved alongside; the next sync collapses the overlap, keeping notes.
+      LOG_INF("ANN", "Touched highlights not joinable on this page (%s)",
+              plan.kind == ExtendPlan::Kind::OffPage ? "off page" : "too many");
+      plan = ExtendPlan{};
+      break;
+    case ExtendPlan::Kind::None:
+    default:
+      break;
+  }
+  const bool extending = plan.kind == ExtendPlan::Kind::Extend;
+
+  // Notes of the joined highlights, in position order, as the sync merge
+  // joins them. Refused rather than cut: this is the user's own text.
+  std::string note;
+  std::string earliest;  // creation stamp of the oldest joined highlight
+  const char* drawer = deckpoint::annotations::OWN_DRAWER;
+  const char* color = deckpoint::annotations::OWN_COLOR;
+  std::string keptDrawer;
+  std::string keptColor;
+  if (extending) {
+    const auto& list = annotationStore->annotations();
+    for (uint8_t k = 0; k < plan.count; k++) {
+      const Annotation& h = list[static_cast<size_t>(plan.indices[k])];
+      const NoteMerge m = deckpoint::annotations::mergeNoteText(note, h.get(Field::Note));
+      if (m == NoteMerge::Truncated || m == NoteMerge::NoRoom) {
+        return endSelectionLocked(false, tr(STR_SEL_EXTEND_TOO_LONG));
+      }
+      const std::string_view created = h.get(Field::Datetime);
+      if (!created.empty() && created != deckpoint::annotations::UNSET_TIMESTAMP &&
+          (earliest.empty() || created < earliest)) {
+        earliest.assign(created.data(), created.size());
+      }
+      // The first joined highlight's style (a KOReader one keeps its look).
+      if (k == 0 && h.has(Field::Drawer)) keptDrawer.assign(h.get(Field::Drawer));
+      if (k == 0 && h.has(Field::Color)) keptColor.assign(h.get(Field::Color));
+    }
+    if (!keptDrawer.empty()) drawer = keptDrawer.c_str();
+    if (!keptColor.empty()) color = keptColor.c_str();
+  }
 
   // Highlight text from every token of the page in range, punctuation tokens
   // included (transient, at most MAX_TEXT_BYTES).
@@ -425,9 +525,14 @@ bool EpubReaderActivity::saveSelectionLocked() {
   values[static_cast<size_t>(Field::Page)] = pos0;
   values[static_cast<size_t>(Field::Text)] = text;
   values[static_cast<size_t>(Field::Chapter)] = chapter;
-  values[static_cast<size_t>(Field::Drawer)] = deckpoint::annotations::OWN_DRAWER;
-  values[static_cast<size_t>(Field::Color)] = deckpoint::annotations::OWN_COLOR;
+  values[static_cast<size_t>(Field::Drawer)] = drawer;
+  values[static_cast<size_t>(Field::Color)] = color;
   values[static_cast<size_t>(Field::Datetime)] = now;
+  if (extending) {
+    values[static_cast<size_t>(Field::Note)] = note;
+    if (!earliest.empty()) values[static_cast<size_t>(Field::Datetime)] = earliest;
+    values[static_cast<size_t>(Field::DatetimeUpdated)] = now;
+  }
   Annotation annotation;
   const bool assigned = annotation.assign(values);
   const std::string key = assigned ? deckpoint::annotations::annotationKey(annotation) : std::string();
@@ -436,10 +541,12 @@ bool EpubReaderActivity::saveSelectionLocked() {
     return endSelectionLocked(false, tr(STR_SEL_SAVE_FAILED));
   }
   const AddResult result =
-      annotationStore->addPlacedAndSave(std::move(annotation), currentSpineIndex, range.start, range.end);
+      extending ? annotationStore->replacePlacedAndSave(std::move(annotation), currentSpineIndex, range.start,
+                                                        range.end, plan.indices, plan.count)
+                : annotationStore->addPlacedAndSave(std::move(annotation), currentSpineIndex, range.start, range.end);
   const bool stored = result == AddResult::Added || result == AddResult::Replaced;
-  LOG_INF("ANN", "Highlight %s: %s||%s \"%s\"", stored ? "saved" : "rejected", pos0.c_str(), pos1.c_str(),
-          text.c_str());
+  LOG_INF("ANN", "Highlight %s%s: %s||%s \"%s\"", stored ? "saved" : "rejected", extending ? " (extended)" : "",
+          pos0.c_str(), pos1.c_str(), text.c_str());
   if (!stored) return endSelectionLocked(false, tr(STR_SEL_SAVE_FAILED));
   if (withNote) return openNoteEditorLocked(annotationStore->annotations().find(key), true);
   return endSelectionLocked(true, nullptr);
@@ -497,6 +604,13 @@ void EpubReaderActivity::runSelectionActionLocked(const SelectionAction action, 
       *rerender = deleted ? endSelectionLocked(true, nullptr) : endSelectionLocked(false, tr(STR_SEL_DELETE_FAILED));
       return;
     }
+    case SelectionAction::Extend:
+      s.extendChosen = true;
+      *rerender = saveSelectionLocked();
+      return;
+    case SelectionAction::Cancel:
+      *rerender = closeHintsLocked(true);
+      return;
     case SelectionAction::None:
     default:
       return;
@@ -628,6 +742,7 @@ void EpubReaderActivity::selectionKey(const freeink::KeyEvent& event) {
           break;
         case SelectMode::WordMenu:
         case SelectMode::HighlightMenu:
+        case SelectMode::ExtendMenu:
           switch (s.menu.feed(event)) {
             case ActionMenu::Result::Moved:
               rerender = repaintHintsLocked();
@@ -717,7 +832,8 @@ void EpubReaderActivity::selectionTouch(const int x, const int y) {
         rerender = noteTouchLocked(x, y);
         break;
       case SelectMode::WordMenu:
-      case SelectMode::HighlightMenu: {
+      case SelectMode::HighlightMenu:
+      case SelectMode::ExtendMenu: {
         if (swipe) {
           rerender = closeHintsLocked(true);
           break;

@@ -18,6 +18,7 @@
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "deckpoint/KeyHelpActivity.h"
+#include "deckpoint/reader/HintSession.h"
 
 using deckpoint::reader::MarkPosition;
 using deckpoint::reader::ReaderCmd;
@@ -405,4 +406,23 @@ void EpubReaderActivity::keyPopupTick() {
     keyPopupShown = false;
     requestUpdate();
   }
+}
+
+// The page itself is only re-rendered when a lock (Caps / Sym lock) comes or
+// goes: the status bar shows locks only, so one-shot latches cost no refresh.
+// Overlays that own the page draw the full badge themselves.
+void EpubReaderActivity::onModifiersChanged(const uint8_t before, const uint8_t after) {
+  if (!readerOwnsPage()) return;  // menus and popups cover the status bar
+  if (hintsOpen) {
+    RenderLock lock;
+    if (hints && hints->mode == deckpoint::reader::SelectMode::Note) hints->noteDirty = true;
+    return;
+  }
+  if (cmdLine.isOpen()) {
+    paintCommandLine();
+    return;
+  }
+  if (search) return;
+  if (((before ^ after) & keymods::LOCKS) == 0) return;
+  requestUpdate();
 }

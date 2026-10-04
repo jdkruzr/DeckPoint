@@ -19,6 +19,7 @@
 #include "components/HeaderBackTapTarget.h"
 #include "deckpoint/HelpKey.h"          // DECKPOINT
 #include "deckpoint/KeyHelpActivity.h"  // DECKPOINT
+#include "deckpoint/ModifierBadge.h"    // DECKPOINT
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
@@ -160,6 +161,15 @@ void ActivityManager::loop() {
           deckpoint::openKeyHelp(renderer, mappedInput, currentActivity->name.c_str(), currentActivity->keyHelp());
           return;
         }
+      }
+    }
+
+    // DECKPOINT: sticky-modifier badge (debounced; see deckpoint/ModifierBadge.h).
+    if (halKeyboard.present()) {
+      uint8_t before = 0;
+      if (deckpoint::pollModifierBadge(halKeyboard.stickyModifiers(), millis(), &before) &&
+          pendingAction == PendingAction::None) {
+        currentActivity->onModifiersChanged(before, deckpoint::shownModifiers());
       }
     }
 

@@ -30,6 +30,7 @@ enum class SelectMode : uint8_t {
   WordMenu,       // popup over a word: Look up / Highlight / Note
   HighlightMenu,  // popup over an existing highlight: Edit note / Delete / Look up
   Note,           // the note sheet edits `highlight`'s note
+  ExtendMenu,     // the range touches existing highlights: Extend highlight / Cancel
 };
 
 struct HintSession {
@@ -51,10 +52,11 @@ struct HintSession {
   SelectMode mode = SelectMode::Labels;
   SelectionSession selection;
   ActionMenu menu;
-  bool touchOrigin = false;  // opened by a long-press: taps pick and confirm
-  bool withNote = false;     // "Note" chosen: the note editor follows the save
-  int menuWord = -1;         // word the popup is about
-  int highlight = -1;        // AnnotationList index for HighlightMenu / Note
+  bool touchOrigin = false;   // opened by a long-press: taps pick and confirm
+  bool withNote = false;      // "Note" chosen: the note editor follows the save
+  bool extendChosen = false;  // "Extend highlight" chosen: the save joins the touched highlights
+  int menuWord = -1;          // word the popup is about
+  int highlight = -1;         // AnnotationList index for HighlightMenu / Note
 
   // Note mode only (EpubReaderNote.cpp).
   NoteEditor note;         // text buffer allocated while the sheet is open

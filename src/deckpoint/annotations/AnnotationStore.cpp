@@ -241,6 +241,43 @@ AddResult AnnotationStore::addPlacedAndSave(Annotation&& annotation, const int s
   return result;
 }
 
+AddResult AnnotationStore::replacePlacedAndSave(Annotation&& annotation, const int spineIndex,
+                                                const uint32_t startOffset, const uint32_t endOffset,
+                                                const int* replaced, const size_t count) {
+  const std::string key = annotationKey(annotation);
+  const bool undated = !trustedtime::isCurrent();
+  annotation.undated = undated;
+  const AddResult result = list.add(std::move(annotation));
+  if (result != AddResult::Added && result != AddResult::Replaced) {
+    LOG_ERR("ANN", "Extended highlight not added: %s", addResultName(result));
+    return result;
+  }
+  char stamp[20];
+  now(stamp);
+  for (size_t k = 0; k < count; k++) {
+    const int i = replaced[k];
+    if (i < 0 || static_cast<size_t>(i) >= list.size() || list[i].deleted) continue;
+    if (annotationKey(list[i]) == key) continue;  // replaced in place by add()
+    if (list.tombstone(static_cast<size_t>(i), stamp)) {
+      list[i].undated = undated;
+    } else {
+      // Left live: the next sync collapses the overlap (keeping its note).
+      LOG_ERR("ANN", "Cannot tombstone extended highlight %d", i);
+    }
+  }
+  const int index = list.find(key);
+  if (index >= 0) {
+    Annotation& a = list[static_cast<size_t>(index)];
+    if (a.spineIndex == spineIndex && endOffset > startOffset) {
+      a.startOffset = startOffset;
+      a.endOffset = endOffset;
+      a.placement = Placement::Resolved;
+    }
+  }
+  save();
+  return result;
+}
+
 int AnnotationStore::highlightAt(const int spineIndex, const uint32_t offset) const {
   for (size_t i = list.size(); i-- > 0;) {
     const Annotation& a = list[i];
@@ -400,6 +437,11 @@ MergeReport AnnotationStore::mergeRemote(AnnotationList& remote) {
           docId.c_str(), report.added, report.updated, report.deletedLocally, report.deletedRemotely, report.conflicts,
           report.stamped, report.clamped, report.contentKept, report.tombstonesIgnored, report.localOnly,
           report.remoteChanged ? "needed" : "not needed");
+  if (report.notesMerged || report.notesKeptApart || report.notesRescued) {
+    LOG_INF("ANN", "Overlap notes for %s: %u merged (%u cut at %u B), %u kept apart, %u kept against a tombstone",
+            docId.c_str(), report.notesMerged, report.notesTruncated, static_cast<unsigned>(MAX_NOTE_BYTES),
+            report.notesKeptApart, report.notesRescued);
+  }
   if (report.localChanged) save();
   return report;
 }

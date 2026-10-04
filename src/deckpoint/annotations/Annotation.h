@@ -43,7 +43,8 @@ bool fieldFromName(std::string_view name, Field& out);
 // Our own writes (new highlights, note edits). Loaded entries may be longer, up
 // to what the JSON reader can hold (StreamingJsonParser::TOKEN_BUF_SIZE - 1).
 constexpr size_t MAX_TEXT_BYTES = 1024;
-constexpr size_t MAX_NOTE_BYTES = 2048;
+// One under StreamingJsonParser::TOKEN_BUF_SIZE so our own notes read back.
+constexpr size_t MAX_NOTE_BYTES = 2047;
 constexpr size_t MAX_DATETIME_BYTES = 19;  // "YYYY-MM-DD HH:MM:SS"
 
 // What DeckPoint writes for highlights it creates. KOReader shows "underscore"

@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalGPIO.h>
+#include <HalKeyboard.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -22,7 +23,8 @@
 #include "components/icons/bookmark.h"
 #include "components/icons/cover.h"
 #include "components/icons/headerIcons.h"
-#include "deckpoint/KeyLegend.h"  // DECKPOINT
+#include "deckpoint/KeyLegend.h"      // DECKPOINT
+#include "deckpoint/ModifierBadge.h"  // DECKPOINT
 #include "fontIds.h"
 
 freeink::ui::BitmapRef BaseTheme::checkboxIcon(const bool checked) {
@@ -383,6 +385,17 @@ void BaseTheme::applyHeaderStatus(const GfxRenderer& renderer, freeink::ui::Head
   if (metrics.headerShowsClock && SETTINGS.clockShowInHeader && halClock.isAvailable() &&
       halClock.formatTime(clockText, sizeof(clockText), SETTINGS.clockFormat == 1)) {
     status.clockText = clockText;
+  }
+  // DECKPOINT: the sticky-modifier badge shares the clock's slot.
+  const char* badge = deckpoint::modifierBadgeText();
+  if (badge[0] != '\0') {
+    static char clockAndBadge[64];
+    if (status.clockText) {
+      snprintf(clockAndBadge, sizeof(clockAndBadge), "%s  %s", status.clockText, badge);
+      status.clockText = clockAndBadge;
+    } else {
+      status.clockText = badge;
+    }
   }
 }
 
@@ -896,6 +909,15 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
       }
       renderer.drawText(SMALL_FONT_ID, clockX, textY, timeBuf);
     }
+  }
+
+  // DECKPOINT: sticky-modifier badge, locks only (Caps Lock mutes j/k paging;
+  // one-shots would need a page refresh each, see EpubReaderActivity).
+  const char* modBadge = deckpoint::modifierBadgeText(keymods::LOCKS);
+  if (showStatusBarTextLane && modBadge[0] != '\0') {
+    const int gap = leftClusterWidth > 0 ? 10 : 0;
+    renderer.drawText(SMALL_FONT_ID, leftClusterX + leftClusterWidth + gap, textY, modBadge, true, EpdFontFamily::BOLD);
+    leftClusterWidth += gap + renderer.getTextWidth(SMALL_FONT_ID, modBadge, EpdFontFamily::BOLD);
   }
 
   // Draw Bookmark

@@ -47,7 +47,7 @@ bool ready();
 BookResult syncBook(const std::string& bookPath);
 
 // UI text (tr()): line1 is the summary or "Highlight sync failed", line2 the
-// reason ("" on success).
+// reason, or on success a time zone reminder while none is set ("" otherwise).
 void describe(const BookResult& result, char* line1, size_t line1Size, char* line2, size_t line2Size);
 
 }  // namespace annotationsync

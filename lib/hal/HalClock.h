@@ -30,20 +30,21 @@ class HalClock {
   // shows immediately.
   void setTimezone(const char* posixTz);
 
-  // Current wall-clock time in the configured timezone.
-  // Returns false if RTC is not available.
+  // Current wall-clock time in the configured timezone. Without an RTC this
+  // is the system clock (SNTP / TrustedTime), false until it holds a plausible
+  // date; it may be a stale floor after a cold boot (trustedtime::isCurrent()).
   bool localTime(struct tm& out) const;
 
-  // Get current local hour (0-23) and minute (0-59).
-  // Returns false if RTC is not available.
+  // Get current local hour (0-23) and minute (0-59). False when localTime() is.
   bool getTime(uint8_t& hour, uint8_t& minute) const;
 
   // Format the local time into a caller-provided buffer.
   // 24h mode produces "HH:MM" (needs >=6 bytes); 12h mode produces "H:MM AM"/"HH:MM PM" (needs >=9 bytes).
-  // Returns false if RTC is not available.
+  // False when localTime() is.
   bool formatTime(char* buf, size_t bufSize, bool use12Hour = false) const;
 
-  // Sync the RTC from an NTP server. Requires WiFi to be connected.
+  // Sync the RTC (or, without one, just the system clock) from an NTP server.
+  // Requires WiFi to be connected.
   // Blocks for up to ~5s while waiting for SNTP response.
   // Returns true if the RTC was successfully updated.
   //

@@ -2,7 +2,6 @@
 
 #include <BoardConfig.h>
 #include <GfxRenderer.h>
-#include <HalClock.h>
 #include <HalDisplay.h>
 #include <HalKeyboard.h>  // DECKPOINT
 #include <LibraryBuilder.h>
@@ -100,11 +99,10 @@ void SettingsActivity::rebuildSettingsLists() {
                             SettingInfo::Action(StrId::STR_HOME_BUTTON, SettingAction::HomeButton));
   }
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
-  // Clock configuration only exists where the RTC probe found hardware; on
-  // clockless boards there is nothing to set.
-  if (halClock.isAvailable()) {
-    systemSettings.push_back(SettingInfo::Action(StrId::STR_CLOCK, SettingAction::ClockSettings));
-  }
+  // DECKPOINT: every board keeps time (RTC, or the system clock via SNTP /
+  // TrustedTime), and the zone stamps annotations; ClockSettingsActivity
+  // hides the RTC-only display rows itself.
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_CLOCK, SettingAction::ClockSettings));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   systemSettings.push_back(
       SettingInfo::Action(StrId::STR_ANNOTATION_SYNC, SettingAction::AnnotationSync));  // DECKPOINT
