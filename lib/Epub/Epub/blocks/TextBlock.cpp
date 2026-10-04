@@ -13,7 +13,9 @@
 
 size_t TextBlock::arenaSize(const uint16_t wordCount, const bool hasFocus, const uint16_t textBytes) {
   // Layout documented in TextBlock.h: 16-bit arrays first, then 8-bit arrays, then text.
-  size_t size = static_cast<size_t>(wordCount) * (sizeof(uint16_t) + sizeof(int16_t) + sizeof(uint8_t));
+  // DECKPOINT: + uint16_t visOff per word.
+  size_t size =
+      static_cast<size_t>(wordCount) * (sizeof(uint16_t) + sizeof(int16_t) + sizeof(uint16_t) + sizeof(uint8_t));
   if (hasFocus) {
     size += static_cast<size_t>(wordCount) * (sizeof(uint16_t) + sizeof(uint8_t));
   }
@@ -25,7 +27,7 @@ void TextBlock::bindArenaPointers() {
   const size_t wc = numWords;
   textOffArr = reinterpret_cast<const uint16_t*>(base);
   xposArr = reinterpret_cast<const int16_t*>(base + wc * 2);
-  size_t off = wc * 4;
+  size_t off = wc * 6;  // DECKPOINT: visOff sits at wc * 4 (visOffArr())
   if (focusPresent) {
     focusSuffixXArr = reinterpret_cast<const uint16_t*>(base + off);
     off += wc * 2;
@@ -42,8 +44,12 @@ void TextBlock::bindArenaPointers() {
 TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,
                      const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& focusBoundary,
                      const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle,
-                     std::vector<std::string> rubyTexts, std::vector<LinkSpan> linkSpans)
-    : blockStyle(blockStyle), rubyTexts(std::move(rubyTexts)), linkSpans(std::move(linkSpans)) {
+                     std::vector<std::string> rubyTexts, std::vector<LinkSpan> linkSpans,
+                     const uint32_t visibleOffsetBase, const std::vector<uint16_t>& visibleOffsetDeltas)
+    : blockStyle(blockStyle),
+      visibleOffsetBase(visibleOffsetBase),
+      rubyTexts(std::move(rubyTexts)),
+      linkSpans(std::move(linkSpans)) {
   // Same invariant as deserialize(): a block never holds an all-empty rubyTexts, so a
   // ruby-less line costs nothing beyond its arena. The layout engine hands one over for
   // every line it extracts, ruby or not; release it here rather than carrying it for the
@@ -56,7 +62,8 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
   // When present, they must be sized in lockstep with words[].
   const bool hasFocus = !focusBoundary.empty();
   if (words.size() != wordXpos.size() || words.size() != wordStyles.size() || words.size() > 10000 ||
-      (hasFocus && (words.size() != focusBoundary.size() || words.size() != focusSuffixX.size()))) {
+      (hasFocus && (words.size() != focusBoundary.size() || words.size() != focusSuffixX.size())) ||
+      (!visibleOffsetDeltas.empty() && words.size() != visibleOffsetDeltas.size())) {
     LOG_ERR("TXB", "Construction failed: size mismatch (words=%u, xpos=%u, styles=%u, boundary=%u, suffixX=%u)",
             static_cast<uint32_t>(words.size()), static_cast<uint32_t>(wordXpos.size()),
             static_cast<uint32_t>(wordStyles.size()), static_cast<uint32_t>(focusBoundary.size()),
@@ -116,6 +123,11 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
     off += static_cast<uint16_t>(words[i].size());
     text[off++] = '\0';
   }
+  // DECKPOINT: no deltas given means no word has a source offset.
+  auto* visOff = const_cast<uint16_t*>(visOffArr());
+  for (uint16_t i = 0; i < numWords; i++) {
+    visOff[i] = visibleOffsetDeltas.empty() ? NO_VISIBLE_OFFSET : visibleOffsetDeltas[i];
+  }
   if (focusPresent) {
     auto* suffixX = const_cast<uint16_t*>(focusSuffixXArr);
     auto* boundary = const_cast<uint8_t*>(focusBoundaryArr);
@@ -124,6 +136,18 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
       boundary[i] = focusBoundary[i];
     }
   }
+}
+
+uint32_t TextBlock::wordVisibleOffset(const uint16_t i) const {
+  const uint16_t* visOff = visOffArr();
+  if (visOff[i] != NO_VISIBLE_OFFSET) return visibleOffsetBase + visOff[i];
+  for (uint16_t j = i + 1; j < numWords; j++) {
+    if (visOff[j] != NO_VISIBLE_OFFSET) return visibleOffsetBase + visOff[j];
+  }
+  for (uint16_t j = i; j > 0; j--) {
+    if (visOff[j - 1] != NO_VISIBLE_OFFSET) return visibleOffsetBase + visOff[j - 1];
+  }
+  return visibleOffsetBase;
 }
 
 bool TextBlock::hasRuby() const {
@@ -314,6 +338,7 @@ bool TextBlock::serialize(HalFile& file) const {
   serialization::writePod(file, numWords);
   serialization::writePod(file, static_cast<uint8_t>(focusPresent ? 1 : 0));
   serialization::writePod(file, textBytes);
+  serialization::writePod(file, visibleOffsetBase);  // DECKPOINT
   if (numWords > 0) {
     const size_t size = arenaSize(numWords, focusPresent, textBytes);
     if (file.write(arena.get(), size) != size) {
@@ -354,6 +379,8 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   serialization::readPod(file, wc);
   serialization::readPod(file, hasFocus);
   serialization::readPod(file, textBytes);
+  uint32_t visibleOffsetBase;
+  serialization::readPod(file, visibleOffsetBase);  // DECKPOINT
 
   // Sanity checks: cap the arena allocation and reject impossible geometry
   // (every word carries at least its NUL terminator).
@@ -373,6 +400,7 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   }
   block->numWords = wc;
   block->textBytes = textBytes;
+  block->visibleOffsetBase = visibleOffsetBase;
   block->focusPresent = hasFocus != 0;
 
   if (wc > 0) {

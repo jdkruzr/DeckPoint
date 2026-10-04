@@ -45,6 +45,7 @@ uint16_t extractPageWords(const GfxRenderer& renderer, const Page& page, const i
       box.row = rowCount;
       box.token = token;
       box.text = text;
+      box.visibleOffset = block->wordVisibleOffset(i);
       out.push_back(box);
       rowHasWords = true;
 

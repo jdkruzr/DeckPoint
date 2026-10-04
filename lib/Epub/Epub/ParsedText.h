@@ -57,6 +57,10 @@ class ParsedText {
   std::vector<uint16_t> wordVisibleOffsetDeltas;
   uint32_t visibleOffsetBase = 0;
   std::vector<VisibleOffsetRebase> visibleOffsetRebases;
+  // DECKPOINT: true for tokens with no source text (list markers, image alt text):
+  // their offset is the next source position, kept for page-start LUTs, but the
+  // TextBlock records them as having no offset of their own.
+  std::vector<bool> wordSyntheticText;
   std::deque<std::string> rubyTexts;
   BlockStyle blockStyle;
   uint8_t wordSpacingPercent = 100;
@@ -73,6 +77,7 @@ class ParsedText {
   std::vector<bool> reorderedNoSpaceBeforeScratch;
   std::vector<uint8_t> reorderedFocusBoundaryScratch;
   std::vector<uint16_t> visualOrderScratch;
+  std::vector<uint16_t> lineOffsetDeltasScratch;  // DECKPOINT: per-line word offset deltas
 
   std::string_view wordAt(const size_t i) const { return wordStore.view(words[i]); }
   bool storeWord(std::string_view text, WordStore::StoredWord& out);
@@ -112,7 +117,7 @@ class ParsedText {
   ~ParsedText() = default;
 
   void addWord(std::string word, EpdFontFamily::Style fontStyle, bool underline = false, bool attachToPrevious = false,
-               uint32_t visibleTextOffset = 0, uint8_t linkId = 0);
+               uint32_t visibleTextOffset = 0, uint8_t linkId = 0, bool syntheticText = false);
   uint8_t addLinkTarget(const char* href);
   bool linkTargetMatches(uint8_t linkId, const char* href) const;
   void setRubyForWordAt(size_t index, const std::string& ruby);

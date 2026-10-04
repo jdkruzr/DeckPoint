@@ -441,7 +441,8 @@ bool ParsedText::storeWord(const std::string_view text, WordStore::StoredWord& o
 }
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
-                         const bool attachToPrevious, const uint32_t visibleTextOffset, const uint8_t linkId) {
+                         const bool attachToPrevious, const uint32_t visibleTextOffset, const uint8_t linkId,
+                         const bool syntheticText) {
   if (word.empty()) return;
 
   // The device fonts carry no combining-mark positioning, so EPUB text stored in NFD
@@ -474,6 +475,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     wordFocusBoundary.push_back(focusBoundary);
     wordLinkIds.push_back(linkId);
     pushVisibleOffset(tokenOffset);
+    wordSyntheticText.push_back(syntheticText);  // DECKPOINT
     if (padRuby && !rubyTexts.empty()) {
       rubyTexts.push_back("");
     }
@@ -517,6 +519,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     wordFocusBoundary.reserve(newCapacity);
     wordLinkIds.reserve(newCapacity);
     wordVisibleOffsetDeltas.reserve(newCapacity);
+    wordSyntheticText.reserve(newCapacity);  // DECKPOINT
   };
 
   if (auto breakOffsets = cjkCharacterBreakByteOffsets(word); !breakOffsets.empty()) {
@@ -813,6 +816,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     wordFocusBoundary.erase(wordFocusBoundary.begin(), wordFocusBoundary.begin() + consumed);
     wordLinkIds.erase(wordLinkIds.begin(), wordLinkIds.begin() + consumed);
     eraseVisibleOffsetPrefix(consumed);
+    wordSyntheticText.erase(wordSyntheticText.begin(), wordSyntheticText.begin() + consumed);  // DECKPOINT
     if (!rubyTexts.empty()) {
       const size_t rtConsumed = std::min(consumed, rubyTexts.size());
       rubyTexts.erase(rubyTexts.begin(), rubyTexts.begin() + rtConsumed);
@@ -1309,6 +1313,8 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   // remainder fully regular.
   wordFocusBoundary.insert(wordFocusBoundary.begin() + wordIndex + 1, focusBoundaryAfter(focusBoundary, chosenOffset));
   wordLinkIds.insert(wordLinkIds.begin() + wordIndex + 1, wordLinkIds[wordIndex]);
+  // DECKPOINT: the remainder starts at the continuation's source offset (set above).
+  wordSyntheticText.insert(wordSyntheticText.begin() + wordIndex + 1, wordSyntheticText[wordIndex]);
   wordFocusBoundary[wordIndex] = focusBoundaryBefore(focusBoundary, chosenOffset);
   // Invariant: a boundary is always strictly inside its token, so an all-bold part carries BOLD in
   // its style with boundary 0 and nothing downstream special-cases boundary == size.
@@ -1709,6 +1715,31 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
   }
 
+  // DECKPOINT: per-word visible offsets in the TextBlock's (visual) word order: the
+  // smallest source offset on the line as a uint32 base plus a uint16 delta per word.
+  // Tokens without source text (list markers, alt text) carry NO_VISIBLE_OFFSET.
+  uint32_t lineOffsetBase = UINT32_MAX;
+  for (size_t i = 0; i < lineWordCount; i++) {
+    const size_t src = lastBreakAt + (willReorder ? visualOrderScratch[i] : i);
+    if (!wordSyntheticText[src]) lineOffsetBase = std::min(lineOffsetBase, visibleOffsetAt(src));
+  }
+  if (lineOffsetBase == UINT32_MAX) lineOffsetBase = lineVisibleOffset;
+  // Member scratch: reused across lines, so no per-line allocation once it has grown.
+  std::vector<uint16_t>& lineOffsetDeltas = lineOffsetDeltasScratch;
+  lineOffsetDeltas.clear();
+  lineOffsetDeltas.reserve(lineWordCount);
+  for (size_t i = 0; i < lineWordCount; i++) {
+    const size_t src = lastBreakAt + (willReorder ? visualOrderScratch[i] : i);
+    if (wordSyntheticText[src]) {
+      lineOffsetDeltas.push_back(TextBlock::NO_VISIBLE_OFFSET);
+      continue;
+    }
+    // A line spans a few hundred codepoints; only >64K of skipped hidden content between
+    // two words of one line could overflow, and then the word keeps the clamped delta.
+    const uint32_t delta = visibleOffsetAt(src) - lineOffsetBase;
+    lineOffsetDeltas.push_back(static_cast<uint16_t>(std::min<uint32_t>(delta, TextBlock::MAX_VISIBLE_OFFSET_DELTA)));
+  }
+
   // Fast path: no word on this line carries focus emphasis, so pass empty boundary/suffixX
   // vectors. TextBlock pays zero per-word RAM cost for these annotations when they are empty.
   bool lineHasFocusSplit = false;
@@ -1723,7 +1754,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     // TextBlock flattens the vectors into its arena; they stay owned here and die at return.
     auto block = makeUniqueNoThrow<TextBlock>(lineWords, lineXPos, lineWordStyles, std::vector<uint8_t>{},
                                               std::vector<uint16_t>{}, blockStyle, std::move(lineRubyTexts),
-                                              std::move(lineLinks));
+                                              std::move(lineLinks), lineOffsetBase, lineOffsetDeltas);
     if (!block || !block->valid()) {
       LOG_ERR("PTX", "Dropping line: TextBlock or arena allocation failed");
       // Latch through the same flag as addWord() OOM: the caller releases the
@@ -1750,8 +1781,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
                                                                    boundary, blockStyle.characterSpacing));
   }
 
-  auto block = makeUniqueNoThrow<TextBlock>(lineWords, lineXPos, lineWordStyles, outBoundaries, outSuffixX, blockStyle,
-                                            std::move(lineRubyTexts), std::move(lineLinks));
+  auto block =
+      makeUniqueNoThrow<TextBlock>(lineWords, lineXPos, lineWordStyles, outBoundaries, outSuffixX, blockStyle,
+                                   std::move(lineRubyTexts), std::move(lineLinks), lineOffsetBase, lineOffsetDeltas);
   if (!block || !block->valid()) {
     LOG_ERR("PTX", "Dropping line: TextBlock or arena allocation failed");
     droppedWords = true;  // see the non-focus branch above

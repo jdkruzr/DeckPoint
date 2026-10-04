@@ -135,6 +135,7 @@ class ChapterHtmlSlimParser {
   // records the first source character it renders.
   uint32_t visibleTextOffset = 0;
   uint32_t partWordVisibleOffset = 0;
+  bool partWordSynthetic = false;  // DECKPOINT: partWordBuffer holds generated text (alt text)
   uint32_t currentPageVisibleOffset = 0;
   bool currentPageVisibleOffsetSet = false;
   bool insideBody = false;

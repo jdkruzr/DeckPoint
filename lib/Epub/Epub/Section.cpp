@@ -60,7 +60,9 @@ namespace {
 // DECKPOINT: bumped for the hanging-indent clamp in ParsedText::resolveFirstLineIndent.
 // v52: Each document is styled only by the stylesheets it links, in link order.
 // DECKPOINT: bumped for per-document stylesheet scoping (CssParser::StylesheetScope).
-constexpr uint8_t SECTION_FILE_VERSION = 54;
+// v55: TextBlock stores a visible-offset base per line and a uint16 delta per word.
+// DECKPOINT: bumped for per-word source offsets (highlights / KOReader annotations).
+constexpr uint8_t SECTION_FILE_VERSION = 55;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

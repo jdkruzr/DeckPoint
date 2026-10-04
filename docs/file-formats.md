@@ -90,6 +90,19 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 55
+
+Each serialized TextBlock gains per-word source positions. After `textBytes`
+comes `u32 visibleOffsetBase`, and the arena gains `u16 visOff[wordCount]`
+right after `wordXPos`. Word `i`'s visible offset (zero-based Unicode codepoint
+in `<body>`, the same count as the page offset LUT) is
+`visibleOffsetBase + visOff[i]`; `0xFFFF` marks a token with no source text
+(list markers, image alt text). Words are stored in visual order, so the base is
+the line's smallest offset. A hyphenated word's continuation on the next line
+carries the offset of its first character, so both halves map back into the same
+source word. Cost: 4 bytes per line plus 2 bytes per word, on SD and while a
+page is resident.
+
 ### Version 54
 
 Version 54 keeps the version 53 serialized layout unchanged. It was bumped
@@ -223,6 +236,7 @@ superscript, and subscript. The format also includes:
 - per-page footnote entries
 - serialized word style bits for underline, strikethrough, superscript, and
   subscript
+- per-word visible offsets (v55): line base plus a 16-bit delta per word
 - flat TextBlock word storage (v29): per-word arrays plus one shared
   NUL-terminated text blob, replacing v28's length-prefixed word strings. The
   on-disk order mirrors the in-RAM arena so the firmware reads a whole block
@@ -235,7 +249,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 50
+#define EXPECTED_VERSION 55
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
@@ -299,10 +313,12 @@ struct TextBlock {
     u16 wordCount;
     u8 hasFocus;
     u16 textBytes [[comment("Total size of text[], including one NUL per word")]];
+    u32 visibleOffsetBase [[comment("Smallest visible offset of a word on the line (v55)")]];
 
     if (wordCount > 0) {
         u16 textOff[wordCount] [[comment("Byte offset of word i's text within text[]")]];
         s16 wordXPos[wordCount];
+        u16 visOff[wordCount] [[comment("Visible offset minus visibleOffsetBase; 0xFFFF = no source text (v55)")]];
         if (hasFocus != 0) {
             u16 wordFocusSuffixX[wordCount] [[comment("Suffix x offset from word start")]];
         }

@@ -129,9 +129,14 @@ TEST(KOReaderXPathResolver, CountsVisibleCdataAndIgnoresHiddenCdata) {
 TEST(KOReaderXPathResolver, ReturnsEmptyForUnusableContent) {
   EXPECT_TRUE(ChapterXPathResolver::findXPathForVisibleTextOffset(epubWith(""), 0, 0).empty());
   EXPECT_TRUE(ChapterXPathResolver::findXPathForVisibleTextOffset(epubWith("<html><body><p>broken"), 0, 100).empty());
-  EXPECT_TRUE(ChapterXPathResolver::findXPathForVisibleTextOffset(
-                  epubWith("<html><body><div>not a paragraph or list item</div></body></html>"), 0, 0)
-                  .empty());
+}
+
+// DECKPOINT: text outside <p>/<li> is addressable too (KOReader positions any text node);
+// this used to be asserted empty.
+TEST(KOReaderXPathResolver, ResolvesTextOutsideParagraphs) {
+  EXPECT_EQ(ChapterXPathResolver::findXPathForVisibleTextOffset(
+                epubWith("<html><body><div>not a paragraph or list item</div></body></html>"), 0, 0),
+            "/body/DocFragment[1]/body/div[1]/text()[1].0");
 }
 
 TEST(KOReaderXPathResolver, KeepsParagraphOnlyResolutionUnchanged) {

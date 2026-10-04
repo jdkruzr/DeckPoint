@@ -23,6 +23,7 @@
 // unaligned multi-byte access):
 //   uint16_t textOff[wordCount]        byte offset of word i's text in text[]
 //   int16_t  xpos[wordCount]
+//   uint16_t visOff[wordCount]         word i's visible offset minus visibleOffsetBase
 //   uint16_t focusSuffixX[wordCount]   present only when focusPresent
 //   uint8_t  styles[wordCount]
 //   uint8_t  focusBoundary[wordCount]  present only when focusPresent
@@ -38,8 +39,18 @@
 // word start to the regular suffix. Both arrays are omitted from the arena
 // entirely when no word on the line has a split (zero per-word RAM cost when
 // focus reading is disabled).
+//
+// DECKPOINT: visOff + visibleOffsetBase give each word the zero-based visible
+// codepoint offset (ChapterHtmlSlimParser's <body> count) of its first source
+// character -- the position KOReader XPointers and annotations are mapped from.
+// Words are in visual order, so the base is the line's smallest offset, not
+// necessarily word 0's. Cost: 2 bytes per word plus 4 per line, in RAM and on SD.
 class TextBlock final : public Block {
  public:
+  // visOff value of a token without source text (list marker, image alt text).
+  static constexpr uint16_t NO_VISIBLE_OFFSET = 0xFFFF;
+  static constexpr uint16_t MAX_VISIBLE_OFFSET_DELTA = 0xFFFE;
+
   struct LinkSpan {
     char href[FOOTNOTE_HREF_LEN];
     int16_t x;
@@ -50,7 +61,8 @@ class TextBlock final : public Block {
  private:
   BlockStyle blockStyle;
   uint16_t numWords = 0;
-  uint16_t textBytes = 0;  // total size of the text region, including NULs
+  uint16_t textBytes = 0;          // total size of the text region, including NULs
+  uint32_t visibleOffsetBase = 0;  // DECKPOINT: see visOff above
   bool focusPresent = false;
   bool isValid = true;
   // The ONLY allocation: makeUniqueNoThrow, so OOM yields an invalid block
@@ -72,6 +84,8 @@ class TextBlock final : public Block {
   TextBlock() = default;  // deserialize() fills the fields directly
   static size_t arenaSize(uint16_t wordCount, bool hasFocus, uint16_t textBytes);
   void bindArenaPointers();
+  // Derived rather than stored: saves a pointer per resident line.
+  const uint16_t* visOffArr() const { return reinterpret_cast<const uint16_t*>(arena.get() + numWords * 4); }
 
  public:
   // Flatten-on-construct: copies the layout-time vectors into the arena; the
@@ -80,7 +94,8 @@ class TextBlock final : public Block {
   explicit TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,
                      const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& focusBoundary,
                      const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle = BlockStyle(),
-                     std::vector<std::string> rubyTexts = {}, std::vector<LinkSpan> linkSpans = {});
+                     std::vector<std::string> rubyTexts = {}, std::vector<LinkSpan> linkSpans = {},
+                     uint32_t visibleOffsetBase = 0, const std::vector<uint16_t>& visibleOffsetDeltas = {});
   ~TextBlock() override = default;
   TextBlock(const TextBlock&) = delete;
   TextBlock& operator=(const TextBlock&) = delete;
@@ -100,6 +115,12 @@ class TextBlock final : public Block {
   EpdFontFamily::Style wordStyle(const uint16_t i) const { return static_cast<EpdFontFamily::Style>(stylesArr[i]); }
   uint8_t focusBoundary(const uint16_t i) const { return focusPresent ? focusBoundaryArr[i] : 0; }
   uint16_t focusSuffixX(const uint16_t i) const { return focusPresent ? focusSuffixXArr[i] : 0; }
+  // DECKPOINT: per-word source positions (see the class comment).
+  uint32_t lineVisibleOffset() const { return visibleOffsetBase; }
+  bool wordHasVisibleOffset(const uint16_t i) const { return visOffArr()[i] != NO_VISIBLE_OFFSET; }
+  // Offset of word i's first source character. A token without source text reports the
+  // nearest following word's offset on the line (else the nearest preceding, else the base).
+  uint32_t wordVisibleOffset(uint16_t i) const;
   bool hasRuby() const;
   int getRubyShift(int ascender) const { return hasRuby() ? (ascender / 2) : 0; }
   const std::vector<std::string>& getRubyTexts() const { return rubyTexts; }

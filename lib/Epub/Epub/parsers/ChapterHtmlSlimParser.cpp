@@ -365,7 +365,8 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
     }
     linkId = currentFootnoteLinkId;
   }
-  currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues, partWordVisibleOffset, linkId);
+  currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues, partWordVisibleOffset, linkId,
+                            partWordSynthetic);  // DECKPOINT
   if (insideTableCell && !tableRowStacked) {
     tableCellTextBytes += wordBytes;
     if (currentTextBlock->size() > MAX_GRID_TABLE_CELL_WORDS) {
@@ -1487,11 +1488,12 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
           self->listStack.back().counter += 1;
           char marker[16];
           snprintf(marker, sizeof(marker), "%d.", self->listStack.back().counter);
-          self->currentTextBlock->addWord(marker, EpdFontFamily::REGULAR, false, false, self->visibleTextOffset);
+          self->currentTextBlock->addWord(marker, EpdFontFamily::REGULAR, false, false, self->visibleTextOffset, 0,
+                                          /*syntheticText=*/true);  // DECKPOINT
           self->listItemBulletOnly = true;
         } else {
-          self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR, false, false,
-                                          self->visibleTextOffset);
+          self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR, false, false, self->visibleTextOffset,
+                                          0, /*syntheticText=*/true);  // DECKPOINT
           self->listItemBulletOnly = true;
         }
       } else if (strcmp(name, "ul") == 0 || strcmp(name, "ol") == 0) {
@@ -1740,7 +1742,8 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       self->partWordBuffer[1] = '\0';
       self->partWordBufferIndex = 1;
       self->partWordVisibleOffset = codepointOffset;
-      self->nextWordContinues = true;  // Attach space to previous word (no break).
+      self->partWordSynthetic = !countVisibleOffsets;  // DECKPOINT: alt text has no source offset
+      self->nextWordContinues = true;                  // Attach space to previous word (no break).
       self->flushPartWordBuffer();
 
       self->nextWordContinues = true;  // Next real word attaches to this space (no break).
@@ -1760,6 +1763,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       self->partWordBuffer[1] = '\0';
       self->partWordBufferIndex = 1;
       self->partWordVisibleOffset = codepointOffset;
+      self->partWordSynthetic = !countVisibleOffsets;  // DECKPOINT: alt text has no source offset
       self->nextWordContinues = true;
       self->flushPartWordBuffer();
 
@@ -1821,6 +1825,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
 
     if (self->partWordBufferIndex == 0) {
       self->partWordVisibleOffset = codepointOffset;
+      self->partWordSynthetic = !countVisibleOffsets;  // DECKPOINT: alt text has no source offset
     }
     self->partWordBuffer[self->partWordBufferIndex++] = s[i];
   }

@@ -132,6 +132,20 @@ bool isBodyTextXPath(const std::string& xpath) {
   return xpath.compare(contentPos, strlen("text()"), "text()") == 0;
 }
 
+// DECKPOINT: crengine DOM >= 20260812 spells the fixed prefix "/body[1]/DocFragment[N]/body[1]"
+// (ldomXPointer::toStringV2). The helpers here match the classic "/body/DocFragment[N]/body".
+std::string canonicalXPathPrefix(std::string xpath) {
+  static constexpr char kExplicitRoot[] = "/body[1]/DocFragment[";
+  if (xpath.compare(0, sizeof(kExplicitRoot) - 1, kExplicitRoot) == 0) {
+    xpath.erase(5, 3);
+  }
+  const size_t fragEnd = xpath.find(']', xpath.find("/DocFragment["));
+  if (fragEnd != std::string::npos && xpath.compare(fragEnd + 1, 8, "/body[1]") == 0) {
+    xpath.erase(fragEnd + 6, 3);
+  }
+  return xpath;
+}
+
 // Parsed representation of one step in the XPath ancestry.
 struct XPathStep {
   char tag[12];      // element name, null-terminated
@@ -861,12 +875,13 @@ std::optional<CrossPointPosition> ProgressMapper::fromRichPosition(const std::sh
   return result;
 }
 
-CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epub, const SavedProgressPosition& koPos,
+CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epub, const SavedProgressPosition& koPosIn,
                                                 GfxRenderer& renderer, int currentSpineIndex,
                                                 int totalPagesInCurrentSpine, int fallbackTotalPages) {
   CrossPointPosition result{};
   const size_t bookSize = epub->getBookSize();
   if (bookSize == 0) return result;
+  const SavedProgressPosition koPos{canonicalXPathPrefix(koPosIn.xpath), koPosIn.percentage};  // DECKPOINT
 
   const int spineCount = epub->getSpineItemsCount();
   const float clampedPercentage = std::max(0.0f, std::min(1.0f, koPos.percentage));
@@ -921,11 +936,18 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
   }
 
   float intra = 0.0f;
-  if (useAncestry) {
+  // DECKPOINT: the content offset comes from crengine's DOM text model, the same one
+  // findXPathForVisibleTextOffset writes, so both directions agree with layout offsets.
+  // ParagraphStreamer now only supplies the p/li/anchor page hints for the fallback below.
+  bool legacyHintsRan = false;
+  const auto runLegacyAncestry = [&]() {
+    legacyHintsRan = true;
     const auto applyResolvedXPath = [&](const ParagraphStreamer& s) {
-      result.visibleTextOffset =
-          static_cast<uint32_t>(std::min<size_t>(s.getTargetVisChars(), static_cast<size_t>(UINT32_MAX)));
-      result.hasVisibleTextOffset = true;
+      if (!result.hasVisibleTextOffset) {
+        result.visibleTextOffset =
+            static_cast<uint32_t>(std::min<size_t>(s.getTargetVisChars(), static_cast<size_t>(UINT32_MAX)));
+        result.hasVisibleTextOffset = true;
+      }
       const int pAtMatch = s.getParagraphAtMatch();
       if (pAtMatch > 0) {
         result.paragraphIndex = static_cast<uint16_t>(pAtMatch);
@@ -960,13 +982,21 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
         applyResolvedXPath(relaxed);
       }
     }
-  } else if (useBodyText) {
-    ParagraphStreamer s(true, xpathChar, xpathTextNode);
-    if (streamSpine(epub, result.spineIndex, s) && s.found()) {
-      result.visibleTextOffset =
-          static_cast<uint32_t>(std::min<size_t>(s.getTargetVisChars(), static_cast<size_t>(UINT32_MAX)));
+  };
+  if (useAncestry || useBodyText) {
+    auto offset = ChapterXPathResolver::findVisibleTextOffsetForXPath(epub, result.spineIndex, koPos.xpath);
+    if (!offset && useAncestry) {
+      // Some KOReader producers omit an unindexed wrapper from the ancestry
+      // (the compatibility case covered by PR #2777). Retry only after the
+      // structurally exact path fails, allowing the first step at any body depth.
+      offset = ChapterXPathResolver::findVisibleTextOffsetForXPath(epub, result.spineIndex, koPos.xpath, true);
+    }
+    if (offset) {
+      result.visibleTextOffset = *offset;
       result.hasVisibleTextOffset = true;
-      LOG_DBG("PM", "XPath body/text()[%d]+%d -> offset=%u", xpathTextNode, xpathChar, result.visibleTextOffset);
+      LOG_DBG("PM", "XPath %s -> offset=%u", koPos.xpath.c_str(), result.visibleTextOffset);
+    } else if (useAncestry) {
+      runLegacyAncestry();
     }
   } else if (xpathP > 0) {
     ParagraphStreamer s(xpathP, xpathChar, xpathTextNode);
@@ -1011,6 +1041,11 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
       0, std::min(static_cast<int>(intra * static_cast<float>(result.totalPages - 1) + 0.5f), result.totalPages - 1));
   LOG_DBG("PM", "<- Progress: %.2f%% %s -> spine=%d page=%d/%d", koPos.percentage * 100, koPos.xpath.c_str(),
           result.spineIndex, result.pageNumber, result.totalPages);
+
+  // DECKPOINT: page hints are only needed now that the offset could not be paged.
+  if (useAncestry && !legacyHintsRan) {
+    runLegacyAncestry();
+  }
 
   // Refine page using section cache LUTs: li index, anchor, or paragraph index.
   if (result.hasLiIndex || result.xpathAnchorId[0] != '\0' || result.hasParagraphIndex) {
