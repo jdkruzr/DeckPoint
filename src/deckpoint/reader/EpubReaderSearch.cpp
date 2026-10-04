@@ -584,7 +584,7 @@ void EpubReaderActivity::clearSearchMark(const bool restore) {
     searchMark.active = false;
     searchMark.wrappedToast = false;
     if (searchMark.pageStored) {
-      if (restore) {
+      if (restore && !pageHasGray) {
         settleOverlayRefresh();
         // No baseline resync: the glass shows the mark, and erasing it needs
         // the differential to keep diffing against the last pushed frame.
@@ -593,6 +593,7 @@ void EpubReaderActivity::clearSearchMark(const bool restore) {
         keyPopupShown = false;  // a wrapped toast went with it
       } else {
         renderer.discardStoredBwBuffer();
+        rerender = restore;  // gray pages re-render: the snapshot holds only the B/W layer
       }
       searchMark.pageStored = false;
     } else {

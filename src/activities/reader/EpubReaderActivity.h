@@ -227,6 +227,8 @@ class EpubReaderActivity final : public ReaderActivity {
   // The renderer holds the clean page from under the band (storeBwBuffer), so
   // closing restores it with one FAST refresh instead of a re-render.
   bool cmdPageStored = false;
+  // DECKPOINT: the page on glass went through a gray pass; a B/W snapshot restore would lose it.
+  bool pageHasGray = false;
   // Non-empty: the band shows this (error / candidates) instead of the prompt
   // until the next key or the toast timeout.
   char cmdMessage[96] = {};

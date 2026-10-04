@@ -139,7 +139,7 @@ bool EpubReaderActivity::closeHintsLocked(const bool restorePage) {
   hintOpenPending = false;
   if (!hints) return false;
   bool rerender = false;
-  if (restorePage && hints->pageStored && !hints->stale) {
+  if (restorePage && hints->pageStored && !hints->stale && !pageHasGray) {
     settleOverlayRefresh();
     // No baseline resync: the glass shows the labels, and erasing them needs
     // the differential to keep diffing against the last pushed frame.

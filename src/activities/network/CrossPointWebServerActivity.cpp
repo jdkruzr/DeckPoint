@@ -490,13 +490,19 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     const std::string ipUrl = "http://" + connectedIP + "/";
     const std::string hostUrl = std::string("http://") + AP_HOSTNAME + ".local/";
     if (isApMode) {
-      renderer.drawText(UI_10_FONT_ID, x, y, tr(STR_CONNECT_WIFI_HINT), true, EpdFontFamily::BOLD);
-      y += h10;
+      for (const auto& line : renderer.wrappedText(UI_10_FONT_ID, tr(STR_CONNECT_WIFI_HINT), pageWidth - 2 * x, 2,
+                                                   EpdFontFamily::BOLD)) {
+        renderer.drawText(UI_10_FONT_ID, x, y, line.c_str(), true, EpdFontFamily::BOLD);
+        y += h10;
+      }
       renderer.drawText(UI_12_FONT_ID, x, y, connectedSSID.c_str(), true);
       y += h12 + metrics.verticalSpacing;
     }
-    renderer.drawText(UI_10_FONT_ID, x, y, tr(STR_OPEN_URL_HINT), true, EpdFontFamily::BOLD);
-    y += h10;
+    for (const auto& line :
+         renderer.wrappedText(UI_10_FONT_ID, tr(STR_OPEN_URL_HINT), pageWidth - 2 * x, 2, EpdFontFamily::BOLD)) {
+      renderer.drawText(UI_10_FONT_ID, x, y, line.c_str(), true, EpdFontFamily::BOLD);
+      y += h10;
+    }
     renderer.drawText(UI_12_FONT_ID, x, y, (isApMode ? hostUrl : ipUrl).c_str(), true, EpdFontFamily::BOLD);
     y += h12;
     const std::string altUrl = std::string(tr(STR_OR_HTTP_PREFIX)) + (isApMode ? connectedIP + "/" : AP_HOSTNAME + std::string(".local/"));

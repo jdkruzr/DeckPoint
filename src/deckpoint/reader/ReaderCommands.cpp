@@ -405,7 +405,7 @@ void EpubReaderActivity::closeCommandLine(const CommandResult how) {
   {
     RenderLock lock;
     cmdLineShown = false;
-    if (how == CommandResult::Restore && cmdPageStored) {
+    if (how == CommandResult::Restore && cmdPageStored && !pageHasGray) {
       settleOverlayRefresh();
       // No baseline resync: the glass shows the band, and erasing it needs the
       // differential to keep diffing against the last pushed frame.
