@@ -74,14 +74,19 @@ jobs:
       - name: Build firmware
         run: pio run -e "${{ matrix.env }}" -j1
 
-      - name: Name firmware asset
-        run: cp ".pio/build/${{ matrix.env }}/firmware.bin" "deckpoint-${{ matrix.board }}.bin"
+      - name: Name firmware assets
+        run: |
+          set -euo pipefail
+          # OTA image (app only) and the full image for a first install over USB
+          # (bootloader + partition table + app, written at 0x0).
+          cp ".pio/build/${{ matrix.env }}/firmware.bin" "deckpoint-${{ matrix.board }}.bin"
+          cp ".pio/build/${{ matrix.env }}/firmware.factory.bin" "deckpoint-${{ matrix.board }}-full.bin"
 
       - name: Stage firmware asset
         uses: actions/upload-artifact@v6
         with:
-          name: deckpoint-${{ matrix.board }}.bin
-          path: deckpoint-${{ matrix.board }}.bin
+          name: deckpoint-${{ matrix.board }}
+          path: deckpoint-${{ matrix.board }}*.bin
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
@@ -92,11 +97,13 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v6
+
       - name: Download firmware assets
         uses: actions/download-artifact@v4
         with:
           path: dist
-          pattern: deckpoint-*.bin
+          pattern: deckpoint-*
           merge-multiple: true
 
       - name: Create or update the release
@@ -107,13 +114,16 @@ jobs:
           set -euo pipefail
           for board in tdeckpro x4pro; do
             test -f "dist/deckpoint-${board}.bin"
+            test -f "dist/deckpoint-${board}-full.bin"
           done
           (cd dist && sha256sum deckpoint-*.bin > SHA256SUMS)
           prerelease=()
           case "$TAG" in *-*) prerelease=(--prerelease) ;; esac
+          notes=(--generate-notes)
+          if [ -f "docs/release-notes/${TAG}.md" ]; then notes=(--notes-file "docs/release-notes/${TAG}.md"); fi
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release upload "$TAG" dist/deckpoint-*.bin dist/SHA256SUMS --repo "$GITHUB_REPOSITORY" --clobber
           else
             gh release create "$TAG" dist/deckpoint-*.bin dist/SHA256SUMS --repo "$GITHUB_REPOSITORY" \
-              --title "DeckPoint $TAG" --generate-notes --verify-tag "${prerelease[@]}"
+              --title "DeckPoint $TAG" "${notes[@]}" --verify-tag "${prerelease[@]}"
           fi

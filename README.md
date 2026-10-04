@@ -112,6 +112,14 @@ OPDS browsing, OTA, many UI languages. Metrics and fonts are tuned for 240x320.
 Copied from the in-firmware help tables (`src/deckpoint/KeyHelpTables.cpp`). If the firmware and
 this page disagree, the firmware wins and this page has a typo.
 
+## Installing
+
+Grab `deckpoint-tdeckpro-full.bin` from the
+[latest release](https://github.com/jdkruzr/DeckPoint/releases/latest) and write it at `0x0`,
+either in the browser with [esptool-js](https://espressif.github.io/esptool-js/) or with
+`esptool --chip esp32s3 write-flash 0x0 deckpoint-tdeckpro-full.bin`. Step by step, plus
+first-time setup (dictionary, Wi-Fi, sync): [docs/deckpoint/INSTALL.md](docs/deckpoint/INSTALL.md).
+
 ## Building and flashing
 
 You need [PlatformIO](https://platformio.org/).
