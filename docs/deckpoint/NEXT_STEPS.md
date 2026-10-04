@@ -90,7 +90,7 @@ Read `PROGRESS.md` first (dev loop, conventions). Current plan with rationale:
   learning for remotes). Wire-up: set FREEINK_CAP_BLE_KEYBOARD + add h2zero/NimBLE-Arduino to
   tdeckpro lib_deps, merge its key queue into HalKeyboard, Settings > Bluetooth (scan/pair/forget).
   Costs: a few hundred KB flash, ~40-60 KB heap while on, radio power, shared 2.4 GHz with Wi-Fi.
-- Identify the side "volume up" button wiring.
+- (done) Side buttons: upper = BOOT/GPIO0 (sleep/wake), lower = reset (EN), confirmed 2026-10-04.
 - Touch word actions (user, 2026-10-02): long-press a word -> popup offering both dictionary
   lookup and annotate/highlight (one entry point for both, shared with hint mode's word targets).
 - Touch (v1.1 CST3530 @0x1A, IRQ-driven; SDK lacks this controller) — user flagged as coming.

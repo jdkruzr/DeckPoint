@@ -24,7 +24,8 @@ Last updated: 2026-10-03 (session 3, afternoon).
 
 ## Dev loop (how to work on the device)
 - Device: `/dev/ttyACM0` (re-check `ls /dev/ttyACM*`). Unit is a **v1.1** (DRV2605 present),
-  no front light. Side **"volume down" button = BOOT/GPIO0** = power/wake (hold ~1 s).
+  no front light. Side buttons: **upper ("volume up") = BOOT/GPIO0** = sleep and wake;
+  **lower ("volume down") = chip reset (EN)**, which also "wakes" by rebooting.
 - `scripts/deckpoint_flash.sh <dir> <port>`: build + stop bridge + flash.
 - `scripts/deckpoint_serial.py daemon --port /dev/ttyACM0 --dir <dir>` (run in background;
   restart after each flash): logs to `<dir>/serial.log`; commands via
