@@ -11,6 +11,28 @@ not want to break the thing we borrowed.
 > Status: works on the author's device and gets daily use, but it is young. Expect rough edges,
 > and please keep a backup of your SD card. No promises, some enthusiasm.
 
+## Screenshots
+
+Straight from the device (The Odyssey, Samuel Butler's public-domain translation).
+
+<table>
+  <tr>
+    <td align="center" width="33%"><img src="docs/images/home.png" width="200" alt="Home: your current book, one keypress away"><br><sub>Home: your current book, one keypress away</sub></td>
+    <td align="center" width="33%"><img src="docs/images/reader.png" width="200" alt="Reading: justified, hyphenated, 240x320"><br><sub>Reading: justified, hyphenated, 240x320</sub></td>
+    <td align="center" width="33%"><img src="docs/images/help.png" width="200" alt="? lists the keys that work on every screen"><br><sub><code>?</code> lists the keys that work on every screen</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="33%"><img src="docs/images/select.png" width="200" alt="v + word labels: select a passage"><br><sub><code>v</code> + word labels: select a passage</sub></td>
+    <td align="center" width="33%"><img src="docs/images/note.png" width="200" alt="Notes in a bottom sheet, page still visible"><br><sub>Notes in a bottom sheet, page still visible</sub></td>
+    <td align="center" width="33%"><img src="docs/images/underline.png" width="200" alt="Saved: underlined, with a note marker"><br><sub>Saved: underlined, with a note marker</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="33%"><img src="docs/images/notes.png" width="200" alt=":notes: every highlight in the book"><br><sub><code>:notes</code>: every highlight in the book</sub></td>
+    <td align="center" width="33%"><img src="docs/images/hints.png" width="200" alt="d labels every word for lookup"><br><sub><code>d</code> labels every word for lookup</sub></td>
+    <td align="center" width="33%"><img src="docs/images/dictionary.png" width="200" alt="StarDict lookup, inflections included"><br><sub>StarDict lookup, inflections included</sub></td>
+  </tr>
+</table>
+
 ## What it does
 
 **Reading, with the keyboard**
