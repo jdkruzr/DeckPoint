@@ -59,7 +59,7 @@ flash.
 * Multi-language reading support (underserved languages, complex script support where realistic on ESP32 hardware).
   Substantial progress has already landed: RTL reading (Arabic, Hebrew) and CJK via SD card fonts.
 * ✅ Better font support and custom fonts. **Landed early.** SD card fonts with a downloader and font manager,
-  script grouping, and CJK support are shipped (see [docs/sd-card-fonts.md](docs/sd-card-fonts.md)).
+  script grouping, and CJK support are shipped (see [docs/sd-card-fonts.md](../sd-card-fonts.md)).
 * ✅ UI languages and localization. **Landed early.** The UI ships with 30+ translations, including RTL languages,
   and continues to receive improvements.
 * Moving themes off-firmware to SD-loaded assets (see SCOPE.md Section 6).

@@ -155,7 +155,7 @@ Endpoint details are documented in [webserver-endpoints.md](./webserver-endpoint
 
 ## Related Documentation
 
-- [User Guide](../USER_GUIDE.md)
+- [User Guide](crosspoint/USER_GUIDE.md)
 - [Webserver Endpoints](./webserver-endpoints.md)
 - [SD Card Fonts](./sd-card-fonts.md)
 - [Troubleshooting](./troubleshooting.md)

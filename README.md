@@ -138,10 +138,13 @@ pio run -e x4pro                                         # the stock Xteink buil
 
 - [docs/deckpoint/PROGRESS.md](docs/deckpoint/PROGRESS.md): what is done, the dev loop, conventions.
 - [docs/deckpoint/NEXT_STEPS.md](docs/deckpoint/NEXT_STEPS.md): what is next, and why things are the way they are.
-- [docs/crosspoint-README.md](docs/crosspoint-README.md): the upstream CrossPoint README, kept
-  for the general feature list, install notes and development quick start.
-- [USER_GUIDE.md](USER_GUIDE.md) and the rest of [docs/](docs/): CrossPoint's guides. Mostly
-  still true, but they do not know about the keyboard.
+- [docs/deckpoint/INSTALL.md](docs/deckpoint/INSTALL.md): installing, first steps, sync setup.
+- [docs/crosspoint/](docs/crosspoint/): upstream CrossPoint's README, user guide, scope, roadmap,
+  governance and contributor templates, archived for reference. They describe CrossPoint and the
+  Xteink buttons, not DeckPoint.
+- The rest of [docs/](docs/): CrossPoint's technical guides (file formats, web server,
+  dictionaries, fonts, plugins, i18n, contributing). Still accurate for the code DeckPoint
+  shares, but they do not know about the keyboard.
 
 ## Credits and license
 

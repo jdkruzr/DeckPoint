@@ -1,4 +1,9 @@
-> This is the upstream CrossPoint Reader README, kept for reference. DeckPoint's own README is [../README.md](../README.md).
+> **Archive.** This folder keeps upstream CrossPoint Reader's project documents for reference: this
+> README, the [user guide](USER_GUIDE.md), [scope](SCOPE.md), [roadmap](ROADMAP.md),
+> [governance](GOVERNANCE.md), the Xteink [comparison](comparison.md) and
+> [unbricking guide](fix-bricked-xteink.md), their GitHub issue/PR templates (`github/`) and
+> contributor agent skills (`skills/`). They describe CrossPoint, not DeckPoint; DeckPoint's own
+> README is [../../README.md](../../README.md).
 
 # CrossPoint Reader
 
@@ -18,7 +23,7 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
 
 ## What can CrossPoint do?
 
-- **Reader engine**: EPUB 2/3 rendering with embedded-style option, image handling, hyphenation, kerning, adaptive table layouts, native CJK ruby annotations, chapter navigation, footnotes, bookmarks, dictionary lookups ([StarDict](dictionary.md)), go-to-percent, auto page turn, orientation control, focus reading, KOReader progress sync and more.
+- **Reader engine**: EPUB 2/3 rendering with embedded-style option, image handling, hyphenation, kerning, adaptive table layouts, native CJK ruby annotations, chapter navigation, footnotes, bookmarks, dictionary lookups ([StarDict](../dictionary.md)), go-to-percent, auto page turn, orientation control, focus reading, KOReader progress sync and more.
 
 - **Various formats**: native handling for `.epub`, `.xtc/.xtch`, `.txt`, and `.bmp`.
 
@@ -135,7 +140,7 @@ See [Development quick start](#development-quick-start) below.
 
 ## Custom SD-card fonts
 
-On devices with external RAM enabled in CrossPoint, copy `.ttf`, `.otf`, or `.ttc` files to the SD card and select them as reader fonts. Put one file in `/fonts/` or `/.fonts/`, or put one family's files in a subfolder. See the [SD card font guide](sd-card-fonts.md) for the folder layout and styles.
+On devices with external RAM enabled in CrossPoint, copy `.ttf`, `.otf`, or `.ttc` files to the SD card and select them as reader fonts. Put one file in `/fonts/` or `/.fonts/`, or put one family's files in a subfolder. See the [SD card font guide](../sd-card-fonts.md) for the folder layout and styles.
 
 On other devices, convert the font to `.cpfont` first. `.cpfont` files also work on devices with external RAM enabled and have better performance. No firmware reflash is needed to add fonts.
 
@@ -153,12 +158,12 @@ Conversion runs the firmware repo's `lib/EpdFont/scripts/fontconvert_sdcard.py` 
 
 ## Documentation
 
-- [User Guide](../USER_GUIDE.md)
-- [Web server usage](webserver.md)
-- [Web server endpoints](webserver-endpoints.md)
-- [Project scope](../SCOPE.md)
-- [Contributing docs](contributing/README.md)
-- [Touch and UI development](contributing/touch-and-ui.md) - how to build new screens on the FreeInkUI activity bases (UiListActivity and friends), plus build envs for the non-Xteink touch devices
+- [User Guide](USER_GUIDE.md)
+- [Web server usage](../webserver.md)
+- [Web server endpoints](../webserver-endpoints.md)
+- [Project scope](SCOPE.md)
+- [Contributing docs](../contributing/README.md)
+- [Touch and UI development](../contributing/touch-and-ui.md) - how to build new screens on the FreeInkUI activity bases (UiListActivity and friends), plus build envs for the non-Xteink touch devices
 
 ---
 
@@ -266,21 +271,21 @@ cache. This cache directory exists at `.crosspoint` on the SD card. The structur
 
 Removing `/.crosspoint` clears all cached metadata and forces a full regeneration on next open. Book deletes, overwrites, and moves done through the firmware or web UI clear or re-key matching caches; manual SD-card edits may leave stale cache directories behind.
 
-For more details on the internal file structures, see the [file formats document](file-formats.md).
+For more details on the internal file structures, see the [file formats document](../file-formats.md).
 
 ---
 
 ## Contributing
 
-Contributions are welcome. If you're new to the codebase, start with the [contributing docs](contributing/README.md). For things to work on, check the [ideas discussion board](https://github.com/crosspoint-reader/crosspoint-reader/discussions/categories/ideas) — leave a comment before starting so we don't duplicate effort.
+Contributions are welcome. If you're new to the codebase, start with the [contributing docs](../contributing/README.md). For things to work on, check the [ideas discussion board](https://github.com/crosspoint-reader/crosspoint-reader/discussions/categories/ideas) — leave a comment before starting so we don't duplicate effort.
 
-Everyone here is a volunteer, so please be respectful and patient. For governance and community expectations, see [GOVERNANCE.md](../GOVERNANCE.md).
+Everyone here is a volunteer, so please be respectful and patient. For governance and community expectations, see [GOVERNANCE.md](GOVERNANCE.md).
 
 ---
 
 ## Community forks
 
-One of the best things about open source is that anyone can take the code in a different direction. If you need something outside CrossPoint's [scope](../SCOPE.md), check out the community forks:
+One of the best things about open source is that anyone can take the code in a different direction. If you need something outside CrossPoint's [scope](SCOPE.md), check out the community forks:
 
 - [CrossInk](https://github.com/uxjulia/CrossInk) — UX focused with minimal reading stats and broader customizations for the reading experience.
 

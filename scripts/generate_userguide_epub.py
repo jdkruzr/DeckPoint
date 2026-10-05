@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate an EPUB from USER_GUIDE.md."""
+"""Generate an EPUB from docs/crosspoint/USER_GUIDE.md."""
 
 import html as _html
 import io
@@ -11,7 +11,7 @@ from ebooklib import epub
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).parent.parent
-SOURCE_MD = ROOT / "USER_GUIDE.md"
+SOURCE_MD = ROOT / "docs" / "crosspoint" / "USER_GUIDE.md"
 OUTPUT_EPUB = ROOT / "CrossPoint_User_Guide.epub"
 LOGO_PNG = ROOT / "src/images/Logo120.png"
 

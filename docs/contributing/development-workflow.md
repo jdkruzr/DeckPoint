@@ -13,7 +13,7 @@ This page defines the expected local workflow before opening a pull request.
 
 ## 2) Implement with scope in mind
 
-- Confirm your idea is in project scope: [SCOPE.md](../../SCOPE.md)
+- Confirm your idea is in project scope: [SCOPE.md](../crosspoint/SCOPE.md)
 - Prefer incremental changes over broad refactors
 
 ## 3) Run local checks
@@ -42,4 +42,4 @@ If `clang-format` is missing or too old locally, see [Getting Started](./getting
 - Keep discussions technical and respectful
 - Assume good intent and focus on code-level feedback
 
-For community expectations, see [GOVERNANCE.md](../../GOVERNANCE.md).
+For community expectations, see [GOVERNANCE.md](../crosspoint/GOVERNANCE.md).

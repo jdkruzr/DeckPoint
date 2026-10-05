@@ -1,3 +1,22 @@
+# DeckPoint notes (read first)
+
+This file is upstream CrossPoint's agent guide (`CLAUDE.md` is a link to it). DeckPoint differs:
+
+- **Target**: LilyGo T-Deck Pro: ESP32-S3 with 8 MB PSRAM, 240x320 UC8253 e-ink, TCA8418
+  keyboard, touch, no RTC. Env `tdeckpro` (`DECKPOINT_COMPACT_UI=1`); `x4pro` must keep building.
+  Where the guide below says ESP32-C3, 800x480 or "no PSRAM", that is the X4.
+- **Code layout**: DeckPoint's own code lives in `src/deckpoint/` and the vendored
+  `freeink-sdk/libs/hardware/{KeyMatrix,BoardTDeckPro}`; edits to upstream files carry a
+  `// DECKPOINT:` marker.
+- **Docs**: `docs/deckpoint/PROGRESS.md` (state, dev loop, conventions) and `NEXT_STEPS.md`
+  (what is in flight) come first. `docs/crosspoint/` is upstream's archived project docs.
+- **Git**: the working branch is `deckpoint`; `origin` is jdkruzr/DeckPoint. Upstream remotes
+  (`upstream-reader`, `upstream-sdk`, `local-crosspoint`) are read-only references.
+- **Keys**: the T-Deck keyboard has no Tab or arrow keys and only a small symbol layer; check
+  what is actually typeable before binding a key.
+
+---
+
 # CrossPoint Reader Development Guide
 
 Project: Open-source e-reader firmware for Xteink X4 (ESP32-C3)
